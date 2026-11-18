@@ -167,6 +167,13 @@
 
   </worldbody>
 
+  <!-- The shoulder link overlaps the base by 1.5 cm and is joined to it by the
+       shoulder_pan hinge, so they must never collide. Without this exclusion the
+       contact locks shoulder_pan on MuJoCo >= 4.0 (policy cannot rotate the arm). -->
+  <contact>
+    <exclude body1="base_link" body2="shoulder_link"/>
+  </contact>
+
   <!-- ==================== ACTUATORS ==================== -->
   <actuator>
     <position name="act_shoulder_pan"  joint="shoulder_pan"  kp="80" ctrlrange="-3.14159 3.14159"/>
