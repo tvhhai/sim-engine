@@ -1,17 +1,17 @@
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "sim-engine"
 version = "1.0.0"
 description = "MuJoCo-based SO-101 robot arm simulator for learning manipulation policies"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = {text = "MIT"}
 
 dependencies = [
-    "mujoco>=3.5.0",
+    "mujoco>=4.0.1",
     "gymnasium>=1.0.0",
     "numpy>=1.24.0",
     "torch>=2.0.0",
@@ -22,8 +22,11 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["diffusers", "transformers", "torchvision"]
 
-[tool.setuptools.packages.find]
-include = ["sim_engine*"]
+# The repo root *is* the `sim_engine` package (flat layout), so map the package
+# name onto the root directory instead of searching for a sim_engine/ subfolder.
+[tool.setuptools]
+package-dir = {"sim_engine" = "."}
+packages = ["sim_engine", "sim_engine.policies"]
 
 [tool.setuptools.package-data]
 sim_engine = ["assets/*.xml"]
