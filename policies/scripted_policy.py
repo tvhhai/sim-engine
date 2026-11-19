@@ -227,7 +227,7 @@ class ScriptedPolicy(BasePolicy):
         self._phase += 1
         self._phase_step = 0
 
-    def _solve_ik(self, target_pos):
+    def _solve_ik(self, target_pos, roll=None):
         """IK: tìm góc khớp (radian) của 5 khớp để đầu tay (ee_site) tới target_pos.
 
         Chạy trên bản sao dữ liệu `_ik_data` nên không làm robot thật cử động. Chỉ tính HÌNH HỌC:
@@ -246,6 +246,10 @@ class ScriptedPolicy(BasePolicy):
         # Bắt đầu từ tư thế thật hiện tại, nên lời giải "gần" tư thế đang có
         ik.qpos[:] = self.data.qpos[:]
         ik.qvel[:] = 0
+        free = np.ones(5)
+        if roll is not None:                                       # khoá wrist_roll ở góc `roll`: IK chỉ dùng 4 khớp còn lại
+            ik.qpos[self._qpos_adr[4]] = roll
+            free[4] = 0.0
         mujoco.mj_forward(self.model, ik)
 
         jacp = np.zeros((3, self.model.nv))
@@ -277,12 +281,13 @@ class ScriptedPolicy(BasePolicy):
 
             # Damped least squares: dq nhỏ nhất sao cho J_all @ dq ≈ err_all.
             # Damping giúp ổn định khi robot gần tư thế "kỳ dị" (singularity), ví dụ khi 2-3-4 thẳng hàng.
+            J_all = J_all * free[None, :]
             J_pinv = J_all.T @ np.linalg.inv(J_all @ J_all.T + self.IK_DAMPING ** 2 * np.eye(J_all.shape[0]))
-            dq = J_pinv @ err_all
+            dq = J_pinv @ err_all * free
 
             # Nhiệm vụ phụ: kéo khớp về tư thế vòm, chỉ trong không gian null
             q = ik.qpos[self._qpos_adr]
-            dq = dq + (eye5 - J_pinv @ J_all) @ (posture_k * (q_pref - q))
+            dq = dq + ((eye5 - J_pinv @ J_all) @ (posture_k * (q_pref - q))) * free
 
             ik.qpos[self._qpos_adr] += self.IK_STEP_GAIN * dq
             mujoco.mj_forward(self.model, ik)
