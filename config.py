@@ -27,8 +27,8 @@ JOINT_LIMITS_RAD = {
     "gripper":       (-0.1745, 1.7453),  # góc hàm kẹp di động (rad); lớn = mở
 }
 
-# Tư thế "nhà" (home) tính bằng radian: tay thẳng lên, nằm ngoài vùng làm việc
-HOME_QPOS_RAD = np.array([0.0, -0.5, 0.5, 0.9, 0.0, 1.2])
+# Tư thế "nhà" (home) tính bằng radian: GẤP GỌN sát đế như robot thật lúc nghỉ (đã kiểm tra không va chạm bàn / tay tự chạm)
+HOME_QPOS_RAD = np.array([0.0, -1.6, 1.55, 0.9, 0.0, 1.2])
 GRIPPER_OPEN_RAD = 1.2      # lệnh mở hết cỡ (hàm di động), action[5] = +1
 GRIPPER_CLOSED_RAD = -0.1   # lệnh đóng/bóp chặt, action[5] = -1
 

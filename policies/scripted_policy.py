@@ -77,6 +77,7 @@ class ScriptedPolicy(BasePolicy):
     # Lệnh mở kẹp lúc thả (action > 0.5 thì env coi là thả). 0.55 mở mỗi ngón ~33 mm, hai má hở ~67 mm: lớn hơn
     # đường chéo hộp (42 mm) để hộp rơi xéo vẫn lọt, nhưng nhỏ hơn mở hết (82 mm, rộng hơn lòng bát 84 mm).
     RELEASE_OPEN_CMD = 0.55
+    RELEASE_RAMP = 0.15       # lệnh mở kẹp tăng tối đa chừng này mỗi bước (thang -1..1)
 
     def __init__(self, env):
         self.env = env
@@ -106,6 +107,7 @@ class ScriptedPolicy(BasePolicy):
         self._gripper_target = 1.0      # lệnh kẹp: +1 mở, -1 đóng
         self._current_joint_targets = None   # góc khớp đích mà IK vừa tính (radian)
         self._smoothed_action = None    # action đã làm mượt (để chuyển động không giật)
+        self._prev_grip = 1.0           # lệnh kẹp ở bước trước (để giới hạn tốc độ mở)
         self._regrasps = 0              # đã kẹp lại bao nhiêu lần vì hộp tuột khi đang mang
         self._lost_steps = 0            # số bước liên tiếp hộp nằm xa ee khi đang mang
         self._roll_hold = None          # góc wrist_roll đã chọn để trục kẹp song song mặt hộp (None = chưa chọn)
@@ -145,6 +147,7 @@ class ScriptedPolicy(BasePolicy):
         self._roll_hold = None
         self._regrasps = 0
         self._lost_steps = 0
+        self._prev_grip = 1.0
 
     def select_action(self, observation: dict) -> np.ndarray:
         """Hàm chính: nhìn tình hình hiện tại, trả về action (7 số trong [-1, 1]).
@@ -152,6 +155,7 @@ class ScriptedPolicy(BasePolicy):
         Policy viết tay này không dùng `observation` mà hỏi thẳng env vị trí hộp và bát
         ("gian lận" so với policy AI, vì AI chỉ được nhìn ảnh camera và góc khớp).
         """
+        self.motion_target = None
         box_pos = self.env.get_box_pos()
         bowl_pos = self.env.get_bowl_pos()
         ee_pos = self.env.get_ee_pos()
@@ -207,6 +211,7 @@ class ScriptedPolicy(BasePolicy):
                 if self._retries < self._max_retries:
                     self._retries += 1
                     self._phase, self._phase_step = 2, 0     # thử lại từ phase 2
+                    self._roll_hold = None                   # hộp có thể đã xoay: chọn lại roll
                 else:
                     self._advance_phase()                    # hết lượt thử: đi tiếp như cũ
 
@@ -244,10 +249,13 @@ class ScriptedPolicy(BasePolicy):
             self._move_toward(target, ee_pos, threshold=0.025)
 
         elif self._phase == 10:
-            # Về lại vị trí home
-            target = np.array([self._home_ee[0], self._home_ee[1], self._home_ee[2]])
+            # Về tư thế GẤP GỌN ban đầu: đi thẳng trong không gian khớp tới HOME_QPOS_RAD (không qua IK để chắc chắn gập đúng kiểu)
             self._gripper_target = 1.0
-            self._move_toward(target, ee_pos, threshold=0.025)
+            self._current_joint_targets = np.array(config.HOME_QPOS_RAD[:5], dtype=float)
+            self._phase_step += 1
+            err = np.max(np.abs(self.data.qpos[self._qpos_adr] - self._current_joint_targets))
+            if err < 0.05 or self._phase_step > self.PHASE_TIMEOUT_STEPS:
+                self._advance_phase()
 
         else:
             # Xong: giữ nguyên tư thế hiện tại
@@ -388,6 +396,7 @@ class ScriptedPolicy(BasePolicy):
         Lưu ý: khoảng cách đo bằng `ee_pos` của đầu bước, nên "tới nơi" được nhận ra chậm 1 bước
         (không đáng kể).
         """
+        self.motion_target = (target_pos.copy(), threshold)
         self._current_joint_targets = self._solve_ik(target_pos)
         if self._roll_hold is not None:                            # đã chọn roll thì giữ nguyên tới hết ván
             self._current_joint_targets[4] = self._roll_hold
@@ -420,7 +429,11 @@ class ScriptedPolicy(BasePolicy):
             if 5 <= self._phase <= 7:                         # mang hộp: không đổi lệnh khớp quá nhanh
                 step = np.clip(step, -self.LIFT_STEP_LIMIT, self.LIFT_STEP_LIMIT)
             self._smoothed_action[:5] += step
-            self._smoothed_action[5:] = raw[5:]  # gripper đổi ngay lập tức, không làm mượt
+            # gripper: đóng ngay; MỞ thì tăng dần (tối đa RELEASE_RAMP mỗi bước) để hai hàm không bật hộp văng ra khi thả
+            self._smoothed_action[5:] = raw[5:]
+            self._smoothed_action[5] = min(raw[5], self._prev_grip + self.RELEASE_RAMP)
+            self._smoothed_action[6] = self._smoothed_action[5]
+        self._prev_grip = float(self._smoothed_action[5])
         return self._smoothed_action.copy()
 
     def _build_action_from_current(self) -> np.ndarray:
