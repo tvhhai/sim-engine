@@ -180,13 +180,13 @@ class ScriptedPolicy(BasePolicy):
 
         elif self._phase == 2:
             # Hạ xuống pre-grasp
-            target = np.array([box_pos[0], box_pos[1], self._pre_grasp_z])
+            target = self._grasp_target(self._pre_grasp_z)
             self._gripper_target = 1.0
             self._move_toward(target, ee_pos, threshold=0.025)
 
         elif self._phase == 3:
             # Hạ xuống vị trí kẹp
-            target = np.array([box_pos[0], box_pos[1], self._grasp_z])
+            target = self._grasp_target(self._grasp_z)
             self._gripper_target = 1.0
             self._move_toward(target, ee_pos, threshold=0.025)
 
@@ -259,6 +259,14 @@ class ScriptedPolicy(BasePolicy):
         """Chuyển sang phase kế tiếp và đặt lại bộ đếm bước của phase."""
         self._phase += 1
         self._phase_step = 0
+
+    def _grasp_target(self, z):
+        """Đích của ee khi hạ xuống hộp: chọn roll theo mặt hộp, rồi lệch khỏi tâm hộp GRASP_SIDE_OFFSET theo trục kẹp."""
+        box = self.env.get_box_pos()
+        above = np.array([box[0], box[1], z])
+        roll, clamp = self._choose_roll(self._solve_ik(above))
+        self._roll_hold, self._clamp_dir = roll, clamp
+        return above - self.GRASP_SIDE_OFFSET * np.append(clamp[:2], 0.0)
 
     def _clamp_direction(self, q5):
         """Hướng trục kẹp (ngang, vector đơn vị) ở tư thế khớp q5: hàm di động xoay quanh trục bản lề a, trục kẹp = a × xuống."""
@@ -380,16 +388,9 @@ class ScriptedPolicy(BasePolicy):
         Lưu ý: khoảng cách đo bằng `ee_pos` của đầu bước, nên "tới nơi" được nhận ra chậm 1 bước
         (không đáng kể).
         """
-        if self._phase in (2, 3):
-            # Hạ xuống hộp: chọn roll theo hướng mặt hộp rồi dịch điểm ee sang bên (xem GRASP_SIDE_OFFSET)
-            roll, clamp = self._choose_roll(self._solve_ik(target_pos))
-            self._roll_hold, self._clamp_dir = roll, clamp
-            target_pos = np.array(target_pos, dtype=float) - self.GRASP_SIDE_OFFSET * np.append(clamp[:2], 0.0)
-            self._current_joint_targets = self._solve_ik(target_pos, roll)
-        else:
-            self._current_joint_targets = self._solve_ik(target_pos)
-            if self._roll_hold is not None:                        # đã chọn roll thì giữ nguyên tới hết ván
-                self._current_joint_targets[4] = self._roll_hold
+        self._current_joint_targets = self._solve_ik(target_pos)
+        if self._roll_hold is not None:                            # đã chọn roll thì giữ nguyên tới hết ván
+            self._current_joint_targets[4] = self._roll_hold
 
         self._phase_step += 1
         arrived = np.linalg.norm(ee_pos - target_pos) < threshold
