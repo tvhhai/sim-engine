@@ -79,7 +79,7 @@ def project(env, cam_id, width, height, point):
 class Runner:
     """Giữ env + policy, chạy từng bước và ghi lại thông tin để in log / vẽ."""
 
-    def __init__(self, policy_path, seed, real_grasp=False):
+    def __init__(self, policy_path, seed, real_grasp=True):
         module_name, class_name = policy_path.split(":")
         policy_cls = getattr(importlib.import_module(module_name), class_name)
         self.env = SO101PickPlaceEnv(render_images=False, real_grasp=real_grasp, end_on_success=False)
@@ -320,14 +320,14 @@ def main():
     parser = argparse.ArgumentParser(description="Chạy policy từng bước bằng phím bấm")
     parser.add_argument("--viewer", action="store_true", help="dùng cửa sổ MuJoCo viewer (xoay được, thấy va chạm thật)")
     parser.add_argument("--seed", type=int, default=2)
-    parser.add_argument("--real-grasp", action="store_true", help="tắt kẹp giả, hộp chỉ được giữ bằng ma sát thật")
+    parser.add_argument("--fake-grasp", action="store_true", help="dùng kẹp giả (snap-grasp) thay cho kẹp thật mặc định")
     parser.add_argument("--policy", default="sim_engine.policies.scripted_policy:ScriptedPolicy")
     parser.add_argument("--headless", action="store_true", help="không mở cửa sổ, chạy hết ván và in log")
     parser.add_argument("--goto", type=int, default=0, help="chạy sẵn N bước (không in log) rồi mới dừng chờ phím; "
                         "dùng số 'tổng bước' trên replay.html để demo dừng đúng chỗ đó")
     args = parser.parse_args()
 
-    runner = Runner(args.policy, args.seed, real_grasp=args.real_grasp)
+    runner = Runner(args.policy, args.seed, real_grasp=not args.fake_grasp)
 
     def goto(n):
         """Chạy lặng lẽ n bước đầu để demo dừng đúng bước đang xem trên replay.html."""
