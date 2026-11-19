@@ -68,8 +68,9 @@ class SO101PickPlaceEnv(gym.Env):
             mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, name)
             for name in config.JOINT_NAMES[:5]  # 5 khớp tay (không gồm gripper)
         ]
-        self._finger_left_jnt = mujoco.mj_name2id(
-            self.model, mujoco.mjtObj.mjOBJ_JOINT, "finger_left"
+        # Khớp hàm kẹp (robot thật chỉ có 1 hàm di động, hàm kia cố định)
+        self._gripper_jnt = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_JOINT, "gripper"
         )
         self._box_body = mujoco.mj_name2id(
             self.model, mujoco.mjtObj.mjOBJ_BODY, "box"
@@ -92,11 +93,11 @@ class SO101PickPlaceEnv(gym.Env):
         self._grasped = False                 # hộp đang bị dính vào tay không
         self._grasp_offset = np.zeros(3)      # độ lệch hộp so với tay lúc bắt đầu dính
         self._grasp_threshold = 0.06          # tay cách hộp < 6 cm mới cho dính
-        self._gripper_close_threshold = 0.018  # khoảng mở ngón kẹp < giá trị này = coi là đã đóng
+        self._gripper_close_threshold = 0.5   # góc hàm kẹp (rad) nhỏ hơn giá trị này = coi là đã đóng
         # Hai má kẹp, dùng để biết "hộp đang bị kẹp thật" (cả hai má cùng chạm hộp) khi bật real_grasp
         self._pad_geoms = {
-            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "left_finger_pad"),
-            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "right_finger_pad"),
+            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "fixed_jaw_col"),
+            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "moving_jaw_col"),
         }
         self._box_qpos_adr = self.model.jnt_qposadr[
             mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "box_joint")
@@ -149,8 +150,8 @@ class SO101PickPlaceEnv(gym.Env):
             self.data.qpos[qadr] = config.HOME_QPOS_RAD[i]
 
         # Mở hết cỡ gripper
-        fl_qadr = self.model.jnt_qposadr[self._finger_left_jnt]
-        self.data.qpos[fl_qadr] = 0.04  # mở tối đa
+        fl_qadr = self.model.jnt_qposadr[self._gripper_jnt]
+        self.data.qpos[fl_qadr] = config.GRIPPER_OPEN_RAD
 
         # Dịch vị trí hộp ngẫu nhiên trong ±box_range theo x và y (z giữ nguyên)
         box_qpos_adr = self.model.jnt_qposadr[
@@ -186,8 +187,7 @@ class SO101PickPlaceEnv(gym.Env):
             jid = self._arm_joint_ids[i]
             qadr = self.model.jnt_qposadr[jid]
             self.data.ctrl[i] = self.data.qpos[qadr]
-        self.data.ctrl[5] = 0.04  # ngón trái mở
-        self.data.ctrl[6] = 0.04  # ngón phải mở
+        self.data.ctrl[5] = config.GRIPPER_OPEN_RAD  # hàm di động mở
 
         # Cho vật lý "lắng xuống" 50 bước (hộp chạm bàn, tay ổn định)
         for _ in range(50):
@@ -212,13 +212,11 @@ class SO101PickPlaceEnv(gym.Env):
             lo, hi = self._ctrl_ranges[i]
             self.data.ctrl[i] = lo + (action[i] + 1.0) * 0.5 * (hi - lo)
 
-        # Gripper: action[5] trong [-1,1] -> khoảng mở mỗi ngón [0.005, 0.04] mét.
-        # Tối thiểu 0.005 để khi kẹp không bóp hộp văng ra.
-        gripper_val = 0.005 + (action[5] + 1.0) * 0.5 * 0.035
-        self.data.ctrl[5] = gripper_val  # ngón trái
-        self.data.ctrl[6] = gripper_val  # ngón phải (đặt giống ngón trái)
+        # Gripper: action[5] trong [-1,1] -> góc đích của hàm di động [GRIPPER_CLOSED_RAD, GRIPPER_OPEN_RAD].
+        gripper_val = config.GRIPPER_CLOSED_RAD + (action[5] + 1.0) * 0.5 * (config.GRIPPER_OPEN_RAD - config.GRIPPER_CLOSED_RAD)
+        self.data.ctrl[5] = gripper_val
 
-        # action[6] không được dùng: cả 2 ngón đều theo action[5]
+        # action[6] không được dùng (robot thật chỉ có 1 hàm di động)
 
         # Cập nhật "kẹp giả" dựa trên lệnh kẹp (bỏ qua khi bật kẹp thật)
         if not self.real_grasp:
@@ -282,7 +280,7 @@ class SO101PickPlaceEnv(gym.Env):
         box_pos = self.data.xpos[self._box_body].copy()
         dist = np.linalg.norm(ee_pos - box_pos)
 
-        fl_qadr = self.model.jnt_qposadr[self._finger_left_jnt]
+        fl_qadr = self.model.jnt_qposadr[self._gripper_jnt]
         finger_qpos = self.data.qpos[fl_qadr]
         gripper_closing = gripper_action < -0.5  # lệnh đang yêu cầu đóng
         gripper_opening = gripper_action > 0.5   # lệnh đang yêu cầu mở
@@ -309,9 +307,10 @@ class SO101PickPlaceEnv(gym.Env):
             joint_pos[i] = np.rad2deg(self.data.qpos[qadr])
 
         # Độ mở kẹp: 0 (đóng) đến 100 (mở hết)
-        fl_qadr = self.model.jnt_qposadr[self._finger_left_jnt]
+        fl_qadr = self.model.jnt_qposadr[self._gripper_jnt]
         gripper_pos = self.data.qpos[fl_qadr]
-        gripper_normalized = np.float32(np.clip(gripper_pos / 0.04 * 100.0, 0, 100))
+        span = config.GRIPPER_OPEN_RAD - config.GRIPPER_CLOSED_RAD
+        gripper_normalized = np.float32(np.clip((gripper_pos - config.GRIPPER_CLOSED_RAD) / span * 100.0, 0, 100))
 
         state = np.append(joint_pos, gripper_normalized).astype(np.float32)
 

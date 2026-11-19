@@ -80,7 +80,7 @@ class ScriptedPolicy(BasePolicy):
             for n in self._joint_names
         ]
         self._dof_ids = [self.model.jnt_dofadr[jid] for jid in self._joint_ids]
-        self._wrist_roll_body = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "wrist_roll_link")
+        self._wrist_roll_body = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "gripper")
         self._qpos_adr = np.array([self.model.jnt_qposadr[jid] for jid in self._joint_ids])  # vị trí của 5 khớp trong data.qpos
         self._ee_site = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, "ee_site")
 
@@ -165,8 +165,8 @@ class ScriptedPolicy(BasePolicy):
             # (đích tính lại từ vị trí hộp hiện tại), tối đa self._max_retries lần.
             self._gripper_target = -1.0
             self._phase_step += 1
-            fo = self.data.qpos[self.model.jnt_qposadr[self.env._finger_left_jnt]]
-            settled = self._last_finger is not None and abs(fo - self._last_finger) < 0.0003
+            fo = self.data.qpos[self.model.jnt_qposadr[self.env._gripper_jnt]]
+            settled = self._last_finger is not None and abs(fo - self._last_finger) < 0.004
             self._last_finger = fo
             if self.env._grasped and settled:
                 self._last_finger = None

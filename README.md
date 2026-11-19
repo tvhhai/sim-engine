@@ -372,7 +372,7 @@ sim_engine/
     evaluate.py                # CLI: evaluate policies
 
     assets/
-        so101_scene.xml        # MuJoCo scene definition (robot + table + objects)
+        so101_real_scene.xml   # MuJoCo scene (REAL SO-101 meshes + table + objects), meshes in assets/so101/
 
     policies/
         base.py                # BasePolicy abstract class
@@ -412,9 +412,9 @@ sim_engine/
 
 ### MuJoCo Simulation
 
-The scene (`assets/so101_scene.xml`) defines:
+The scene (`assets/so101_real_scene.xml`) defines:
 - A table with a wood texture
-- The SO-101 arm mounted on the table (position-controlled actuators)
+- The REAL SO-101 arm (STL meshes, 5 joints + 1 moving jaw, position actuators) mounted on the table facing +y
 - A red box (free body with a freejoint)
 - A blue bowl (static body made of box geoms)
 - Two cameras and three lights
@@ -427,7 +427,7 @@ Real friction-based grasping in simulation is unreliable. Instead, SimEngine use
 
 1. **Grasp triggers** when ALL of these are true:
    - Gripper action < -0.5 (close command)
-   - Finger joint position < 0.018 (fingers actually closing)
+   - Gripper jaw angle < 0.5 rad (jaw actually closing)
    - End-effector is within 6cm of the box center
 
 2. **While grasped**: The box position is set to track the end-effector every step (kinematic attachment). The box velocity is zeroed to prevent it flying off on release.

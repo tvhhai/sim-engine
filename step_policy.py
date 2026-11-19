@@ -140,8 +140,8 @@ class Runner:
         self.go_to_step(self.step_no - n)
 
     def finger_open(self):
-        """Độ mở 1 ngón kẹp (mét). Cần < _gripper_close_threshold thì mới tính là đã khép."""
-        adr = self.env.model.jnt_qposadr[self.env._finger_left_jnt]
+        """Góc hàm kẹp di động (rad). Cần < _gripper_close_threshold thì mới tính là đã khép."""
+        adr = self.env.model.jnt_qposadr[self.env._gripper_jnt]
         return float(self.env.data.qpos[adr])
 
     def contact_text(self):

@@ -24,11 +24,13 @@ JOINT_LIMITS_RAD = {
     "elbow_flex":    (-np.pi, 0.0),
     "wrist_flex":    (-np.pi / 2, np.pi / 2),
     "wrist_roll":    (-np.pi, np.pi),
-    "gripper":       (0.0, 0.04),  # khoảng mở của ngón kẹp, đơn vị mét
+    "gripper":       (-0.1745, 1.7453),  # góc hàm kẹp di động (rad); lớn = mở
 }
 
 # Tư thế "nhà" (home) tính bằng radian: tay thẳng lên, nằm ngoài vùng làm việc
-HOME_QPOS_RAD = np.array([0.0, 0.0, -0.3, -0.3, 0.0, 0.04])
+HOME_QPOS_RAD = np.array([0.0, -0.5, 0.5, 0.9, 0.0, 1.2])
+GRIPPER_OPEN_RAD = 1.2      # lệnh mở hết cỡ (hàm di động), action[5] = +1
+GRIPPER_CLOSED_RAD = -0.1   # lệnh đóng/bóp chặt, action[5] = -1
 
 # Cấu hình camera (2 camera: webcam nhìn toàn cảnh và arm_cam gắn ở cổ tay)
 CAMERA_WIDTH = 640
@@ -50,7 +52,7 @@ DEFAULT_TASK = "Pick up the box and place it in the bowl"
 
 # Đường dẫn
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
-SCENE_XML = os.path.join(ASSETS_DIR, "so101_scene.xml")
+SCENE_XML = os.path.join(ASSETS_DIR, "so101_real_scene.xml")
 DEFAULT_DATASET_DIR = os.path.join(os.path.dirname(__file__), "..", "datasets", "sim_demos")
 DEFAULT_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "outputs", "sim_engine")
 
