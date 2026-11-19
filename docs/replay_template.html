@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Replay ván chạy</title>
+<style>
+  :root {
+    --bg:#fafaf8; --card:#fff; --ink:#1f2328; --muted:#656d76; --line:#d8dee4;
+    --box:#e24b4a; --bowl:#2f6fd0; --hand:#c026d3; --goal:#1a9a3a; --arm:#6b7280; --warn:#c2410c; --ok:#1a9a3a; --bad:#cf222e;
+    --table:#e9d9bd; --sel:#fff3c4; --past:#0f8b8d; --future:#d97706;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#16181b; --card:#1f2328; --ink:#e6e8eb; --muted:#9aa4af; --line:#363c44;
+      --box:#ff6b69; --bowl:#6ea0ff; --hand:#e879f9; --goal:#4ade80; --arm:#9ca3af; --warn:#fbbf24; --ok:#4ade80; --bad:#ff7b72;
+      --table:#4a4030; --sel:#3d3720; --past:#2dd4bf; --future:#fbbf24;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui,"Segoe UI",Roboto,sans-serif; overflow:hidden; }
+  .wrap { height:100vh; padding:8px 12px; display:flex; flex-direction:column; gap:6px; }
+  h1 { font-size:16px; margin:0; }
+  .hd { display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; }
+  .sub { margin:0; font-size:12px; color:var(--muted); }
+  button, select { font:inherit; font-size:13px; padding:4px 9px; border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:6px; cursor:pointer; }
+  button:hover { border-color:var(--muted); }
+  button.primary { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+  input[type=range] { width:100%; margin:2px 0; }
+  .badge { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; font-weight:600; }
+  .ok { background:color-mix(in srgb,var(--ok) 18%,transparent); color:var(--ok); }
+  .bad { background:color-mix(in srgb,var(--bad) 18%,transparent); color:var(--bad); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:6px 10px; }
+  .card h2 { font-size:12px; margin:0 0 4px; color:var(--muted); font-weight:600; letter-spacing:.02em; }
+  .main { flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,2.2fr) minmax(340px,26vw); grid-template-rows:minmax(0,1fr); gap:8px; }
+  .card h2 + svg + h2 { margin-top:6px; }
+  .main > .card, .col .card { min-height:0; overflow:auto; }
+  .main > .card { display:flex; flex-direction:column; }
+  .main > .card svg { flex:1; min-height:0; width:100%; height:100%; }
+  .cv { flex:1; min-height:0; position:relative; }
+  .cv canvas { position:absolute; inset:0; width:100%; height:100%; cursor:grab; touch-action:none; }
+  .card h2 .vb { float:right; display:inline-flex; gap:4px; }
+  .card h2 .vb button { padding:0 6px; font-size:11px; }
+  .col { display:flex; flex-direction:column; gap:8px; min-height:0; overflow:auto; }
+  @media (min-width:1500px) {
+    .main { grid-template-columns:minmax(0,1fr) minmax(0,2.4fr) 340px 300px; }
+    .col { display:contents; }
+  }
+  .ctl { border-top:1px solid var(--line); margin-top:6px; padding-top:6px; }
+  .ctl .row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:4px; }
+  .ctl button { padding:4px 8px; font-size:13px; }
+  .ctl .row { gap:4px 6px; }
+  .ctl select { padding:2px 4px; }
+  .ctl label { font-size:13px; display:flex; gap:4px; align-items:center; }
+  .tl { display:flex; height:16px; border-radius:6px; overflow:hidden; border:1px solid var(--line); cursor:pointer; }
+  .tl div { height:100%; font-size:10px; text-align:center; color:#fff; overflow:hidden; white-space:nowrap; line-height:16px; }
+  .tlcur { position:relative; height:6px; }
+  .tlcur i { position:absolute; top:0; width:2px; height:10px; background:var(--ink); transform:translateX(-1px); }
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:1px 10px; font-size:13px; }
+  .kv b { font-weight:600; color:var(--muted); }
+  code, .mono { font-family:ui-monospace,Consolas,monospace; font-size:12.5px; }
+  .chk { display:flex; gap:8px; align-items:baseline; font-size:13px; }
+  .chk span:first-child { width:1.2em; font-weight:700; }
+  .y, .hlg { color:var(--ok); font-weight:700; } .n, .hlb { color:var(--bad); font-weight:700; } .hlw { color:var(--warn); font-weight:700; }
+  .big { font-size:17px; font-weight:700; }
+  .meter { height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin:3px 0 5px; position:relative; }
+  .meter i { display:block; height:100%; background:var(--goal); }
+  .meter u { position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--ink); }
+  .alert { padding:4px 8px; border-radius:6px; margin:0 0 6px; font-size:13px; border-left:4px solid; }
+  .alert.bad { background:color-mix(in srgb,var(--bad) 13%,transparent); border-color:var(--bad); }
+  .alert.warn { background:color-mix(in srgb,var(--warn) 15%,transparent); border-color:var(--warn); }
+  .alert.info { background:color-mix(in srgb,var(--goal) 12%,transparent); border-color:var(--goal); }
+  table { border-collapse:collapse; width:100%; font-size:12.5px; }
+  th, td { padding:2px 8px; text-align:left; white-space:nowrap; border-bottom:1px solid var(--line); }
+  th { position:sticky; top:0; background:var(--card); z-index:1; }
+  .jt td, .jt th { padding:1px 6px; font-size:12px; }
+  .jt td.r, .jt th.r { text-align:right; }
+  .logcard { height:clamp(120px,24vh,240px); display:flex; flex-direction:column; }
+  .logwrap { flex:1; overflow:auto; border:1px solid var(--line); border-radius:8px; }
+  tr.cur td { background:var(--sel); }
+  tr.chg td { border-top:2px solid var(--goal); }
+  tr[data-k] { cursor:pointer; }
+  .legend { display:flex; flex-wrap:wrap; gap:2px 12px; font-size:12px; color:var(--muted); }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:4px; vertical-align:-1px; }
+  .note { font-size:12.5px; color:var(--muted); }
+  .err { padding:24px; text-align:center; }
+  @media (max-width:899px) {
+    html, body { height:auto; } body { overflow:auto; }
+    .wrap { height:auto; }
+    .main { display:block; }
+    .main > .card, .col { margin-bottom:8px; }
+    .main > .card svg { height:auto; }
+    .cv { flex:none; height:320px; }
+    .logcard { height:300px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+const DATA = /*__DATA__*/null;
+
+const PHASE_NAME = {
+  0:"nhấc thẳng lên từ home", 1:"bay ngang tới phía TRÊN HỘP", 2:"hạ xuống pre-grasp", 3:"hạ xuống vị trí KẸP",
+  4:"đóng kẹp, chờ 30 bước", 5:"nhấc hộp lên", 6:"bay ngang tới phía TRÊN BÁT", 7:"hạ hộp xuống bát",
+  8:"mở kẹp thả hộp, chờ 20 bước", 9:"rút tay lên khỏi bát", 10:"về lại home", 11:"XONG"
+};
+const PHASE_COLOR = ["#6b7280","#2f6fd0","#0e9aa7","#d97706","#c026d3","#7c3aed","#2f6fd0","#0e9aa7","#c026d3","#6b7280","#6b7280","#1a9a3a"];
+const WAIT_LIMIT = {4:30, 8:20};
+const JSHORT = {shoulder_pan:"pan", shoulder_lift:"lift", elbow_flex:"elbow", wrist_flex:"wflex", wrist_roll:"wroll"};
+// khớp k (0..4) quay đoạn tay nào: đoạn đó là link S.arm_bodies[k+1]
+const JMEAN = "pan = xoay thân · lift = nâng vai · elbow = gập khuỷu · wflex = gập cổ tay · wroll = xoay cổ tay";
+
+const app = document.getElementById("app");
+if (!DATA) {
+  app.innerHTML = '<div class="err"><h1>Chưa có dữ liệu</h1><p>Đây là file mẫu. Hãy chạy <code>python -m sim_engine.make_replay</code> để tạo <code>docs/replay.html</code>.</p></div>';
+  throw new Error("no data");
+}
+const S = DATA.scene, EPS = DATA.episodes;
+const f3 = v => v ? "(" + v.map(x => (x >= 0 ? "+" : "") + x.toFixed(3)).join(", ") + ")" : "—";
+const dist = (a, b) => Math.hypot(a[0]-b[0], a[1]-b[1], a[2]-b[2]);
+const cm = v => (v * 100).toFixed(1);
+
+let ep = 0, i = 0, timer = null, speed = 120;
+const OPT = { past:true, future:true, path:true, hz:"1", every:1 };
+
+/* ---------- khung trang ---------- */
+app.innerHTML = `
+  <div class="hd">
+    <h1 title="Mỗi lần sửa policy, chạy lại python -m sim_engine.make_replay để cập nhật file này">Replay</h1>
+    <label>Seed <select id="sel"></select></label>
+    <span id="res"></span>
+    <span class="sub">Policy <code>${S.policy}</code> · hình 2D vẽ lại từ số liệu thật, không phải vật lý</span>
+    <span style="flex:1"></span>
+    <div class="legend">
+      <span><i style="background:var(--box)"></i>hộp</span><span><i style="background:var(--bowl)"></i>bát (nét đứt = ngưỡng vào bát)</span>
+      <span><i style="background:var(--hand)"></i>tay (giữa 2 ngón)</span><span><i style="background:var(--goal)"></i>đích</span>
+      <span><i style="background:var(--arm)"></i>cánh tay (đỏ = cẳng tay chạm hộp)</span>
+      <span><i style="background:var(--past)"></i>cánh tay mờ xanh lục = QUÁ KHỨ</span><span><i style="background:var(--future)"></i>cánh tay mờ cam = TƯƠNG LAI</span>
+      <span>số nhỏ cạnh cánh tay = lệch bao nhiêu bước so với hiện tại · chấm trên đường đứt = 1 bước</span>
+    </div>
+  </div>
+  <div class="main">
+    <div class="card c-small"><h2>NHÌN TỪ TRÊN XUỐNG (x ngang, y dọc, mét) · số 1-5 = khớp</h2><svg id="top" viewBox="0 0 520 340"></svg>
+      <h2>NHÌN TỪ CẠNH (x ngang, z cao, mét)</h2><svg id="side" viewBox="0 0 520 340"></svg></div>
+    <div class="card c-3d"><h2>3D (VIEW CHÍNH) · kéo chuột = xoay · lăn = zoom · nhấp đúp = về mặc định<span class="vb"><button id="v1">chéo</button><button id="v2">trước</button><button id="v3">trên</button></span></h2><div class="cv"><canvas id="c3"></canvas></div>
+      <div class="ctl">
+        <div class="row">
+          <button id="bFirst" title="Home">⏮ đầu</button>
+          <button id="bPP" title="↑">⏪ phase trước</button>
+          <button id="bPrev" title="←">◀ lùi 1</button>
+          <button id="bNext" title="→">tiến 1 ▶</button>
+          <button id="bPhase" title="↓">phase kế ⏩</button>
+          <button id="bPlay" class="primary" title="Space">▶ phát</button>
+          <label>Tốc độ <select id="spd"><option value="400">chậm</option><option value="120" selected>vừa</option><option value="40">nhanh</option></select></label>
+        </div>
+        <input type="range" id="rng" min="0" value="0">
+        <div class="tl" id="tl"></div><div class="tlcur" id="tlc"><i></i></div>
+        <div class="row" style="margin-top:2px">
+          <label><input type="checkbox" id="oPast" checked><span style="color:var(--past);font-weight:700">quá khứ</span></label>
+          <label><input type="checkbox" id="oFut" checked><span style="color:var(--future);font-weight:700">tương lai</span></label>
+          <label><input type="checkbox" id="oPath" checked>đường đi của tay</label>
+          <label>phạm vi <select id="oHz"><option value="1" selected>1 bước</option><option value="5">5 bước</option><option value="15">15 bước</option><option value="phase">hết phase</option><option value="end">hết ván</option></select></label>
+          <label>1 cánh tay mờ mỗi <select id="oEv"><option value="1" selected>1 bước</option><option value="3">3 bước</option><option value="5">5 bước</option><option value="10">10 bước</option></select></label>
+          <span class="sub">Phím: ← → · ↑ ↓ phase · Space · Home/End</span>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card"><h2>PHASE, ĐÍCH VÀ IK</h2><div id="info"></div></div>
+      <div class="card"><h2>KẸP VÀ VÀO BÁT: điều kiện env kiểm tra</h2><div id="chk"></div></div>
+    </div>
+  </div>
+  <details><summary>Tự điều tra một phase chạy lâu</summary>
+<p><b>Mức 1.</b> Chọn một seed hoàn thành và một seed hết bước. Trong cùng một phase, hộp bắt đầu dịch chuyển ở bước nào trên hình nhìn từ trên? Lúc đó tay còn cao hơn hộp bao nhiêu trên hình nhìn từ cạnh?</p>
+<details><summary>Mức 2 · Đọc log</summary><p>Dừng ở hai bước liên tiếp. Khoảng cách tay đến đích thay đổi vì tay di chuyển hay vì chính đích đã đổi? Dòng log nào giúp bạn phân biệt?</p></details>
+<details><summary>Mức 3 · Nối với code</summary><p>Trong <code>scripted_policy.py</code>, tìm <code>select_action</code> và nhánh của phase vừa xem. Điều kiện nào cho phép sang phase kế? Nếu sửa một chỗ, bạn dự đoán đại lượng nào trong log sẽ đổi trước?</p></details>
+<p>Để so tốc độ, hãy ghi bước vào và bước ra của cùng một phase ở cùng một seed trước và sau khi sửa. Cuối lần chạy, hộp có thực sự vào bát không?</p></details>
+<div class="card logcard"><h2>LOG TỪNG BƯỚC (bấm một dòng để nhảy tới)</h2><div class="logwrap" id="logw"></div></div>
+`;
+const $ = id => document.getElementById(id);
+$("sel").innerHTML = EPS.map((e, k) => `<option value="${k}">seed ${e.seed} — ${e.success ? "OK" : "FAIL"}</option>`).join("");
+
+/* ---------- ánh xạ tọa độ -> pixel ---------- */
+const W = 520, H = 340;
+const TOP = { x0:-0.22, x1:0.30, y0:-0.20, y1:0.14 };
+const SIDE = { x0:-0.22, x1:0.30, z0:0.40, z1:0.66 };
+const sx = (v, R) => 10 + (v - R.x0) / (R.x1 - R.x0) * (W - 20);
+const topX = x => sx(x, TOP);
+const topY = y => H - 10 - (y - TOP.y0) / (TOP.y1 - TOP.y0) * (H - 20);
+const sideX = x => sx(x, SIDE);
+const sideY = z => H - 10 - (z - SIDE.z0) / (SIDE.z1 - SIDE.z0) * (H - 20);
+const scaleX = R => (W - 20) / (R.x1 - R.x0);
+const polyPts = (arr, fx, fy, a, b) => arr.map(p => fx(p[a]).toFixed(1) + "," + fy(p[b]).toFixed(1)).join(" ");
+function cross(x, y, r, col, w) { return `<path d="M${x-r} ${y} H${x+r} M${x} ${y-r} V${y+r}" stroke="${col}" stroke-width="${w}"/>`; }
+function F() { return EPS[ep].frames; }
+
+/* ---------- quá khứ và tương lai ---------- */
+function futureEnd() {
+  const fs = F(), n = fs.length - 1, nx = Math.min(i + 1, n);
+  if (OPT.hz === "end") return n;
+  if (OPT.hz === "phase") { const cur = fs[nx].ph; let k = nx; while (k < n && fs[k+1].ph === cur) k++; return k; }
+  return Math.min(n, i + (+OPT.hz));
+}
+function armSeg(fr, fx, fy, a, b, w, op, red, col) {
+  const A = fr.arm.map(p => [p[a], p[b]]); A.push([fr.ee[a], fr.ee[b]]);
+  let s = "";
+  for (let k = 0; k < A.length - 1; k++) {
+    const nm = S.arm_bodies[k];                       // đoạn k nằm giữa khớp k và khớp k+1, mang tên link nm
+    const hit = red && fr.ct.includes(nm), tb = red && fr.tb.includes(nm);
+    const c = hit ? "var(--bad)" : tb ? "var(--warn)" : (col || "var(--arm)");
+    s += `<line x1="${fx(A[k][0])}" y1="${fy(A[k][1])}" x2="${fx(A[k+1][0])}" y2="${fy(A[k+1][1])}" stroke="${c}" stroke-width="${hit || tb ? w + 2 : w}" stroke-linecap="round" opacity="${hit || tb ? 1 : op}"/>`;
+  }
+  if (red) for (let k = 1; k <= 5; k++)                // đánh số khớp 1..5 trên cánh tay chính
+    s += `<circle cx="${fx(A[k][0])}" cy="${fy(A[k][1])}" r="7" fill="var(--card)" stroke="var(--ink)" stroke-width="1.2"/><text x="${fx(A[k][0])}" y="${fy(A[k][1]) + 3.2}" font-size="9" font-weight="700" text-anchor="middle" fill="var(--ink)">${k}</text>`;
+  return s;
+}
+function pastStart() {
+  const fs = F();
+  if (OPT.hz === "end") return 0;
+  if (OPT.hz === "phase") { const cur = fs[i].ph; let k = i; while (k > 0 && fs[k-1].ph === cur) k--; return k; }
+  return Math.max(0, i - (+OPT.hz));
+}
+// Chọn các khung để vẽ cánh tay mờ: cách nhau OPT.every bước, tối đa 12 cánh tay mỗi phía
+function ghostIdx(from, to) {
+  const span = Math.abs(to - from); if (span === 0) return [];
+  let g = OPT.every; if (span / g > 12) g = Math.ceil(span / 12);
+  const out = [], dir = to > from ? 1 : -1;
+  for (let k = g; k <= span; k += g) out.push(from + dir * k);
+  if (out[out.length - 1] !== to) out.push(to);
+  return out;
+}
+function trails(fx, fy, a, b) {
+  const fs = F(), n = fs.length - 1; let s = "";
+  const lab = (f, off, col) => `<text x="${fx(f.ee[a]) + 5}" y="${fy(f.ee[b]) - 5}" font-size="9" fill="${col}" opacity=".9">${off > 0 ? "+" : ""}${off}</text>`;
+  if (OPT.past && i > 0) {
+    const st = pastStart(), idx = ghostIdx(i, st);
+    if (OPT.path) {
+      const past = fs.slice(st, i + 1);
+      s += `<polyline points="${polyPts(past.map(f => f.ee), fx, fy, a, b)}" fill="none" stroke="var(--past)" stroke-width="1.6" opacity=".55"/>`;
+      if (dist(past[0].box, past[past.length-1].box) > 0.003)
+        s += `<polyline points="${polyPts(past.map(f => f.box), fx, fy, a, b)}" fill="none" stroke="var(--box)" stroke-width="1.5" opacity=".4"/>`;
+    }
+    idx.slice().reverse().forEach(k => {                       // vẽ cái xa nhất trước, cái gần đè lên
+      const t = Math.abs(k - i) / Math.max(1, Math.abs(st - i));
+      s += armSeg(fs[k], fx, fy, a, b, 5, .34 - .2 * t, false, "var(--past)") + lab(fs[k], k - i, "var(--past)");
+    });
+  }
+  if (OPT.future && i < n) {
+    const e = futureEnd(), idx = ghostIdx(i, e);
+    if (OPT.path) {
+      const seg = fs.slice(i, e + 1);
+      if (dist(seg[0].box, seg[seg.length-1].box) > 0.003)
+        s += `<polyline points="${polyPts(seg.map(f => f.box), fx, fy, a, b)}" fill="none" stroke="var(--box)" stroke-width="2" stroke-dasharray="4 3"/>`;
+      s += `<polyline points="${polyPts(seg.map(f => f.ee), fx, fy, a, b)}" fill="none" stroke="var(--future)" stroke-width="2" stroke-dasharray="5 3"/>`;
+      seg.slice(1).forEach(f => { s += `<circle cx="${fx(f.ee[a])}" cy="${fy(f.ee[b])}" r="2.2" fill="var(--future)"/>`; });
+    }
+    idx.slice().reverse().forEach(k => {
+      const t = Math.abs(k - i) / Math.max(1, Math.abs(e - i));
+      s += armSeg(fs[k], fx, fy, a, b, 5, .42 - .24 * t, false, "var(--future)") + lab(fs[k], k - i, "var(--future)");
+    });
+  }
+  return s;
+}
+
+// Lưới + trục có số (mét). ystep: bước vạch dọc, ylab: bước ghi số.
+function axes(R, fx, fy, vlo, vhi, ystep, ylab, xname, yname) {
+  const num = v => (Math.abs(v) < 1e-9 ? 0 : v).toFixed(2);
+  let s = "";
+  for (let v = Math.ceil(R.x0 / 0.05 - 1e-9) * 0.05; v <= R.x1 + 1e-9; v += 0.05) {
+    const X = fx(v), z0 = Math.abs(v) < 1e-9, major = Math.abs(v / 0.1 - Math.round(v / 0.1)) < 1e-6;
+    s += `<line x1="${X}" y1="10" x2="${X}" y2="${H-10}" stroke="var(--muted)" stroke-width="${z0 ? 1.4 : .5}" opacity="${z0 ? .7 : major ? .35 : .18}"/>`;
+    if (major) s += `<text x="${X}" y="${H-13}" font-size="9" text-anchor="middle" fill="var(--muted)">${num(v)}</text>`;
+  }
+  for (let v = Math.ceil(vlo / ystep - 1e-9) * ystep; v <= vhi + 1e-9; v += ystep) {
+    const Y = fy(v), z0 = Math.abs(v) < 1e-9, lab = Math.abs(v / ylab - Math.round(v / ylab)) < 1e-6;
+    s += `<line x1="10" y1="${Y}" x2="${W-10}" y2="${Y}" stroke="var(--muted)" stroke-width="${z0 ? 1.4 : .5}" opacity="${z0 ? .7 : lab ? .35 : .18}"/>`;
+    if (lab && Y < H - 24) s += `<text x="13" y="${Y - 2}" font-size="9" fill="var(--muted)">${num(v)}</text>`;
+  }
+  s += `<text x="${W-12}" y="${H-26}" font-size="11" font-weight="700" text-anchor="end" fill="var(--ink)">${xname} →</text>`;
+  s += `<text x="13" y="22" font-size="11" font-weight="700" fill="var(--ink)">↑ ${yname}</text>`;
+  return s;
+}
+function drawTop(fr, fs) {
+  const k = scaleX(TOP), b = S.bowl, b0 = fs[0].box, h = S.box_half * k;
+  let s = `<rect x="${topX(-0.30)}" y="${topY(0.25)}" width="${topX(0.30)-topX(-0.30)}" height="${topY(-0.25)-topY(0.25)}" fill="var(--table)" opacity=".5"/>`;
+  s += axes(TOP, topX, topY, TOP.y0, TOP.y1, 0.05, 0.1, "x (m)", "y (m)");
+  s += `<text x="${topX(b[0])}" y="${topY(b[1]) - 0.06*k}" font-size="10" text-anchor="middle" fill="var(--bowl)" font-weight="700">bát</text>`;
+  s += `<text x="${topX(fr.arm[0][0]) + 9}" y="${topY(fr.arm[0][1]) + 4}" font-size="10" fill="var(--ink)">đế robot</text>`;
+  s += `<circle cx="${topX(b[0])}" cy="${topY(b[1])}" r="${0.045*k}" fill="var(--bowl)" opacity=".35" stroke="var(--bowl)" stroke-width="2"/>`;
+  s += `<circle cx="${topX(b[0])}" cy="${topY(b[1])}" r="${S.bowl_radius*k}" fill="none" stroke="var(--bowl)" stroke-dasharray="4 3"/>`;
+  s += `<rect x="${topX(b0[0])-h}" y="${topY(b0[1])-h}" width="${2*h}" height="${2*h}" fill="none" stroke="var(--box)" stroke-dasharray="3 3" opacity=".6"/>`;
+  s += `<text x="${topX(b0[0])}" y="${topY(b0[1]) + h + 11}" font-size="9" text-anchor="middle" fill="var(--box)">hộp ban đầu</text>`;
+  if (Math.hypot(fr.box[0]-b0[0], fr.box[1]-b0[1]) > 0.004)     // mũi tên: hộp đã lệch khỏi chỗ cũ
+    s += `<line x1="${topX(b0[0])}" y1="${topY(b0[1])}" x2="${topX(fr.box[0])}" y2="${topY(fr.box[1])}" stroke="var(--bad)" stroke-width="2" stroke-dasharray="2 2"/>`;
+  s += trails(topX, topY, 0, 1);
+  s += armSeg(fr, topX, topY, 0, 1, 7, .85, true);
+  for (const g of fr.fg) s += `<rect x="${topX(g[0])-3}" y="${topY(g[1])-5}" width="6" height="10" fill="${fr.ct.some(n => n.endsWith("_finger")) ? "var(--bad)" : "var(--ink)"}"/>`;
+  s += `<rect x="${topX(fr.box[0])-h}" y="${topY(fr.box[1])-h}" width="${2*h}" height="${2*h}" fill="var(--box)"/>`;
+  if (fr.tg) {
+    s += `<line x1="${topX(fr.ee[0])}" y1="${topY(fr.ee[1])}" x2="${topX(fr.tg[0])}" y2="${topY(fr.tg[1])}" stroke="var(--warn)" stroke-width="2"/>`;
+    s += `<circle cx="${topX(fr.tg[0])}" cy="${topY(fr.tg[1])}" r="7" fill="none" stroke="var(--goal)" stroke-width="2.5"/>`;
+  }
+  s += cross(topX(fr.ee[0]), topY(fr.ee[1]), 8, "var(--hand)", 2.5);
+  $("top").innerHTML = s;
+}
+function drawSide(fr, fs) {
+  const k = scaleX(SIDE), b = S.bowl, h = S.box_half * k;
+  const b0 = fs[0].box;
+  let s = `<rect x="10" y="${sideY(0.42)}" width="${W-20}" height="${H-10-sideY(0.42)}" fill="var(--table)" opacity=".5"/>`;
+  s += axes(SIDE, sideX, sideY, SIDE.z0, SIDE.z1, 0.05, 0.05, "x (m)", "z = độ cao (m)");
+  s += `<line x1="10" y1="${sideY(0.42)}" x2="${W-10}" y2="${sideY(0.42)}" stroke="var(--muted)" stroke-width="2"/>`;
+  s += `<text x="${W-12}" y="${sideY(0.42) + 12}" font-size="10" text-anchor="end" fill="var(--muted)">mặt bàn z=0.42</text>`;
+  s += `<text x="${sideX(b[0])}" y="${sideY(b[2] + S.bowl_height) - 5}" font-size="10" text-anchor="middle" fill="var(--bowl)" font-weight="700">bát</text>`;
+  s += `<rect x="${sideX(b0[0])-h}" y="${sideY(b0[2])-h}" width="${2*h}" height="${2*h}" fill="none" stroke="var(--box)" stroke-dasharray="3 3" opacity=".6"/>`;
+  if (Math.abs(fr.box[0]-b0[0]) > 0.004)
+    s += `<line x1="${sideX(b0[0])}" y1="${sideY(b0[2])}" x2="${sideX(fr.box[0])}" y2="${sideY(fr.box[2])}" stroke="var(--bad)" stroke-width="2" stroke-dasharray="2 2"/>`;
+  s += `<rect x="${sideX(b[0]-0.045)}" y="${sideY(b[2]+S.bowl_height)}" width="${0.09*k}" height="${S.bowl_height/(SIDE.z1-SIDE.z0)*(H-20)}" fill="var(--bowl)" opacity=".35" stroke="var(--bowl)" stroke-width="2"/>`;
+  for (const sgn of [-1, 1]) s += `<line x1="${sideX(b[0]+sgn*S.bowl_radius)}" y1="${sideY(b[2]-0.01)}" x2="${sideX(b[0]+sgn*S.bowl_radius)}" y2="${sideY(b[2]+S.bowl_height+0.02)}" stroke="var(--bowl)" stroke-dasharray="4 3"/>`;
+  s += trails(sideX, sideY, 0, 2);
+  s += armSeg(fr, sideX, sideY, 0, 2, 7, .85, true);
+  s += `<rect x="${sideX(fr.box[0])-h}" y="${sideY(fr.box[2])-h}" width="${2*h}" height="${2*h}" fill="var(--box)"/>`;
+  if (fr.tg) {
+    s += `<line x1="${sideX(fr.ee[0])}" y1="${sideY(fr.ee[2])}" x2="${sideX(fr.tg[0])}" y2="${sideY(fr.tg[2])}" stroke="var(--warn)" stroke-width="2"/>`;
+    s += `<circle cx="${sideX(fr.tg[0])}" cy="${sideY(fr.tg[2])}" r="7" fill="none" stroke="var(--goal)" stroke-width="2.5"/>`;
+  }
+  s += cross(sideX(fr.ee[0]), sideY(fr.ee[2]), 8, "var(--hand)", 2.5);
+  $("side").innerHTML = s;
+}
+
+/* ---------- thông tin và cảnh báo ---------- */
+function reasonOf(fr) {
+  if (fr.phn === fr.ph) return "";
+  if (fr.tg) return dist(fr.ee, fr.tg) < fr.th ? "tới đích" : "TIMEOUT 200 bước (không tới được đích)";
+  return "hết thời gian chờ";
+}
+function drawInfo(fr, fs) {
+  const ph = fr.ph, d = fr.tg ? dist(fr.ee, fr.tg) : null, lim = WAIT_LIMIT[ph] || 200, wait = !!WAIT_LIMIT[ph];
+  const prev = fs[Math.max(0, i - 1)], box0 = fs[0].box;
+  let al = "";
+
+  // Cảnh báo 1: IK tin tới được nhưng tay thật không tới -> tay có thể bị chặn
+  if (d !== null && fr.ie !== null && fr.ie < 0.005 && d > fr.th && fr.ps >= 5)
+    al += `<div class="alert bad"><b>IK tin là tới được</b> (sai số ${cm(fr.ie)} cm) <b>nhưng tay thật còn cách đích ${cm(d)} cm</b> (ngưỡng ${cm(fr.th)}). Tay có thể bị cản.${fr.tb.length ? " Đang chạm bàn: <b>" + fr.tb.join(", ") + "</b>." : ""}</div>`;
+  // Cảnh báo 2: sắp timeout
+  if (!wait && fr.ps >= 0.75 * lim) al += `<div class="alert warn">Phase đã chạy <b>${fr.ps}/${lim}</b> bước: sắp timeout, cả ván có ${S.max_steps} bước.</div>`;
+  // Cảnh báo 3: hộp vừa bị đẩy
+  const mv = dist(fr.box, prev.box);
+  if (!fr.gr && mv > 0.002) al += `<div class="alert bad"><b>Hộp vừa bị đẩy ${cm(mv)} cm</b> trong bước này${fr.ct.length ? " (chạm: <b>" + fr.ct.join(", ") + "</b>)" : ""}.</div>`;
+  // Cảnh báo 4: hộp đã lệch so với ban đầu trước khi kẹp
+  const off = Math.hypot(fr.box[0]-box0[0], fr.box[1]-box0[1]);
+  if (!fr.gr && ph <= 4 && off > 0.01) al += `<div class="alert warn">Hộp đã lệch <b>${cm(off)} cm</b> so với vị trí ban đầu, trước khi được kẹp.</div>`;
+  const r = reasonOf(fr);
+  if (r) al += `<div class="alert info">Bước này kết thúc phase ${ph} (<b>${r}</b>) → phase ${fr.phn}: ${PHASE_NAME[fr.phn] || ""}</div>`;
+
+  const pr = fr.ps / lim, prCls = wait ? "" : pr >= .75 ? "hlb" : pr >= .5 ? "hlw" : "";
+  let html = al + `<div class="kv">
+    <b>Phase</b><span><span class="big">${ph}</span> — ${PHASE_NAME[ph] || "?"}</span>
+    <b>Bước</b><span class="mono"><span class="${prCls}">${fr.ps}/${lim}</span> trong phase · tổng ${fr.t}/${S.max_steps}</span>
+    <b>Tay</b><span class="mono" style="color:var(--hand)">${f3(fr.ee)}</span>
+    <b>Đích</b><span class="mono" style="color:var(--goal)">${f3(fr.tg)}</span>
+    <b>Hộp</b><span class="mono" style="color:var(--box)">${f3(fr.box)}</span>
+  </div>`;
+  if (d !== null) {
+    const pct = Math.min(100, d / 0.2 * 100), tp = Math.min(100, fr.th / 0.2 * 100), ok = d < fr.th;
+    html += `<div class="meter" title="vạch đen = ngưỡng"><i style="width:${pct}%;background:${ok ? "var(--ok)" : "var(--warn)"}"></i><u style="left:${tp}%"></u></div>
+      <div>Tay cách đích <span class="big ${ok ? "hlg" : "hlw"}">${cm(d)} cm</span> · ngưỡng ${cm(fr.th)} cm ${ok ? '<span class="hlg">đủ gần</span>' : '<span class="hlw">chưa đủ</span>'}</div>`;
+  } else html += `<div class="note" style="margin-top:4px">Phase này không di chuyển, chỉ đóng/mở kẹp và chờ nên IK không chạy.</div>`;
+
+  // Bảng khớp: số thứ tự, góc IK muốn so với góc thật, và đoạn tay do khớp đó quay (đỏ = chạm hộp, cam = chạm bàn)
+  html += `<div style="margin-top:8px"><b style="font-size:12px;color:var(--muted)">5 KHỚP (độ) · đoạn tay nào chạm hộp/bàn</b>`;
+  if (fr.ik) html += ` · IK dự đoán tay tới sát đích: sai số <span class="${fr.ie < 0.005 ? "hlg" : "hlw"}">${cm(fr.ie)} cm</span>`;
+  else html += ` · <span class="note">phase chờ: IK không chạy</span>`;
+  html += `</div><table class="jt"><thead><tr><th>#</th><th>khớp</th><th class="r">IK muốn</th><th class="r">thật</th><th class="r">lệch</th><th>đoạn tay</th></tr></thead><tbody>` +
+    S.joints.map((jn, k) => {
+      const link = S.arm_bodies[k + 1], a = fr.ik ? fr.ik[k] : null, dv = a === null ? null : a - fr.jq[k], ad = Math.abs(dv), cls = dv === null ? "" : ad > 15 ? "hlb" : ad > 5 ? "hlw" : "";
+      const st = fr.ct.includes(link) ? ' <span class="badge bad">chạm HỘP</span>' : fr.tb.includes(link) ? ' <span class="badge" style="background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)">chạm bàn</span>' : "";
+      return `<tr><td><b>${k + 1}</b></td><td title="${jn}">${JSHORT[jn] || jn}</td><td class="r mono">${a === null ? "—" : a.toFixed(1)}</td><td class="r mono">${fr.jq[k].toFixed(1)}</td><td class="r mono ${cls}">${dv === null ? "—" : (dv >= 0 ? "+" : "") + dv.toFixed(1)}</td><td class="mono">${link.replace("_link", "")}${st}</td></tr>`;
+    }).join("") + `</tbody></table>`;
+  const fing = fr.ct.filter(n => n.endsWith("_finger")), base = fr.tb.includes("base_link");
+  html += `<div class="note" style="margin-top:3px">${JMEAN}. Đoạn <b>base</b> (đế) đứng yên${base ? " (chạm bàn)" : ""}; <b>2 ngón kẹp</b> không có trong IK${fing.length ? ': <span class="hlb">đang chạm hộp: ' + fing.join(", ") + "</span>" : ""}.</div>`;
+  $("info").innerHTML = html;
+}
+// Từ lúc env đã "dính" hộp vào tay ít nhất một lần, hộp dịch chuyển là chủ ý
+function ph_after_grasp() { return F().slice(0, i + 1).some(f => f.gr); }
+// PUSH[ep] = chỉ số khung đầu tiên mà hộp trượt ngang > 0.2 cm khi chưa được kẹp (hoặc null)
+const PUSH = EPS.map(e => {
+  const fs = e.frames;
+  for (let k = 1; k < fs.length; k++) {
+    if (fs[k].gr) return null;
+    if (Math.hypot(fs[k].box[0] - fs[k-1].box[0], fs[k].box[1] - fs[k-1].box[1]) > 0.002) return k;
+  }
+  return null;
+});
+function yn(ok, text) { return `<div class="chk"><span class="${ok ? "y" : "n"}">${ok ? "✓" : "✗"}</span><span>${text}</span></div>`; }
+function drawChk(fr) {
+  const dEB = dist(fr.ee, fr.box), z = fr.box[2], bz = S.bowl[2];
+  const zOk = z > bz - 0.01 && z < bz + S.bowl_height + 0.02, hOk = fr.hd < S.bowl_radius;
+  const clsy = ok => ok ? "hlg" : "hlb";
+  let h = `<div class="note" style="margin:0 0 3px"><b>Hộp dính vào tay</b> khi đủ cả 3 điều (env._update_grasp):</div>`;
+  h += yn(fr.ag < -0.5, `lệnh đóng kẹp (action &lt; -0.5): <span class="${clsy(fr.ag < -0.5)}">${fr.ag}</span>`);
+  h += yn(fr.fo < S.close_threshold, `ngón đã khép: mở <span class="${clsy(fr.fo < S.close_threshold)}">${fr.fo.toFixed(3)}</span> (cần &lt; ${S.close_threshold})`);
+  h += yn(dEB < S.grasp_threshold, `tay gần hộp: <span class="${clsy(dEB < S.grasp_threshold)}">${cm(dEB)} cm</span> (cần &lt; ${(S.grasp_threshold*100).toFixed(0)})`);
+  h += `<div class="chk"><span>→</span><span>Đang dính: <span class="big ${clsy(fr.gr)}">${fr.gr ? "CÓ" : "KHÔNG"}</span></span></div>`;
+  h += `<div class="note" style="margin:8px 0 3px"><b>Hộp vào bát</b> khi (env._get_info):</div>`;
+  h += yn(hOk, `ngang hộp-bát <span class="${clsy(hOk)}">${cm(fr.hd)} cm</span> (cần &lt; ${(S.bowl_radius*100).toFixed(0)})`);
+  h += yn(zOk, `độ cao hộp <span class="${clsy(zOk)}">${z.toFixed(3)}</span> trong [${(bz-0.01).toFixed(2)}, ${(bz+S.bowl_height+0.02).toFixed(2)}]`);
+  h += `<div class="chk"><span>→</span><span>Thành công: <span class="big ${clsy(fr.ok)}">${fr.ok ? "CÓ" : "chưa"}</span></span></div>`;
+  h += `<div class="note" style="margin:8px 0 3px"><b>Vật đang chạm hộp</b> (trừ mặt bàn):</div>`;
+  h += fr.ct.length ? fr.ct.map(n => `<span class="badge ${n === "forearm_link" ? "bad" : "ok"}">${n}</span> `).join("") : '<span class="note">không có</span>';
+  h += `<div class="note" style="margin:8px 0 3px"><b>Khúc tay đang chạm bàn:</b></div>`;
+  h += fr.tb.length ? fr.tb.map(n => `<span class="badge bad">${n}</span> `).join("") : '<span class="note">không có</span>';
+
+  // Hộp có bị lệch khỏi chỗ ban đầu không?
+  const b0 = F()[0].box, dx = fr.box[0] - b0[0], dy = fr.box[1] - b0[1], dz = fr.box[2] - b0[2], off = Math.hypot(dx, dy);
+  const carried = fr.gr || ph_after_grasp(fr);
+  const oc = carried ? "" : off > 0.01 ? "hlb" : off > 0.005 ? "hlw" : "hlg";
+  h += `<div class="note" style="margin:8px 0 3px"><b>Hộp có bị lệch không?</b> (so với bước 0)</div>`;
+  h += `<div class="kv mono"><b>ban đầu</b><span>${f3(b0)}</span><b>hiện tại</b><span>${f3(fr.box)}</span><b>lệch ngang</b><span class="${oc}">${cm(off)} cm</span> <b>(dx, dy, dz)</b><span>${(dx*100).toFixed(1)}, ${(dy*100).toFixed(1)}, ${(dz*100).toFixed(1)} cm</span></div>`;
+  h += carried ? `<div class="note">Hộp đã được kẹp/mang đi nên dịch chuyển là chủ ý.</div>`
+    : off > 0.01 ? `<div class="alert bad" style="margin-top:3px">Hộp bị đẩy lệch <b>${cm(off)} cm</b> khi chưa được kẹp: hướng đích sẽ lệch theo.</div>` : `<div class="note">Hộp gần như đứng yên (lệch &lt; 0.5 cm là bình thường).</div>`;
+  const pu = PUSH[ep];
+  h += pu ? `<div class="note" style="margin-top:3px">Bị đẩy lần đầu ở <a href="#" id="jmpPush"><b>bước ${F()[pu].t}</b> (phase ${F()[pu].ph})</a> bởi <b>${F()[pu].ct.join(", ") || "?"}</b>.</div>` : `<div class="note" style="margin-top:3px">Không bị đẩy trước khi kẹp.</div>`;
+  $("chk").innerHTML = h;
+  const jp = $("jmpPush"); if (jp) jp.onclick = e => { e.preventDefault(); go(pu); };
+}
+
+/* ---------- log ---------- */
+function maxDiff(f) { return f.ik ? Math.max(...f.ik.map((a, k) => Math.abs(a - f.jq[k]))) : null; }
+function buildLog(fs) {
+  let rows = `<table><thead><tr><th>bước</th><th>phase</th><th>tay</th><th>đích</th><th>cách đích</th><th>IK sai số</th><th>góc lệch max</th><th>hộp</th><th>ngón</th><th>dính</th><th>chạm hộp</th><th>chạm bàn</th></tr></thead><tbody>`;
+  fs.forEach((f, k) => {
+    const d = f.tg ? dist(f.ee, f.tg) : null, md = maxDiff(f);
+    const dCls = d === null ? "" : d < f.th ? "hlg" : "hlw";
+    const iCls = f.ie === null ? "" : f.ie < 0.005 ? "" : "hlw";
+    const mCls = md === null ? "" : md > 15 ? "hlb" : md > 5 ? "hlw" : "";
+    const moved = k > 0 && !f.gr && dist(f.box, fs[k-1].box) > 0.002;
+    rows += `<tr data-k="${k}" class="${f.ph !== f.phn ? "chg" : ""}"><td>${f.t}</td><td>${f.ph}${f.ph !== f.phn ? " → " + f.phn : ""}</td><td class="mono">${f3(f.ee)}</td><td class="mono">${f3(f.tg)}</td><td class="${dCls}">${d === null ? "—" : cm(d) + " cm"}</td><td class="${iCls}">${f.ie === null ? "—" : cm(f.ie) + " cm"}</td><td class="${mCls}">${md === null ? "—" : md.toFixed(1) + "°"}</td><td class="mono ${moved ? "hlb" : ""}">${f3(f.box)}</td><td>${f.fo.toFixed(3)}</td><td>${f.gr ? "có" : "không"}</td><td class="${f.ct.length ? "hlb" : ""}">${f.ct.join(", ")}</td><td>${f.tb.join(", ")}</td></tr>`;
+  });
+  $("logw").innerHTML = rows + "</tbody></table>";
+  $("logw").querySelectorAll("tr[data-k]").forEach(tr => tr.onclick = () => go(+tr.dataset.k));
+}
+function buildTimeline(fs) {
+  const n = fs.length - 1; let segs = [], start = 1;
+  for (let k = 1; k <= n; k++) if (k === n || fs[k].ph !== fs[k+1].ph) { segs.push([fs[k].ph, start, k]); start = k + 1; }
+  $("tl").innerHTML = segs.map(([p, a, b]) => `<div title="phase ${p}: bước ${a}-${b}" style="flex:${b-a+1};background:${PHASE_COLOR[p]}">${p}</div>`).join("");
+  $("tl").onclick = e => { const r = $("tl").getBoundingClientRect(); go(Math.round((e.clientX - r.left) / r.width * n)); };
+}
+
+/* ---------- 3D: tự vẽ bằng canvas 2D, không cần thư viện ---------- */
+const CAM0 = { yaw:-0.95, pitch:0.5, dist:0.95 };
+const CAM = { ...CAM0, t:[0.02, -0.03, 0.5] };
+const JN = ["pan", "lift", "elbow", "wflex", "wroll"];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue("--" + n).trim();
+function makeProj(w, h) {
+  const cp = Math.cos(CAM.pitch), sp = Math.sin(CAM.pitch), cy = Math.cos(CAM.yaw), sy = Math.sin(CAM.yaw);
+  const cam = [CAM.t[0] + CAM.dist*cp*cy, CAM.t[1] + CAM.dist*cp*sy, CAM.t[2] + CAM.dist*sp];
+  const f = [-cp*cy, -cp*sy, -sp];
+  let r = [f[1], -f[0], 0]; const rl = Math.hypot(r[0], r[1]) || 1; r = [r[0]/rl, r[1]/rl, 0];
+  const u = [r[1]*f[2] - r[2]*f[1], r[2]*f[0] - r[0]*f[2], r[0]*f[1] - r[1]*f[0]];
+  const fp = Math.min(w, h) * 1.45;
+  return v => {
+    const d = [v[0]-cam[0], v[1]-cam[1], v[2]-cam[2]];
+    const zc = d[0]*f[0] + d[1]*f[1] + d[2]*f[2];
+    return [w/2 + fp * (d[0]*r[0] + d[1]*r[1]) / zc, h/2 - fp * (d[0]*u[0] + d[1]*u[1] + d[2]*u[2]) / zc, zc];
+  };
+}
+function draw3d(fr, fs) {
+  const cv = $("c3"), w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return;
+  const dpr = window.devicePixelRatio || 1;
+  if (cv.width !== Math.round(w*dpr) || cv.height !== Math.round(h*dpr)) { cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr); }
+  const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  const P = makeProj(w, h), K = {};
+  ["box","bowl","hand","goal","arm","past","future","ink","line","muted","warn","bad","table","card"].forEach(n => K[n] = css(n));
+  const line = (a, b, c, lw, al, dash) => { const p = P(a), q = P(b); g.globalAlpha = al ?? 1; g.strokeStyle = c; g.lineWidth = lw; g.setLineDash(dash || []); g.beginPath(); g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]); g.stroke(); g.globalAlpha = 1; g.setLineDash([]); };
+  const poly = (pts, fill, stroke, lw, al, dash) => { g.beginPath(); pts.forEach((v, k) => { const p = P(v); k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }); g.closePath(); g.globalAlpha = al ?? 1; if (fill) { g.fillStyle = fill; g.fill(); } if (stroke) { g.strokeStyle = stroke; g.lineWidth = lw || 1; g.setLineDash(dash || []); g.stroke(); } g.globalAlpha = 1; g.setLineDash([]); };
+  const txt = (v, s, c, size, anchor) => { const p = P(v); g.fillStyle = c; g.font = `${size || 11}px system-ui,sans-serif`; g.textAlign = anchor || "left"; g.fillText(s, p[0] + 6, p[1] - 6); };
+  const ring = (c, rad, z, n = 32) => Array.from({ length: n }, (_, k) => [c[0] + rad*Math.cos(2*Math.PI*k/n), c[1] + rad*Math.sin(2*Math.PI*k/n), z]);
+  const TZ = 0.42;
+
+  // bàn + lưới
+  poly([[-0.3,-0.25,TZ],[0.3,-0.25,TZ],[0.3,0.25,TZ],[-0.3,0.25,TZ]], K.table, K.muted, 1, .55);
+  for (let v = -0.2; v <= 0.201; v += 0.1) { line([v,-0.25,TZ],[v,0.25,TZ], K.muted, .5, .3); }
+  for (let v = -0.2; v <= 0.201; v += 0.1) { line([-0.3,v,TZ],[0.3,v,TZ], K.muted, .5, .3); }
+  // trục x (đỏ), y (xanh lá), z (xanh dương) từ gốc (0,0) trên mặt bàn, dài 10 cm
+  const O = [0, 0, TZ];
+  [[[0.1,0,0],"#d33","x"],[[0,0.1,0],"#2a2","y"],[[0,0,0.1],"#38e","z"]].forEach(([d, c, n]) => { const e = [O[0]+d[0], O[1]+d[1], O[2]+d[2]]; line(O, e, c, 2.2); txt(e, n + " +0.1", c, 11, "left"); });
+
+  // bát: đáy, miệng, thành, vòng ngưỡng
+  const b = S.bowl, bz1 = b[2] + S.bowl_height;
+  poly(ring(b, 0.045, bz1), K.bowl, K.bowl, 1.5, .25);
+  const r0 = ring(b, 0.045, b[2], 16), r1 = ring(b, 0.045, bz1, 16);
+  r0.forEach((v, k) => line(v, r1[k], K.bowl, 1, .5));
+  poly(ring(b, S.bowl_radius, bz1), null, K.bowl, 1, .8, [4, 3]);
+  txt([b[0], b[1], bz1 + 0.01], "bát", K.bowl, 12, "center");
+
+  // hộp ban đầu (nét đứt) và mũi tên lệch
+  const cube = (c, hs) => { const V = []; for (const sx of [-1,1]) for (const sy of [-1,1]) for (const sz of [-1,1]) V.push([c[0]+sx*hs, c[1]+sy*hs, c[2]+sz*hs]); return V; };
+  const EDGES = [[0,1],[2,3],[4,5],[6,7],[0,2],[1,3],[4,6],[5,7],[0,4],[1,5],[2,6],[3,7]];
+  const b0 = fs[0].box;
+  const V0 = cube(b0, S.box_half);
+  EDGES.forEach(([p, q]) => line(V0[p], V0[q], K.box, 1, .5, [3, 3]));
+  if (Math.hypot(fr.box[0]-b0[0], fr.box[1]-b0[1]) > 0.004) line(b0, fr.box, K.bad, 2, 1, [2, 2]);
+
+  // cánh tay (xương) từ danh sách điểm: 6 khớp + điểm giữa 2 ngón
+  const pts = f => [...f.arm, f.ee];
+  const drawArm = (f, lw, al, col, main) => {
+    const A = pts(f);
+    for (let k = 0; k < A.length - 1; k++) {
+      const nm = S.arm_bodies[k], hit = main && f.ct.includes(nm), tb = main && f.tb.includes(nm);
+      line(A[k], A[k+1], hit ? K.bad : tb ? K.warn : (col || K.arm), hit || tb ? lw + 3 : lw, hit || tb ? 1 : al);
+      if (hit || tb) { const m = [0,1,2].map(a => (A[k][a] + A[k+1][a]) / 2); txt(m, nm + (hit ? " CHẠM HỘP" : " chạm bàn"), hit ? K.bad : K.warn, 11, "left"); }
+    }
+    if (main) {
+      f.fg.forEach(p => { line(f.arm[5], p, K.ink, 3); const q = P(p); g.fillStyle = f.ct.some(n => n.endsWith("_finger")) ? K.bad : K.ink; g.beginPath(); g.arc(q[0], q[1], 3.5, 0, 7); g.fill(); });
+      for (let k = 1; k <= 5; k++) {
+        const q = P(A[k]); g.fillStyle = K.card; g.strokeStyle = K.ink; g.lineWidth = 1.3; g.beginPath(); g.arc(q[0], q[1], 8, 0, 7); g.fill(); g.stroke();
+        g.fillStyle = K.ink; g.font = "bold 10px system-ui,sans-serif"; g.textAlign = "center"; g.fillText(k, q[0], q[1] + 3.5);
+        g.font = "10px system-ui,sans-serif"; g.textAlign = "left"; g.fillStyle = K.muted; g.fillText(JN[k-1], q[0] + 10, q[1] + 3.5);
+      }
+    }
+  };
+
+  // quá khứ / tương lai (cánh tay mờ + đường đi của tay), dùng chung tuỳ chọn với 2 hình 2D
+  const n = fs.length - 1;
+  if (OPT.past && i > 0) {
+    const st = pastStart(), idx = ghostIdx(i, st);
+    if (OPT.path) { g.strokeStyle = K.past; g.lineWidth = 1.6; g.globalAlpha = .6; g.beginPath(); fs.slice(st, i + 1).forEach((f, k) => { const p = P(f.ee); k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }); g.stroke(); g.globalAlpha = 1; }
+    idx.slice().reverse().forEach(k => { const t = Math.abs(k - i) / Math.max(1, Math.abs(st - i)); drawArm(fs[k], 4, .3 - .18*t, K.past); });
+  }
+  if (OPT.future && i < n) {
+    const e = futureEnd(), idx = ghostIdx(i, e);
+    if (OPT.path) { g.strokeStyle = K.future; g.lineWidth = 2; g.setLineDash([5, 3]); g.beginPath(); fs.slice(i, e + 1).forEach((f, k) => { const p = P(f.ee); k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }); g.stroke(); g.setLineDash([]); }
+    idx.slice().reverse().forEach(k => { const t = Math.abs(k - i) / Math.max(1, Math.abs(e - i)); drawArm(fs[k], 4, .4 - .22*t, K.future); });
+  }
+
+  // hộp hiện tại: 6 mặt, vẽ mặt xa trước
+  const V = cube(fr.box, S.box_half);
+  const FACES = [[0,1,3,2],[4,5,7,6],[0,1,5,4],[2,3,7,6],[0,2,6,4],[1,3,7,5]];
+  FACES.map(f => ({ f, z: f.reduce((s, k) => s + P(V[k])[2], 0) / 4 })).sort((a, c) => c.z - a.z)
+    .forEach(({ f }, k) => poly(f.map(j => V[j]), K.box, "#00000066", 1, k > 3 ? 1 : .88));
+  txt([fr.box[0], fr.box[1], fr.box[2] + 0.02], "hộp", K.box, 12, "center");
+
+  // cánh tay hiện tại (trên cùng), tay, hình chiếu xuống bàn và đích
+  drawArm(fr, 7, .95, K.arm, true);
+  txt(fr.arm[0], "đế robot", K.ink, 10, "left");
+  const hz = [fr.ee[0], fr.ee[1], TZ];
+  line(fr.ee, hz, K.hand, 1, .8, [2, 3]);
+  poly(ring(hz, 0.008, TZ, 12), K.hand, null, 0, .5);
+  { const q = P(fr.ee); g.strokeStyle = K.hand; g.lineWidth = 2.5; g.beginPath(); g.moveTo(q[0]-8, q[1]); g.lineTo(q[0]+8, q[1]); g.moveTo(q[0], q[1]-8); g.lineTo(q[0], q[1]+8); g.stroke(); }
+  if (fr.tg) {
+    line(fr.ee, fr.tg, K.warn, 2, 1);
+    const q = P(fr.tg); g.strokeStyle = K.goal; g.lineWidth = 2.5; g.beginPath(); g.arc(q[0], q[1], 8, 0, 7); g.stroke();
+    line(fr.tg, [fr.tg[0], fr.tg[1], TZ], K.goal, 1, .6, [2, 3]);
+  }
+}
+
+/* ---------- điều khiển ---------- */
+function render() {
+  const fs = F(), fr = fs[i];
+  drawTop(fr, fs); drawSide(fr, fs); draw3d(fr, fs); drawInfo(fr, fs); drawChk(fr);
+  $("rng").value = i;
+  $("tlc").firstElementChild.style.left = (i / (fs.length - 1) * 100) + "%";
+  const cur = $("logw").querySelector("tr.cur"); if (cur) cur.classList.remove("cur");
+  const row = $("logw").querySelector(`tr[data-k="${i}"]`);
+  if (row) { row.classList.add("cur"); const w = $("logw"), t = row.offsetTop; if (t < w.scrollTop + 30 || t > w.scrollTop + w.clientHeight - 30) w.scrollTop = t - w.clientHeight / 2; }
+}
+function go(k) { i = Math.max(0, Math.min(F().length - 1, k)); render(); }
+function nextPhase() {
+  const fs = F(); let k = i + 1;
+  while (k < fs.length - 1 && fs[k].ph === fs[k+1].ph) k++;
+  go(Math.min(k, fs.length - 1));
+}
+function prevPhase() {
+  const fs = F(); let k = i - 1;
+  while (k > 0 && fs[k-1].ph === fs[k].ph) k--;
+  go(Math.max(0, k - 1));
+}
+function stop() { if (timer) { clearInterval(timer); timer = null; } $("bPlay").textContent = "▶ phát"; }
+function play() {
+  if (timer) return stop();
+  if (i >= F().length - 1) i = 0;
+  $("bPlay").textContent = "⏸ dừng";
+  timer = setInterval(() => { if (i >= F().length - 1) return stop(); go(i + 1); }, speed);
+}
+function loadEp(k) {
+  stop(); ep = k; i = 0;
+  const e = EPS[k];
+  $("rng").max = e.frames.length - 1;
+  $("res").innerHTML = `<span class="badge ${e.success ? "ok" : "bad"}">${e.success ? "THÀNH CÔNG" : "THẤT BẠI"}</span> <span class="sub">${e.steps} bước</span>`;
+  buildLog(e.frames); buildTimeline(e.frames); render();
+}
+$("sel").onchange = () => loadEp(+$("sel").value);
+$("spd").onchange = () => { speed = +$("spd").value; if (timer) { stop(); play(); } };
+$("rng").oninput = () => go(+$("rng").value);
+$("bFirst").onclick = () => go(0);
+$("bPrev").onclick = () => go(i - 1);
+$("bNext").onclick = () => go(i + 1);
+$("bPhase").onclick = nextPhase;
+$("bPP").onclick = prevPhase;
+$("bPlay").onclick = play;
+$("oPast").onchange = e => { OPT.past = e.target.checked; render(); };
+$("oFut").onchange = e => { OPT.future = e.target.checked; render(); };
+$("oPath").onchange = e => { OPT.path = e.target.checked; render(); };
+$("oHz").onchange = e => { OPT.hz = e.target.value; $("oEv").disabled = OPT.hz === "1"; render(); };   // phạm vi 1 bước thì chỉ có 1 cánh tay mờ, khoảng cách không còn ý nghĩa
+$("oEv").disabled = true;
+$("oEv").onchange = e => { OPT.every = +e.target.value; render(); };
+// điều khiển camera 3D
+const redraw3 = () => draw3d(F()[i], F());
+const setCam = (yaw, pitch, dist) => { CAM.yaw = yaw; CAM.pitch = pitch; CAM.dist = dist ?? CAM.dist; redraw3(); };
+$("v1").onclick = () => setCam(CAM0.yaw, CAM0.pitch, CAM0.dist);
+$("v2").onclick = () => setCam(-Math.PI / 2, 0.12);
+$("v3").onclick = () => setCam(-Math.PI / 2, 1.5);
+{
+  const cv = $("c3"); let drag = null;
+  cv.onpointerdown = e => { drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); cv.style.cursor = "grabbing"; };
+  cv.onpointerup = () => { drag = null; cv.style.cursor = "grab"; };
+  cv.onpointermove = e => {
+    if (!drag) return;
+    CAM.yaw -= (e.clientX - drag.x) * 0.008;
+    CAM.pitch = Math.max(-0.2, Math.min(1.5, CAM.pitch + (e.clientY - drag.y) * 0.008));
+    drag = { x: e.clientX, y: e.clientY }; redraw3();
+  };
+  cv.onwheel = e => { e.preventDefault(); CAM.dist = Math.max(0.3, Math.min(2.5, CAM.dist * Math.exp(e.deltaY * 0.001))); redraw3(); };
+  cv.ondblclick = () => setCam(CAM0.yaw, CAM0.pitch, CAM0.dist);
+  new ResizeObserver(redraw3).observe(cv);
+}
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "SELECT") return;
+  if (e.key === "ArrowRight") go(i + 1);
+  else if (e.key === "ArrowLeft") go(i - 1);
+  else if (e.key === "ArrowDown") nextPhase();
+  else if (e.key === "ArrowUp") prevPhase();
+  else if (e.key === " ") { e.preventDefault(); play(); }
+  else if (e.key === "Home") go(0);
+  else if (e.key === "End") go(F().length - 1);
+  else return;
+  if (["ArrowRight","ArrowLeft","ArrowUp","ArrowDown"].includes(e.key)) e.preventDefault();
+});
+const def = EPS.findIndex(e => e.seed === 2);
+$("sel").value = def >= 0 ? def : 0;
+loadEp(+$("sel").value);
+</script>
+</body>
+</html>
