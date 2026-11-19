@@ -70,7 +70,7 @@ class ScriptedPolicy(BasePolicy):
     #   - ee hạ xuống GRASP_Z (ngang tâm hộp) để hai hàm ôm ở phần giữa thân hộp;
     #   - wrist_roll xoay để trục kẹp song song với một cặp mặt hộp (nếu không hai hàm kẹp vào GÓC hộp).
     GRASP_Z = 0.43
-    GRASP_SIDE_OFFSET = 0.016
+    GRASP_SIDE_OFFSET = 0.022
     CARRY_Z = 0.51            # độ cao đầu tay khi mang: tay kẹp thẳng đứng được ở độ cao này, miệng bát z 0.46 nên hộp (đáy ~0.49) vẫn cao hơn
     LIFT_STEP_LIMIT = 0.01    # phase 5-7: mỗi bước, lệnh khớp (thang -1..1) đổi tối đa chừng này, để hộp không bị giật
     PLACE_ARRIVE_THRESHOLD = 0.04   # phase 7: kẹp thẳng đứng làm tay thiếu 2-4 cm tới đích, nên nới ngưỡng "tới nơi"
@@ -335,18 +335,20 @@ class ScriptedPolicy(BasePolicy):
         mujoco.mj_forward(self.model, ik)
 
         jacp = np.zeros((3, self.model.nv))
-        jacr = np.zeros((3, self.model.nv))
+        tool_down = self._phase in self.TOOL_DOWN_PHASES
+        jacr = np.zeros_like(jacp) if tool_down else None
         eye5 = np.eye(5)
         q_pref = np.radians(self.POSTURE_PREF_DEG)
         posture_k = self.POSTURE_GAIN * np.array(self.POSTURE_MASK, dtype=float)   # K · mask
-        tool_down = self._phase in self.TOOL_DOWN_PHASES
+        damping = self.IK_DAMPING ** 2 * np.eye(6 if tool_down else 3)
         down = np.array([0.0, 0.0, -1.0])
         for _ in range(self.IK_ITERATIONS):
             ee = ik.site_xpos[self._ee_site]
             error = target_pos - ee                                # còn cách đích bao xa (vector 3D)
-            axis = ee - ik.xpos[self._wrist_roll_body]             # trục kẹp: từ cổ tay tới đầu tay
-            axis /= np.linalg.norm(axis)
-            axis_error = down - axis                               # còn lệch khỏi "thẳng xuống" bao nhiêu
+            if tool_down:
+                axis = ee - ik.xpos[self._wrist_roll_body]             # trục kẹp: từ cổ tay tới đầu tay
+                axis /= np.linalg.norm(axis)
+                axis_error = down - axis                               # còn lệch khỏi "thẳng xuống" bao nhiêu
             if np.linalg.norm(error) < self.IK_TOLERANCE and (not tool_down or np.linalg.norm(axis_error) < 0.02):
                 break
 
@@ -364,7 +366,7 @@ class ScriptedPolicy(BasePolicy):
             # Damped least squares: dq nhỏ nhất sao cho J_all @ dq ≈ err_all.
             # Damping giúp ổn định khi robot gần tư thế "kỳ dị" (singularity), ví dụ khi 2-3-4 thẳng hàng.
             J_all = J_all * free[None, :]
-            J_pinv = J_all.T @ np.linalg.inv(J_all @ J_all.T + self.IK_DAMPING ** 2 * np.eye(J_all.shape[0]))
+            J_pinv = J_all.T @ np.linalg.inv(J_all @ J_all.T + damping)
             dq = J_pinv @ err_all * free
 
             # Nhiệm vụ phụ: kéo khớp về tư thế vòm, chỉ trong không gian null
