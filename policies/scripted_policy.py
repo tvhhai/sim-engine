@@ -36,6 +36,13 @@ class ScriptedPolicy(BasePolicy):
        11: Xong (giữ nguyên)
     """
 
+    # Hằng số của bộ IK và của phase (đặt tên để khỏi lẫn "số ma thuật" trong code)
+    IK_ITERATIONS = 40        # số vòng lặp IK tối đa mỗi bước
+    IK_TOLERANCE = 0.001      # dừng IK khi đầu tay cách đích < 1 mm (trên bản sao)
+    IK_DAMPING = 0.05         # hệ số giảm chấn của damped least squares (ổn định gần điểm kỳ dị)
+    IK_STEP_GAIN = 0.4        # mỗi vòng chỉ đi 40% bước tính được, cho an toàn
+    PHASE_TIMEOUT_STEPS = 200  # ở một phase quá số bước này thì bỏ cuộc và sang phase kế
+
     def __init__(self, env):
         self.env = env
         self.model = env.model
@@ -51,6 +58,7 @@ class ScriptedPolicy(BasePolicy):
             for n in self._joint_names
         ]
         self._dof_ids = [self.model.jnt_dofadr[jid] for jid in self._joint_ids]
+        self._qpos_adr = np.array([self.model.jnt_qposadr[jid] for jid in self._joint_ids])  # vị trí của 5 khớp trong data.qpos
         self._ee_site = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, "ee_site")
 
         self._phase = 0                 # đang ở phase nào
@@ -87,8 +95,8 @@ class ScriptedPolicy(BasePolicy):
         """Gọi mỗi đầu episode: đưa policy về phase 0."""
         self._phase = 0
         self._phase_step = 0
-        self._retries = 0               # đã thử kẹp lại bao nhiêu lần
-        self._last_finger = None        # độ mở ngón ở bước trước (để biết ngón đã ngừng khép chưa)
+        self._retries = 0
+        self._last_finger = None
         self._gripper_target = 1.0
         self._current_joint_targets = None
         self._smoothed_action = None
@@ -103,8 +111,6 @@ class ScriptedPolicy(BasePolicy):
         box_pos = self.env.get_box_pos()
         bowl_pos = self.env.get_bowl_pos()
         ee_pos = self.env.get_ee_pos()
-
-        print(f"phase={self._phase} bước_trong_phase={self._phase_step} tay={ee_pos.round(3)}")
 
         if self._phase == 0:
             # Nhấc thẳng lên từ home (giữ nguyên x, y; chỉ đổi z)
@@ -198,61 +204,72 @@ class ScriptedPolicy(BasePolicy):
         self._phase += 1
         self._phase_step = 0
 
-    def _move_toward(self, target_pos, ee_pos, threshold=0.02):
-        """Dùng IK để tính góc khớp đưa đầu tay tới target_pos.
+    def _solve_ik(self, target_pos):
+        """IK: tìm góc khớp (radian) của 5 khớp để đầu tay (ee_site) tới target_pos.
 
-        Chuyển phase khi: tay đã tới gần đích (khoảng cách < threshold mét),
-        HOẶC đã ở phase này quá 200 bước (timeout, tránh kẹt vĩnh viễn).
-        Nếu hay thấy phase bị timeout 200 bước thì đó là dấu hiệu tay không tới được đích.
+        Chạy trên bản sao dữ liệu `_ik_data` nên không làm robot thật cử động. Chỉ tính HÌNH HỌC:
+        không biết va chạm, không giới hạn góc khớp, và chỉ ép vị trí (x, y, z) của đầu tay chứ
+        không ép hướng của nó. Vì 5 khớp mà chỉ 3 ràng buộc nên cánh tay còn dư tự do để uốn.
         """
-        dist = np.linalg.norm(ee_pos - target_pos)
+        ik = self._ik_data
+        # Bắt đầu từ tư thế thật hiện tại, nên lời giải "gần" tư thế đang có
+        ik.qpos[:] = self.data.qpos[:]
+        ik.qvel[:] = 0
+        mujoco.mj_forward(self.model, ik)
 
-        # Sao chép trạng thái thật sang bản sao IK
-        self._ik_data.qpos[:] = self.data.qpos[:]
-        self._ik_data.qvel[:] = 0
-        mujoco.mj_forward(self.model, self._ik_data)
-
-        # Lặp tối đa 40 lần, mỗi lần nhích các khớp một chút để đầu tay gần đích hơn
-        for _ in range(40):
-            shadow_ee = self._ik_data.site_xpos[self._ee_site].copy()
-            error = target_pos - shadow_ee      # còn cách đích bao xa (vector 3D)
-            if np.linalg.norm(error) < 0.001:   # đã tới đích (sai số < 1 mm)
+        jacp = np.zeros((3, self.model.nv))
+        eye3 = np.eye(3)
+        for _ in range(self.IK_ITERATIONS):
+            error = target_pos - ik.site_xpos[self._ee_site]      # còn cách đích bao xa (vector 3D)
+            if np.linalg.norm(error) < self.IK_TOLERANCE:
                 break
 
-            # Jacobian J: "xoay mỗi khớp một chút thì đầu tay dịch chuyển thế nào"
-            jacp = np.zeros((3, self.model.nv))
-            mujoco.mj_jacSite(self.model, self._ik_data, jacp, None, self._ee_site)
+            # Jacobian J (3 x 5): "xoay mỗi khớp một chút thì đầu tay dịch chuyển thế nào"
+            mujoco.mj_jacSite(self.model, ik, jacp, None, self._ee_site)
             J = jacp[:, self._dof_ids]
 
-            # Damped least squares: giải dq sao cho J @ dq ≈ error.
-            # lam (damping) giúp ổn định khi robot gần tư thế "kỳ dị" (singularity).
-            lam = 0.05
-            dq = J.T @ np.linalg.solve(J @ J.T + lam**2 * np.eye(3), error)
+            # Damped least squares: giải dq sao cho J @ dq ≈ error, chọn dq nhỏ nhất.
+            # Damping giúp ổn định khi robot gần tư thế "kỳ dị" (singularity).
+            dq = J.T @ np.linalg.solve(J @ J.T + self.IK_DAMPING ** 2 * eye3, error)
 
-            # Cộng dq (nhân 0.4 để bước nhỏ, an toàn) vào góc khớp của bản sao IK
-            for i, jid in enumerate(self._joint_ids):
-                self._ik_data.qpos[self.model.jnt_qposadr[jid]] += dq[i] * 0.4
-            mujoco.mj_forward(self.model, self._ik_data)
+            ik.qpos[self._qpos_adr] += self.IK_STEP_GAIN * dq
+            mujoco.mj_forward(self.model, ik)
 
-        # Kết quả IK: góc đích (radian) của 5 khớp tay
-        self._current_joint_targets = np.array([
-            self._ik_data.qpos[self.model.jnt_qposadr[jid]]
-            for jid in self._joint_ids
-        ])
+        return ik.qpos[self._qpos_adr].copy()
+
+    def _move_toward(self, target_pos, ee_pos, threshold=0.02):
+        """Hướng đầu tay về target_pos trong bước này, và quyết định có sang phase kế không.
+
+        Tham số:
+            target_pos: đích 3D (x, y, z) của đầu tay, mét, do phase hiện tại tính (vd. phía trên hộp).
+            ee_pos:     vị trí đầu tay LÚC ĐẦU BƯỚC này (chưa áp dụng action của bước này).
+            threshold:  khoảng cách (mét) dưới mức này thì coi là "đã tới" và sang phase kế.
+
+        Làm hai việc: (1) gọi IK để có góc khớp đích, lưu vào `_current_joint_targets` cho
+        `_build_action` dùng; (2) đếm bước và chuyển phase khi tay đã tới gần đích HOẶC đã ở phase
+        này quá PHASE_TIMEOUT_STEPS bước. Phase hay chạm timeout là dấu hiệu tay không tới được đích.
+
+        Lưu ý: khoảng cách đo bằng `ee_pos` của đầu bước, nên "tới nơi" được nhận ra chậm 1 bước
+        (không đáng kể).
+        """
+        self._current_joint_targets = self._solve_ik(target_pos)
 
         self._phase_step += 1
-        if dist < threshold or self._phase_step > 200:
+        arrived = np.linalg.norm(ee_pos - target_pos) < threshold
+        if arrived or self._phase_step > self.PHASE_TIMEOUT_STEPS:
             self._advance_phase()
+
+    def _to_action(self, angles):
+        """Đổi góc 5 khớp (radian) sang thang [-1, 1] của action, theo khoảng điều khiển của từng actuator."""
+        lo, hi = self.env._ctrl_ranges[:5].T
+        return 2.0 * (np.asarray(angles) - lo) / (hi - lo) - 1.0
 
     def _build_action(self) -> np.ndarray:
         """Đổi góc khớp đích (radian) thành action chuẩn hóa [-1, 1], rồi làm mượt."""
         raw = np.zeros(7, dtype=np.float32)
         if self._current_joint_targets is not None:
-            for i in range(5):
-                lo, hi = self.env._ctrl_ranges[i]
-                raw[i] = 2.0 * (self._current_joint_targets[i] - lo) / (hi - lo) - 1.0
-        raw[5] = self._gripper_target
-        raw[6] = self._gripper_target
+            raw[:5] = self._to_action(self._current_joint_targets)
+        raw[5] = raw[6] = self._gripper_target
         raw = np.clip(raw, -1.0, 1.0)
 
         # Làm mượt theo hàm mũ (exponential smoothing) để tốc độ nhìn đều, không giật.
@@ -268,10 +285,6 @@ class ScriptedPolicy(BasePolicy):
     def _build_action_from_current(self) -> np.ndarray:
         """Tạo action giữ nguyên tư thế hiện tại (dùng khi đã xong phase 11)."""
         action = np.zeros(7, dtype=np.float32)
-        for i, jid in enumerate(self._joint_ids):
-            lo, hi = self.env._ctrl_ranges[i]
-            qpos = self.data.qpos[self.model.jnt_qposadr[jid]]
-            action[i] = 2.0 * (qpos - lo) / (hi - lo) - 1.0
-        action[5] = self._gripper_target
-        action[6] = self._gripper_target
+        action[:5] = self._to_action(self.data.qpos[self._qpos_adr])
+        action[5] = action[6] = self._gripper_target
         return np.clip(action, -1.0, 1.0)
