@@ -40,6 +40,7 @@
   .main > .card svg { flex:1; min-height:0; width:100%; height:100%; }
   .cv { flex:1; min-height:0; position:relative; }
   .cv canvas { position:absolute; inset:0; width:100%; height:100%; cursor:grab; touch-action:none; }
+  .cv canvas#camW { inset:auto 8px 8px auto; width:30%; height:auto; aspect-ratio:4/3; cursor:default; pointer-events:none; border:2px solid var(--line); border-radius:6px; box-shadow:0 2px 8px #0006; }
   .card h2 .vb { float:right; display:inline-flex; gap:4px; }
   .card h2 .vb button { padding:0 6px; font-size:11px; }
   .col { display:flex; flex-direction:column; gap:8px; min-height:0; overflow:auto; }
@@ -166,9 +167,9 @@ app.innerHTML = `
   <div class="main">
     <div class="card c-small"><h2>NHÌN TỪ TRÊN XUỐNG (x ngang, y dọc, mét) · số 1-5 = khớp<label style="float:right;font-weight:400"><input type="checkbox" id="showReach" checked> vùng gắp được</label></h2><svg id="top" viewBox="0 0 520 340"></svg>
       <h2>NHÌN TỪ CẠNH = LÁT CẮT thẳng đứng qua trục khớp 1, theo hướng cánh tay (u ngang, z cao, mét)</h2><svg id="side" viewBox="0 0 520 340"></svg>
-      <h2>CAMERA TRONG MÔ HÌNH <span class="sub" style="font-weight:400">(dựng lại từ đúng cấu hình camera của model)</span></h2>
-      <div class="cams"><canvas id="camW" width="320" height="240"></canvas><canvas id="camA" width="320" height="240"></canvas></div><div class="note" id="camN" style="font-size:10px;line-height:1.3"></div></div>
-    <div class="card c-3d"><h2>3D (VIEW CHÍNH) · kéo chuột = xoay · lăn = zoom · nhấp đúp = về mặc định<span class="vb"><button id="v1">chéo</button><button id="v2">trước</button><button id="v3">trên</button></span></h2><div class="cv"><canvas id="c3"></canvas></div>
+      <h2>ARM_CAM (camera gắn trên tay)</h2>
+      <div class="cams" style="grid-template-columns:minmax(0,1fr)"><canvas id="camA" width="320" height="240"></canvas></div><div class="note" id="camN" style="font-size:10px;line-height:1.3"></div></div>
+    <div class="card c-3d"><h2>3D (VIEW CHÍNH) · kéo chuột = xoay · lăn = zoom · nhấp đúp = về mặc định<span class="vb"><button id="v1">chéo</button><button id="v2">trước</button><button id="v3">trên</button><button id="bCam" title="bật/tắt khung webcam ở góc phải dưới">webcam ✓</button></span></h2><div class="cv"><canvas id="c3"></canvas><canvas id="camW" width="320" height="240"></canvas></div>
       <div class="ctl">
         <div class="row">
           <button id="bFirst" title="Home">⏮ đầu</button>
@@ -857,16 +858,20 @@ function renderCam(cv, name, fr) {
     const cs = `rgb(${(col[0]*sh)|0},${(col[1]*sh)|0},${(col[2]*sh)|0})`; g.fillStyle = cs; g.strokeStyle = cs; g.beginPath();
     q.forEach((v, k2) => { const s2 = scr(v); k2 ? g.lineTo(s2[0], s2[1]) : g.moveTo(s2[0], s2[1]); }); g.closePath(); g.fill(); g.stroke();
   }
-  g.fillStyle = "#000a"; g.fillRect(0, 0, 78, 16); g.fillStyle = "#fff"; g.font = "11px system-ui"; g.fillText(name + " · fovy " + cam.fovy.toFixed(0) + "°", 4, 12);
+  g.fillStyle = "#000a"; g.fillRect(0, 0, name.length * 6.5 + 10, 16); g.fillStyle = "#fff"; g.font = "11px system-ui"; g.fillText(name, 4, 12);
 }
 const hexRgbCam = h => [1, 3, 5].map(k => parseInt(h.slice(k, k + 2), 16));
+let SHOW_WEBCAM = true;
+try { SHOW_WEBCAM = localStorage.getItem("showWebcam") !== "0"; } catch (e) {}
+function applyWebcamToggle() { $("camW").style.display = SHOW_WEBCAM ? "" : "none"; $("bCam").textContent = "webcam " + (SHOW_WEBCAM ? "✓" : "✗"); }
 function drawCams(fr) {
-  renderCam($("camW"), "webcam", fr); renderCam($("camA"), "arm_cam", fr);
+  if (SHOW_WEBCAM) renderCam($("camW"), "webcam", fr);
+  renderCam($("camA"), "arm_cam", fr);
   const cs = S.cams || {};
   const t = [];
   if (cs.webcam) t.push(`webcam (trái): cố định ở (${cs.webcam.pos.map(v => v.toFixed(2)).join(", ")}).`);
   if (cs.arm_cam) t.push(`arm_cam (phải): gắn vào link ${cs.arm_cam.body}, lệch (${cs.arm_cam.pos.map(v => v.toFixed(2)).join(", ")}) so với link, đi theo tay.`);
-  $("camN").textContent = t.join(" ") + " Đổi vị trí/hướng trong assets/so101_real_scene.xml (thẻ <camera>).";
+  $("camN").textContent = t.join(" ").replace("webcam (trái)", "webcam (khung góc phải dưới card 3D)").replace("arm_cam (phải)", "arm_cam") + " Đổi vị trí/hướng trong assets/so101_real_scene.xml (thẻ <camera>).";
 }
 
 /* ---------- điều khiển ---------- */
@@ -931,6 +936,8 @@ const setCam = (yaw, pitch, dist) => { CAM.yaw = yaw; CAM.pitch = pitch; CAM.dis
 $("v1").onclick = () => setCam(CAM0.yaw, CAM0.pitch, CAM0.dist);
 $("v2").onclick = () => setCam(-Math.PI / 2, 0.12);
 $("v3").onclick = () => setCam(-Math.PI / 2, 1.5);
+$("bCam").onclick = () => { SHOW_WEBCAM = !SHOW_WEBCAM; try { localStorage.setItem("showWebcam", SHOW_WEBCAM ? "1" : "0"); } catch (e) {} applyWebcamToggle(); render(); };
+applyWebcamToggle();
 {
   const cv = $("c3"); let drag = null;
   cv.onpointerdown = e => { drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); cv.style.cursor = "grabbing"; };
