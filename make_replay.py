@@ -102,6 +102,19 @@ class Recorder:
                     names.add(mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, other))
         return sorted(n for n in names if n)
 
+    def bowl_contacts(self):
+        """Tên các khúc tay / ngón kẹp đang chạm bát (không tính bàn và hộp)."""
+        bowl_b = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "bowl")
+        names = set()
+        for i in range(self.data.ncon):
+            c = self.data.contact[i]
+            b1, b2 = self.model.geom_bodyid[c.geom1], self.model.geom_bodyid[c.geom2]
+            if bowl_b in (b1, b2):
+                other = b2 if b1 == bowl_b else b1
+                if other not in self.skip_bodies and other != self.env._box_body:
+                    names.add(mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, other))
+        return sorted(n for n in names if n)
+
     def joint_deg(self):
         """Góc thật của 5 khớp tay (độ)."""
         return [round(float(np.degrees(self.data.qpos[self.model.jnt_qposadr[j]])), 1) for j in self.policy._joint_ids]
@@ -133,6 +146,7 @@ class Recorder:
             "ph": ph, "phn": phn, "ps": ps,              # phase vừa chạy, phase kế, bước trong phase
             "ee": r3(info["ee_pos"]),                    # điểm giữa hai ngón kẹp
             "box": r3(info["box_pos"]),
+            "bq": [round(float(x), 4) for x in self.data.xquat[self.env._box_body]],   # hướng của hộp (quaternion w,x,y,z): để vẽ hộp bị nghiêng/lật
             "tg": r3(self.target) if self.target is not None else None,   # đích của phase
             "th": self.threshold if self.target is not None else None,    # ngưỡng để sang phase kế
             "fo": self.finger_open(),                    # độ mở 1 ngón kẹp (m)
@@ -140,9 +154,12 @@ class Recorder:
             "ag": round(float(action_grip), 2),          # lệnh kẹp: +1 mở, -1 đóng
             "hd": round(float(info["box_to_bowl_dist"]), 3),   # khoảng cách ngang hộp-bát
             "ok": bool(info["success"]),
+            "bs": round(float(info["box_speed"]), 3),    # tốc độ hộp (m/s): chỉ tính thành công khi hộp đã nằm yên
             "arm": [r3(self.data.xpos[i]) for i in self.arm_ids],
+            "wq": [round(float(x), 6) for x in self.data.xquat[self.arm_ids[-1]]],
             "fg": [r3(self.data.xpos[i]) for i in self.finger_ids],
             "ct": self.box_contacts(),
+            "bc": self.bowl_contacts(),                  # khúc tay / ngón đang chạm bát
         }
 
     def run(self, seed):
@@ -178,13 +195,16 @@ def main():
     parser = argparse.ArgumentParser(description="Ghi các ván chạy ra file HTML để xem lại")
     parser.add_argument("--seeds", default="0-29", help="ví dụ 0-29, hoặc 2,3, hoặc 0-4,10")
     parser.add_argument("--policy", default="sim_engine.policies.scripted_policy:ScriptedPolicy")
+    parser.add_argument("--real-grasp", action="store_true", help="tắt kẹp giả, hộp chỉ được giữ bằng ma sát thật")
     here = os.path.dirname(os.path.abspath(__file__))
-    parser.add_argument("--out", default=os.path.join(here, "docs", "replay.html"))
+    parser.add_argument("--out", default=None, help="mặc định docs/replay.html (kẹp giả) hoặc docs/replay_real.html (--real-grasp)")
     args = parser.parse_args()
+    if args.out is None:
+        args.out = os.path.join(here, "docs", "replay_real.html" if args.real_grasp else "replay.html")
 
     module_name, class_name = args.policy.split(":")
     policy_cls = getattr(importlib.import_module(module_name), class_name)
-    env = SO101PickPlaceEnv(render_images=False)
+    env = SO101PickPlaceEnv(render_images=False, real_grasp=args.real_grasp, end_on_success=False)
     policy = policy_cls(env)
     rec = Recorder(env, policy)
 
@@ -197,13 +217,41 @@ def main():
     # Thông tin cố định của cảnh để HTML vẽ đúng tỷ lệ
     scene = {
         "bowl": r3(env.get_bowl_pos()),
-        "bowl_radius": config.BOWL_RADIUS,
+        "bowl_radius": config.BOWL_INNER_RADIUS,   # ngưỡng ngang để vào bát = lòng bát (tâm hộp phải nằm trong vòng này)
         "bowl_height": config.BOWL_HEIGHT,
-        "box_half": 0.015,
+        "bowl_inner": config.BOWL_INNER_RADIUS,      # lòng bát: tâm hộp phải cách tâm bát ít hơn mức này
+        "settled_speed": config.SETTLED_SPEED,       # hộp phải chậm hơn mức này (m/s) mới tính là nằm yên
+        "real_grasp": bool(args.real_grasp),
+        "box_half": config.BOX_HALF,
         "close_threshold": env._gripper_close_threshold,
         "grasp_threshold": env._grasp_threshold,
         "max_steps": config.MAX_EPISODE_STEPS,
         "joints": config.JOINT_NAMES[:5],
+        "gripper": [
+            {"origin": origin, "offset": r3(env.model.geom_pos[g]), "half": r3(env.model.geom_size[g]),
+             "body": mujoco.mj_id2name(env.model, mujoco.mjtObj.mjOBJ_BODY, env.model.geom_bodyid[g])}
+            for origin, name in [(-1, "gripper_mount"), (0, "left_finger_slider"), (0, "left_finger_pad"),
+                                 (1, "right_finger_slider"), (1, "right_finger_pad")]
+            for g in [env.model.geom(name).id]
+        ],
+        # Hình học THẬT của bát (đọc từ model): đáy hình trụ + 8 tấm tường hình hộp. Toạ độ tâm tính theo thế giới.
+        "bowl_geoms": [
+            {
+                "name": mujoco.mj_id2name(env.model, mujoco.mjtObj.mjOBJ_GEOM, g),
+                "type": "cylinder" if env.model.geom_type[g] == mujoco.mjtGeom.mjGEOM_CYLINDER else "box",
+                "pos": r3(env.data.geom_xpos[g]),
+                "size": [round(float(x), 4) for x in env.model.geom_size[g]],
+                "yaw": round(float(np.arctan2(env.data.geom_xmat[g][3], env.data.geom_xmat[g][0])), 4),
+            }
+            for g in range(env.model.ngeom)
+            if env.model.geom_bodyid[g] == mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_BODY, "bowl")
+        ],
+        "capsule_radii": {
+            ARM_BODIES[k]: float(env.model.geom_size[g, 0])
+            for k, body in enumerate(rec.arm_ids)
+            for g in range(env.model.ngeom)
+            if env.model.geom_bodyid[g] == body and env.model.geom_type[g] == mujoco.mjtGeom.mjGEOM_CAPSULE
+        },
         "arm_bodies": ARM_BODIES,            # đoạn k nằm giữa khớp k và khớp k+1 (xem JS: đánh số khớp 1-5)
         "policy": args.policy,
     }
