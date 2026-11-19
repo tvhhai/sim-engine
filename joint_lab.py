@@ -31,10 +31,13 @@ import numpy as np
 
 from . import config
 from .env import SO101PickPlaceEnv
+from .make_replay import arm_model_export
 
-ARM = ["base_link", "shoulder_link", "upper_arm_link", "forearm_link", "wrist_flex_link", "wrist_roll_link"]
+ARM = ["base", "shoulder", "upper_arm", "lower_arm", "wrist", "gripper"]
+JAW = "moving_jaw_so101_v1"      # hàm kẹp di động (hàm cố định thuộc body "gripper")
+ARM_ALL = ARM + [JAW]
 TABLE_TOP_Z = 0.42
-HIDE_PAIRS = {frozenset(p) for p in [("table", "world"), ("base_link", "table"), ("base_link", "world"),
+HIDE_PAIRS = {frozenset(p) for p in [("table", "world"), ("base", "table"), ("base", "world"),
                                       ("box", "table"), ("bowl", "table"), ("bowl", "world"), ("box", "world")]}
 
 
@@ -71,14 +74,17 @@ class Lab:
         self.dof = [m.jnt_dofadr[j] for j in self.jid]
         self.lo = np.array([m.jnt_range[j][0] for j in self.jid])
         self.hi = np.array([m.jnt_range[j][1] for j in self.jid])
-        self.fl = m.jnt_qposadr[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, "finger_left")]
-        self.fr = m.jnt_qposadr[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, "finger_right")]
+        self.fl = m.jnt_qposadr[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, "gripper")]   # góc hàm kẹp di động (rad)
         self.box_adr = m.jnt_qposadr[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, "box_joint")]
         self.bowl = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, "bowl")
         self.site = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_SITE, "ee_site")
         body = lambda n: mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, n)
         self.arm_ids = [body(n) for n in ARM]
-        self.wr, self.lf, self.rf = body("wrist_roll_link"), body("left_finger"), body("right_finger")
+        self.all_ids = [body(n) for n in ARM_ALL]
+        self.wr = body("gripper")
+        geom = lambda n: mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, n)
+        self.jaw_fixed, self.jaw_moving = geom("fixed_jaw_col"), geom("moving_jaw_col")
+        self.kin, self.mesh = arm_model_export(self.env)
         self.bname = lambda b: mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_BODY, int(b))
         self.ik = mujoco.MjData(m)
         self.policy_env = None
@@ -90,7 +96,7 @@ class Lab:
     def set_pose(self, p):
         d = self.d
         d.qpos[self.qadr] = np.radians([p["pan"], p["lift"], p["elbow"], p["wflex"], p["wroll"]])
-        d.qpos[self.fl] = d.qpos[self.fr] = p["grip"]
+        d.qpos[self.fl] = p["grip"]
         yaw = math.radians(p["byaw"])
         d.qpos[self.box_adr:self.box_adr + 3] = [p["bx"], p["by"], TABLE_TOP_Z + config.BOX_HALF]
         d.qpos[self.box_adr + 3:self.box_adr + 7] = [math.cos(yaw / 2), 0, 0, math.sin(yaw / 2)]
@@ -115,6 +121,10 @@ class Lab:
                 out += [e + s[0] * np.array([math.cos(a), math.sin(a), 0]) for a in ang]
                 out += [e + s[0] * np.array([math.cos(a), 0, math.sin(a)]) for a in ang]
             return out
+        if t == int(mujoco.mjtGeom.mjGEOM_MESH):
+            mid = m.geom_dataid[g]
+            v = m.mesh_vert[m.mesh_vertadr[mid]:m.mesh_vertadr[mid] + m.mesh_vertnum[mid]]
+            return list(v[::25] @ R.T + pos)
         return [pos]
 
     def geom_3d(self, g, pts):
@@ -132,7 +142,7 @@ class Lab:
     def jaw_dev(self):
         """Độ lệch (độ) giữa trục hai má kẹp và các mặt của hộp: 0 = ôm 2 mặt đối diện, 45 = kẹp vào góc."""
         d = self.d
-        jaw = d.xpos[self.rf] - d.xpos[self.lf]
+        jaw = d.geom_xpos[self.jaw_moving] - d.geom_xpos[self.jaw_fixed]
         jaw_yaw = math.degrees(math.atan2(jaw[1], jaw[0])) % 180
         q = d.qpos[self.box_adr + 3:self.box_adr + 7]
         box_yaw = math.degrees(math.atan2(2 * (q[0] * q[3] + q[1] * q[2]), 1 - 2 * (q[2] ** 2 + q[3] ** 2))) % 90
@@ -175,10 +185,13 @@ class Lab:
             body = self.bname(m.geom_bodyid[g])
             if int(m.geom_type[g]) == int(mujoco.mjtGeom.mjGEOM_PLANE) or body in ("table", "world"):
                 continue
+            if body in ARM_ALL:                       # cánh tay thật: vẽ bằng lưới (xem "pose"), ở đây chỉ tính độ hở tới bàn
+                if m.geom_group[g] == 3 and m.geom_type[g] == int(mujoco.mjtGeom.mjGEOM_MESH):
+                    zmin = min(p[2] for p in self.geom_pts(g))
+                    if body != "base":
+                        clearance[body] = min(clearance.get(body, 9.0), zmin - TABLE_TOP_Z)
+                continue
             pts = self.geom_pts(g)
-            zmin = min(p[2] for p in pts)
-            if body in ARM[1:] or body in ("left_finger", "right_finger"):
-                clearance[body] = min(clearance.get(body, 9.0), zmin - TABLE_TOP_Z)
             geoms.append({
                 "body": body, "solid": bool(m.geom_contype[g]), "m": self.geom_3d(g, pts),
                 "side": hull2([(p[0], p[2]) for p in pts]), "top": hull2([(p[0], p[1]) for p in pts]),
@@ -188,7 +201,7 @@ class Lab:
         axis = ee - d.xpos[self.wr]
         axis /= np.linalg.norm(axis)
         tilt = math.degrees(math.acos(max(-1, min(1, -axis[2]))))
-        jaw = d.xpos[self.rf] - d.xpos[self.lf]
+        jaw = d.geom_xpos[self.jaw_moving] - d.geom_xpos[self.jaw_fixed]
         jaw_yaw = math.degrees(math.atan2(jaw[1], jaw[0])) % 180
         box = d.xpos[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, "box")].copy()
         q = d.qpos[self.box_adr + 3:self.box_adr + 7]
@@ -201,7 +214,8 @@ class Lab:
         near = [bool(min(a - math.degrees(l), math.degrees(h) - a) < 3) for a, l, h in zip(ang, self.lo, self.hi)]
         return {
             "geoms": geoms, "joints_xyz": P, "ee": ee.tolist(), "axis": axis.tolist(), "tilt": tilt,
-            "jaw_yaw": jaw_yaw, "face_dev": face_dev, "jaw_gap_mm": float(np.linalg.norm(jaw) * 1000),
+            "jaw_yaw": jaw_yaw, "face_dev": face_dev, "jaw_deg": math.degrees(float(d.qpos[self.fl])),
+            "pose": {self.bname(b): {"p": d.xpos[b].round(5).tolist(), "R": d.xmat[b].round(5).tolist()} for b in self.all_ids},
             "box": box.tolist(), "box_off_jaw_mm": float(off @ ju) * 1000, "box_off_dist_mm": float(np.linalg.norm(off)) * 1000,
             "angles": ang.tolist(), "near_limit": near,
             "limits": [[math.degrees(l), math.degrees(h)] for l, h in zip(self.lo, self.hi)],
@@ -287,8 +301,8 @@ class Lab:
         for i in range(rd.ncon):
             c = rd.contact[i]
             b1, b2 = self.bname(m.geom_bodyid[c.geom1]), self.bname(m.geom_bodyid[c.geom2])
-            if c.dist < 0 and ((b1 in ARM[1:] or "finger" in b1) and b2 in ("table", "world") or
-                               (b2 in ARM[1:] or "finger" in b2) and b1 in ("table", "world")):
+            if c.dist < 0 and ((b1 in ARM_ALL[1:]) and b2 in ("table", "world") or
+                               (b2 in ARM_ALL[1:]) and b1 in ("table", "world")):
                 hit = True
         return (float(np.linalg.norm(np.array(target) - ee)), tilt, hit,
                 np.degrees(rd.qpos[self.qadr]).round(0).tolist(), rd.qpos[self.qadr].copy())
@@ -415,8 +429,8 @@ button{font:inherit;padding:2px 9px;border:1px solid var(--line);border-radius:6
  </div>
 </div>
 <div>
- <div class="card"><h2>Khớp (độ) và ngón</h2><div id="sl"></div>
-  <div style="margin-top:6px"><button id="bHome">về home</button> <button id="bOpen">mở ngón</button> <button id="bClose">đóng ngón</button></div></div>
+ <div class="card"><h2>Khớp (độ) và hàm kẹp</h2><div id="sl"></div>
+  <div style="margin-top:6px"><button id="bHome">về home</button> <button id="bOpen">mở hàm kẹp</button> <button id="bClose">đóng hàm kẹp</button></div></div>
  <div class="card" style="margin-top:8px"><h2>Hộp và bát (cm)</h2><div id="ob"></div></div>
  <div class="card" style="margin-top:8px"><h2>Nút nhanh (xong thì chỉ cần tinh chỉnh khớp)</h2>
   <div style="display:flex;flex-wrap:wrap;gap:4px">
@@ -442,7 +456,8 @@ button{font:inherit;padding:2px 9px;border:1px solid var(--line);border-radius:6
 </div>
 <script>
 const NAMES=[["pan","1 pan (xoay thân)"],["lift","2 lift (nâng vai)"],["elbow","3 elbow (gập khuỷu)"],["wflex","4 wflex (gập cổ tay)"],["wroll","5 wroll (xoay cổ tay)"]];
-const S={pan:0,lift:0,elbow:-17,wflex:-17,wroll:0,grip:0.04,bx:0.15,by:0,byaw:0,wx:-0.15,wy:0};
+const S={pan:0,lift:0,elbow:0,wflex:0,wroll:0,grip:1.2,bx:0.15,by:0,byaw:0,wx:-0.15,wy:0};
+let GOPEN=1.2,GCLOSE=-0.1,MODEL=null;
 let LIM=[[-180,180],[-90,90],[-180,0],[-90,90],[-180,180]],busy=false,again=false,last=null,REACH=null;
 const BANDC=["#0e9aa7","#d97706","#8b8f98"];
 async function loadReach(){try{const r=await (await fetch("/reach")).json();if(r.status==="ready"){REACH=r.reach;if(last)render(last)}else{setTimeout(loadReach,3000)}}catch(e){setTimeout(loadReach,5000)}}
@@ -469,15 +484,15 @@ function reachInfo(J){
 const $=id=>document.getElementById(id);
 function row(id,label,lo,hi,step,val,fmt){return `<div class="row"><span>${label}</span><input type="range" id="r_${id}" min="${lo}" max="${hi}" step="${step}" value="${val}"><input type="number" id="n_${id}" min="${lo}" max="${hi}" step="${step}" value="${val}"></div>`}
 function build(){
-  $("sl").innerHTML=NAMES.map(([k,l],i)=>row(k,l,LIM[i][0],LIM[i][1],0.5,S[k])).join("")+row("grip","ngón (mm)",0,40,0.5,S.grip*1000);
+  $("sl").innerHTML=NAMES.map(([k,l],i)=>row(k,l,LIM[i][0],LIM[i][1],0.5,S[k])).join("")+row("grip","hàm kẹp (°)",-10,100,0.5,S.grip*180/Math.PI);
   $("ob").innerHTML=row("bx","hộp x",0,30,0.1,S.bx*100)+row("by","hộp y",-25,25,0.1,S.by*100)+row("byaw","hộp xoay °",-90,90,1,S.byaw)+row("wx","bát x",-30,30,0.1,S.wx*100)+row("wy","bát y",-25,25,0.1,S.wy*100);
   for(const k of ["pan","lift","elbow","wflex","wroll","grip","bx","by","byaw","wx","wy"]){
     const r=$("r_"+k),n=$("n_"+k);
-    const set=v=>{v=+v;S[k]=(k==="grip")?v/1000:(["bx","by","wx","wy"].includes(k)?v/100:v);r.value=v;n.value=v;go()};
+    const set=v=>{v=+v;S[k]=(k==="grip")?v*Math.PI/180:(["bx","by","wx","wy"].includes(k)?v/100:v);r.value=v;n.value=v;go()};
     r.oninput=()=>set(r.value);n.onchange=()=>set(n.value);
   }
 }
-function syncUI(){for(const [k,s] of [["pan",1],["lift",1],["elbow",1],["wflex",1],["wroll",1],["grip",1000],["bx",100],["by",100],["byaw",1],["wx",100],["wy",100]]){const v=Math.round(S[k]*s*10)/10;$("r_"+k).value=v;$("n_"+k).value=v}}
+function syncUI(){for(const [k,s] of [["pan",1],["lift",1],["elbow",1],["wflex",1],["wroll",1],["grip",180/Math.PI],["bx",100],["by",100],["byaw",1],["wx",100],["wy",100]]){const v=Math.round(S[k]*s*10)/10;$("r_"+k).value=v;$("n_"+k).value=v}}
 async function go(){
   if(busy){again=true;return}busy=true;
   try{const q=new URLSearchParams(S);const r=await fetch("/pose?"+q);last=await r.json();render(last);
@@ -485,6 +500,21 @@ async function go(){
 }
 const f=(v,n=3)=>(+v).toFixed(n);
 function touchColor(body,T){const t=T[body]||[];return t.includes("box")?"var(--bad)":t.includes("table")?"var(--warn)":t.includes("bowl")?"#a855f7":null}
+/* ---------- cánh tay THẬT: lưới tam giác giản lược của từng link, đặt theo tư thế MuJoCo trả về ---------- */
+function armWorld(J){const out={};if(!MODEL)return out;
+  for(const nm in MODEL.mesh){const T=J.pose[nm];if(!T)continue;const R=T.R,p=T.p,v=MODEL.mesh[nm].v,w=new Float64Array(v.length);
+    for(let i=0;i<v.length;i+=3){w[i]=R[0]*v[i]+R[1]*v[i+1]+R[2]*v[i+2]+p[0];w[i+1]=R[3]*v[i]+R[4]*v[i+1]+R[5]*v[i+2]+p[1];w[i+2]=R[6]*v[i]+R[7]*v[i+1]+R[8]*v[i+2]+p[2]}
+    out[nm]=w}return out}
+const ARMCOL="#e8b923";
+function linkColor(J,nm){const t=J.touch[nm]||[];return t.includes("box")?"#e5484d":t.includes("table")?"#f59e0b":t.includes("bowl")?"#a855f7":ARMCOL}
+function hull2(pts){const P=pts.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);if(P.length<3)return P;const cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);const lo=[],up=[];
+  for(const p of P){while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],p)<=0)lo.pop();lo.push(p)}
+  for(const p of P.slice().reverse()){while(up.length>=2&&cr(up[up.length-2],up[up.length-1],p)<=0)up.pop();up.push(p)}
+  return lo.slice(0,-1).concat(up.slice(0,-1))}
+function armHulls(J,fx,fy,a,b){let s="";const W3=armWorld(J);
+  for(const nm in W3){const w=W3[nm],pts=[];for(let i=0;i<w.length;i+=6)pts.push([fx(w[i+a]),fy(w[i+b])]);
+    s+=`<polygon points="${hull2(pts).map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ")}" fill="${linkColor(J,nm)}" fill-opacity=".78" stroke="#3a2c00" stroke-opacity=".55" stroke-width=".8"/>`}
+  return s}
 function render(J){
   const X=x=>(x+0.30)*1000,Z=z=>(0.80-z)*1000,Y=y=>(0.25-y)*1000;
   const col=g=>{if(g.body==="box")return["var(--box)","var(--box)",.9];if(g.body==="bowl")return["var(--bowl)","var(--bowl)",.3];
@@ -495,6 +525,7 @@ function render(J){
   let s=grid(false);for(let v=0.40;v<=0.80;v+=0.05)s+=`<line x1="0" y1="${Z(v)}" x2="600" y2="${Z(v)}" stroke="var(--muted)" stroke-opacity=".15"/><text x="3" y="${Z(v)-2}" font-size="9" fill="var(--muted)">${v.toFixed(2)}</text>`;
   s+=`<rect x="0" y="${Z(0.42)}" width="600" height="${Z(0.38)-Z(0.42)}" fill="var(--table)"/><line x1="0" y1="${Z(0.42)}" x2="600" y2="${Z(0.42)}" stroke="var(--muted)" stroke-width="1.5"/>`;
   J.geoms.forEach(g=>s+=poly(g.side,X,Z,col(g)));
+  s+=armHulls(J,X,Z,0,2);
   const P=J.joints_xyz,ee=J.ee,ax=J.axis;
   s+=`<line x1="${X(ee[0])}" y1="${Z(ee[2])}" x2="${X(ee[0]+ax[0]*0.08)}" y2="${Z(ee[2]+ax[2]*0.08)}" stroke="var(--hand)" stroke-dasharray="4 3"/>`;
   s+=`<line x1="${X(ee[0])}" y1="${Z(ee[2])}" x2="${X(ee[0])}" y2="${Z(ee[2]-0.08)}" stroke="var(--muted)" stroke-dasharray="1 3" stroke-opacity=".6"/>`;
@@ -505,6 +536,7 @@ function render(J){
   s=grid(true);for(let v=-0.25;v<=0.251;v+=0.05)s+=`<line x1="0" y1="${Y(v)}" x2="600" y2="${Y(v)}" stroke="var(--muted)" stroke-opacity=".15"/><text x="3" y="${Y(v)-2}" font-size="9" fill="var(--muted)">${v.toFixed(2)}</text>`;
   s=`<rect x="0" y="0" width="600" height="500" fill="var(--table)" fill-opacity=".6"/>`+s+reachTop(J);
   J.geoms.forEach(g=>s+=poly(g.top,X,Y,col(g)));
+  s+=armHulls(J,X,Y,0,1);
   for(let k=1;k<=5;k++)s+=`<circle cx="${X(P[k][0])}" cy="${Y(P[k][1])}" r="8" fill="var(--card)" stroke="var(--ink)"/><text x="${X(P[k][0])}" y="${Y(P[k][1])+3.5}" font-size="10" font-weight="700" text-anchor="middle" fill="var(--ink)">${k}</text>`;
   s+=`<path d="M${X(ee[0])-8},${Y(ee[1])}H${X(ee[0])+8}M${X(ee[0])},${Y(ee[1])-8}V${Y(ee[1])+8}" stroke="var(--hand)" stroke-width="2.5"/>`;
   $("top").innerHTML=s;
@@ -545,6 +577,15 @@ function draw3d(J){
     else if(m.k==="cyl"){const ring=pt=>Array.from({length:20},(_,i)=>{const t=i/20*2*Math.PI,c=Math.cos(t)*m.r,s=Math.sin(t)*m.r;return[pt[0]+c*m.u[0]+s*m.v[0],pt[1]+c*m.u[1]+s*m.v[1],pt[2]+c*m.u[2]+s*m.v[2]]});
       const ra=ring(m.a),rb=ring(m.b);poly(ra,col,col,1,al);poly(rb,col,col,1,al);for(let i=0;i<20;i+=5)line(ra[i],rb[i],col,1,Math.min(1,al+.3))}
     else{const mid=[0,1,2].map(a=>(m.a[a]+m.b[a])/2),wpx=2*m.r*P.fp/Math.max(.001,P(mid)[2]);g.lineCap="round";line(m.a,m.b,col,wpx,al*.55);line(m.a,m.b,col,2,Math.min(1,al+.4));g.lineCap="butt"}}
+  {const W3=armWorld(J),tris=[],L=[0.35,-0.45,0.82],ln=Math.hypot(...L);
+   for(const nm in W3){const w=W3[nm],F=MODEL.mesh[nm].f,n=w.length/3,sc=new Float64Array(n*3);
+    for(let k=0;k<n;k++){const q=P([w[3*k],w[3*k+1],w[3*k+2]]);sc[3*k]=q[0];sc[3*k+1]=q[1];sc[3*k+2]=q[2]}
+    const c=linkColor(J,nm),base=[1,3,5].map(k=>parseInt(c.slice(k,k+2),16));
+    for(let t=0;t<F.length;t+=3){const i0=F[t],i1=F[t+1],i2=F[t+2],ux=w[3*i1]-w[3*i0],uy=w[3*i1+1]-w[3*i0+1],uz=w[3*i1+2]-w[3*i0+2],vx=w[3*i2]-w[3*i0],vy=w[3*i2+1]-w[3*i0+1],vz=w[3*i2+2]-w[3*i0+2];
+      const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx,nl=Math.hypot(nx,ny,nz)||1,sh=0.42+0.58*Math.abs((nx*L[0]+ny*L[1]+nz*L[2])/(nl*ln));
+      tris.push([(sc[3*i0+2]+sc[3*i1+2]+sc[3*i2+2])/3,i0,i1,i2,sc,base,sh])}}
+   tris.sort((p,q)=>q[0]-p[0]);g.lineJoin="round";g.lineWidth=.6;
+   for(const [,i0,i1,i2,sc,base,sh] of tris){const col=`rgb(${(base[0]*sh)|0},${(base[1]*sh)|0},${(base[2]*sh)|0})`;g.fillStyle=col;g.strokeStyle=col;g.beginPath();g.moveTo(sc[3*i0],sc[3*i0+1]);g.lineTo(sc[3*i1],sc[3*i1+1]);g.lineTo(sc[3*i2],sc[3*i2+1]);g.closePath();g.fill();g.stroke()}}
   const ee=J.ee,ax=J.axis,A=J.joints_xyz;
   line(ee,[ee[0]+ax[0]*.09,ee[1]+ax[1]*.09,ee[2]+ax[2]*.09],K.hand,1.5,1,[4,3]);line(ee,[ee[0],ee[1],ee[2]-.09],K.muted,1,.7,[1,3]);line(ee,[ee[0],ee[1],TZ],K.hand,1,.6,[2,3]);
   for(let k=1;k<=5;k++){const q=P(A[k]);g.fillStyle=K.card;g.strokeStyle=K.ink;g.lineWidth=1.3;g.beginPath();g.arc(q[0],q[1],8,0,7);g.fill();g.stroke();g.fillStyle=K.ink;g.font="bold 10px system-ui,sans-serif";g.textAlign="center";g.fillText(k,q[0],q[1]+3.5)}
@@ -572,8 +613,8 @@ function info(J){
   const tc=J.tilt<15?"good":J.tilt<40?"warn":"bad";
   h+=`<div>Trục kẹp nghiêng so với thẳng đứng: <span class="mono ${tc}">${f(J.tilt,1)}°</span> <span class="muted">(0° = chúc thẳng xuống)</span></div>`;
   const fc=J.face_dev<10?"good":J.face_dev<30?"warn":"bad";
-  h+=`<div>Hai má kẹp so với mặt hộp: lệch <span class="mono ${fc}">${f(J.face_dev,1)}°</span> <span class="muted">(0° = ôm 2 MẶT đối diện, 45° = kẹp vào GÓC)</span></div>`;
-  h+=`<div>Hai má cách nhau <span class="mono">${f(J.jaw_gap_mm,1)} mm</span> · hộp cách đầu tay <span class="mono">${f(J.box_off_dist_mm,1)} mm</span> (dọc trục má ${f(J.box_off_jaw_mm,1)} mm)</div>`;
+  h+=`<div>Hàm kẹp mở <span class="mono">${f(J.jaw_deg,1)}°</span> (1 hàm cố định + 1 hàm di động) · Hai hàm so với mặt hộp: lệch <span class="mono ${fc}">${f(J.face_dev,1)}°</span> <span class="muted">(0° = ôm 2 MẶT đối diện, 45° = kẹp vào GÓC)</span></div>`;
+  h+=`<div>hộp cách đầu tay <span class="mono">${f(J.box_off_dist_mm,1)} mm</span> (dọc trục má ${f(J.box_off_jaw_mm,1)} mm)</div>`;
   const T=J.touch,list=(k)=>Object.entries(T).filter(([b,v])=>v.includes(k)).map(([b])=>b);
   h+=`<div style="margin-top:6px"><b>Va chạm</b> `+(["table","bowl","box"].map(k=>{const l=list(k);return l.length?tag(k,{table:"bàn",bowl:"bát",box:"hộp"}[k]+": "+l.join(", ")):""}).join("")||tag("ok","không chạm gì"))+`</div>`;
   if(J.contacts.length)h+=`<table style="margin-top:4px"><tr><th>cặp</th><th>xuyên (mm)</th></tr>`+J.contacts.map(c=>`<tr><td>${c.a} ↔ ${c.b}</td><td class="mono">${c.pen_mm}</td></tr>`).join("")+`</table>`;
@@ -582,8 +623,8 @@ function info(J){
   h+=reachInfo(J);
   $("info").innerHTML=h;
 }
-$("bHome").onclick=()=>{Object.assign(S,{pan:0,lift:0,elbow:-17,wflex:-17,wroll:0,grip:0.04});syncUI();go()};
-$("bOpen").onclick=()=>{S.grip=0.04;syncUI();go()};$("bClose").onclick=()=>{S.grip=0.005;syncUI();go()};
+$("bHome").onclick=()=>{Object.assign(S,HOME);syncUI();go()};
+$("bOpen").onclick=()=>{S.grip=GOPEN;syncUI();go()};$("bClose").onclick=()=>{S.grip=GCLOSE;syncUI();go()};
 async function doIk(target,{vertical=$("tv").checked,free="1,1,1,1,1",label=""}={}){
   const q=new URLSearchParams({...S,x:target[0],y:target[1],z:target[2],vertical:vertical?1:0,w:$("tw").value,K:$("tk").value,pl:$("pl").value,pe:$("pe").value,pw:$("pw").value,free});
   const r=await (await fetch("/ik?"+q)).json();
@@ -611,7 +652,8 @@ $("bPol").onclick=async()=>{
   syncUI();$("polres").textContent="đã nạp";go();
 };
 $("showReach").onchange=()=>{if(last)render(last)};
-(async()=>{const r=await (await fetch("/meta")).json();LIM=r.limits;Object.assign(S,r.home);build();syncUI();go();loadReach()})();
+let HOME={};
+(async()=>{const r=await (await fetch("/meta")).json();LIM=r.limits;HOME=r.home;GOPEN=r.gopen;GCLOSE=r.gclose;Object.assign(S,r.home);MODEL=await (await fetch("/model")).json();build();syncUI();go();loadReach()})();
 </script></body></html>"""
 
 
@@ -633,7 +675,7 @@ def make_handler(lab):
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
             fl = lambda k, d=0.0: float(q.get(k, d))
             pose = lambda: dict(pan=fl("pan"), lift=fl("lift"), elbow=fl("elbow"), wflex=fl("wflex"), wroll=fl("wroll"),
-                                grip=fl("grip", 0.04), bx=fl("bx", 0.15), by=fl("by"), byaw=fl("byaw"),
+                                grip=fl("grip", config.GRIPPER_OPEN_RAD), bx=fl("bx", 0.15), by=fl("by"), byaw=fl("byaw"),
                                 wx=fl("wx", -0.15), wy=fl("wy"))
             try:
                 if u.path == "/":
@@ -641,7 +683,12 @@ def make_handler(lab):
                 elif u.path == "/meta":
                     h = lab.home
                     self._send(json.dumps({"limits": [[math.degrees(a), math.degrees(b)] for a, b in zip(lab.lo, lab.hi)],
-                                           "home": {"pan": h[0], "lift": h[1], "elbow": h[2], "wflex": h[3], "wroll": h[4]}}))
+                                           "home": {"pan": h[0], "lift": h[1], "elbow": h[2], "wflex": h[3], "wroll": h[4],
+                                                    "grip": config.GRIPPER_OPEN_RAD},
+                                           "gopen": config.GRIPPER_OPEN_RAD, "gclose": config.GRIPPER_CLOSED_RAD,
+                                           "glim": [float(lab.m.jnt_range[lab.m.jnt_qposadr.tolist().index(lab.fl)][0]) if False else -10, 100]}))
+                elif u.path == "/model":
+                    self._send(json.dumps({"kin": lab.kin, "mesh": lab.mesh}))
                 elif u.path == "/pose":
                     with lab.lock:
                         lab.set_pose(pose())
