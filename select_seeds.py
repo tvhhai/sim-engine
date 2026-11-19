@@ -35,8 +35,8 @@ from .make_replay import Recorder, parse_seeds
 # Hai trường hợp cực biên luôn đứng đầu danh sách replay: hộp XA nhất và GẦN nhất mà cánh tay phải xử lý.
 # (đặt tay vị trí hộp qua env.reset(options=...), nên không phụ thuộc vùng random ±3 cm)
 EXTREME_CASES = [
-    {"name": "CASE 1: hộp XA nhất", "seed": 0, "options": {"box_xy": [0.234, -0.026]}, "box_xy": (0.234, -0.026)},
-    {"name": "CASE 2: hộp GẦN nhất", "seed": 0, "options": {"box_xy": [0.12, -0.07]}, "box_xy": (0.12, -0.07)},
+    {"name": "CASE 1: hộp XA nhất", "seed": 0, "options": {"box_xy": [-0.103, 0.132]}, "box_xy": (-0.103, 0.132)},
+    {"name": "CASE 2: hộp GẦN nhất", "seed": 0, "options": {"box_xy": [0.050, -0.063]}, "box_xy": (0.050, -0.063)},
 ]
 SHOULDER_XY = (0.0, -0.15)      # trục khớp 1
 

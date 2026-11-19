@@ -318,6 +318,7 @@ def main():
         "bowl_inner": config.BOWL_INNER_RADIUS,      # lòng bát: tâm hộp phải cách tâm bát ít hơn mức này
         "settled_speed": config.SETTLED_SPEED,       # hộp phải chậm hơn mức này (m/s) mới tính là nằm yên
         "box_half": config.BOX_HALF,
+        "table": list(config.TABLE_HALF),            # nửa kích thước bàn (x, y)
         "max_steps": config.MAX_EPISODE_STEPS,
         "joints": config.JOINT_NAMES[:5],
         # Hình học THẬT của bát (đọc từ model): đáy hình trụ + 8 tấm tường hình hộp. Toạ độ tâm tính theo thế giới.

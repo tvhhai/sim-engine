@@ -72,14 +72,14 @@
     <light name="overhead" directional="true" diffuse="0.8 0.8 0.8" specular="0.3 0.3 0.3" pos="0 0 2" dir="0 0 -1" castshadow="true"/>
     <light name="side_fill" directional="false" diffuse="0.4 0.4 0.4" specular="0.1 0.1 0.1" pos="0.5 -0.5 1.2"/>
     <light name="back_fill" directional="false" diffuse="0.2 0.2 0.2" specular="0.05 0.05 0.05" pos="-0.3 0.4 1.0"/>
-    <camera name="webcam" pos="0.0 -0.5 1.1" quat="0.92 0.39 0 0" fovy="60"/>
+    <camera name="webcam" pos="0.0 -0.75 1.25" quat="0.92 0.39 0 0" fovy="60"/>
 
     <body name="table" pos="0 0 0.2">
-      <geom name="table_top" type="box" size="0.30 0.25 0.02" pos="0 0 0.20" material="wood_mat" contype="1" conaffinity="1" mass="10"/>
-      <geom type="cylinder" size="0.02 0.10" pos="0.25 0.20 0.10" material="wood_mat"/>
-      <geom type="cylinder" size="0.02 0.10" pos="-0.25 0.20 0.10" material="wood_mat"/>
-      <geom type="cylinder" size="0.02 0.10" pos="0.25 -0.20 0.10" material="wood_mat"/>
-      <geom type="cylinder" size="0.02 0.10" pos="-0.25 -0.20 0.10" material="wood_mat"/>
+      <geom name="table_top" type="box" size="0.45 0.40 0.02" pos="0 0 0.20" material="wood_mat" contype="1" conaffinity="1" mass="10"/>
+      <geom type="cylinder" size="0.02 0.10" pos="0.40 0.35 0.10" material="wood_mat"/>
+      <geom type="cylinder" size="0.02 0.10" pos="-0.40 0.35 0.10" material="wood_mat"/>
+      <geom type="cylinder" size="0.02 0.10" pos="0.40 -0.35 0.10" material="wood_mat"/>
+      <geom type="cylinder" size="0.02 0.10" pos="-0.40 -0.35 0.10" material="wood_mat"/>
     </body>
 
     <!-- ROBOT SO-101 THAT, de tren ban: truc xoay vai (shoulder_pan) van o (0, -0.15), tay huong +y -->

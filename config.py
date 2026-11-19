@@ -62,6 +62,7 @@ BOWL_DEFAULT_POS = np.array([-0.15, 0.0, 0.41])  # bát, nằm trên mặt bàn
 BOWL_RADIUS = 0.05   # (cũ) ngưỡng ngang của tiêu chí thành công kiểu cũ; tiêu chí mới dùng BOWL_INNER_RADIUS
 BOWL_HEIGHT = 0.04   # chiều cao tường bát: miệng bát = z của bát + BOWL_HEIGHT
 BOWL_INNER_RADIUS = 0.042   # lòng bát tới mặt TRONG của tường (tường dày 0.3 cm nên 0.045 - 0.003)
+TABLE_HALF = (0.45, 0.40)   # nửa kích thước mặt bàn (x, y), mét: bàn 90 x 80 cm (khớp với assets/so101_real_scene.xml)
 BOX_HALF = 0.015            # nửa cạnh hộp (hộp 3 cm)
 BOX_RANDOM_RANGE = 0.03     # hộp được đặt ngẫu nhiên trong ±3 cm quanh BOX_DEFAULT_POS (theo x, y)
 BOWL_RANDOM_RANGE = 0.0     # bát đứng yên; đặt > 0 để bát cũng ngẫu nhiên trong ±giá trị này

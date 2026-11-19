@@ -464,10 +464,10 @@ async function loadReach(){try{const r=await (await fetch("/reach")).json();if(r
 const cpath=(cx,cy,r)=>`M${cx+r},${cy}a${r},${r} 0 1 0 ${-2*r},0a${r},${r} 0 1 0 ${2*r},0`;
 function reachTop(J){
   if(!REACH||!$("showReach").checked)return "";
-  const X=x=>(x+0.30)*1000,Y=y=>(0.25-y)*1000,b=J.joints_xyz[1],cx=X(b[0]),cy=Y(b[1]);let s="";
+  const X=x=>(x+0.45)*666.7,Y=y=>(0.30-y)*666.7,b=J.joints_xyz[1],cx=X(b[0]),cy=Y(b[1]);let s="";
   REACH.bands.forEach((bd,i)=>{const c=BANDC[i];
-    bd.free.forEach(([a,r])=>{s+=`<path d="${cpath(cx,cy,(r+REACH.r_step/2)*1000)}${cpath(cx,cy,Math.max(0,a-REACH.r_step/2)*1000)}" fill="${c}" fill-opacity="${i===0?.13:.05}" fill-rule="evenodd" stroke="${c}" stroke-width="1.6" stroke-opacity=".9"/>`});
-    bd.vertical.forEach(([a,r])=>{s+=`<circle cx="${cx}" cy="${cy}" r="${(r+REACH.r_step/2)*1000}" fill="none" stroke="${c}" stroke-width="1.6" stroke-dasharray="6 4"/>`+(a>0.03?`<circle cx="${cx}" cy="${cy}" r="${Math.max(0,a-REACH.r_step/2)*1000}" fill="none" stroke="${c}" stroke-width="1.6" stroke-dasharray="6 4"/>`:"")});
+    bd.free.forEach(([a,r])=>{s+=`<path d="${cpath(cx,cy,(r+REACH.r_step/2)*666.7)}${cpath(cx,cy,Math.max(0,a-REACH.r_step/2)*666.7)}" fill="${c}" fill-opacity="${i===0?.13:.05}" fill-rule="evenodd" stroke="${c}" stroke-width="1.6" stroke-opacity=".9"/>`});
+    bd.vertical.forEach(([a,r])=>{s+=`<circle cx="${cx}" cy="${cy}" r="${(r+REACH.r_step/2)*666.7}" fill="none" stroke="${c}" stroke-width="1.6" stroke-dasharray="6 4"/>`+(a>0.03?`<circle cx="${cx}" cy="${cy}" r="${Math.max(0,a-REACH.r_step/2)*666.7}" fill="none" stroke="${c}" stroke-width="1.6" stroke-dasharray="6 4"/>`:"")});
   });return s;
 }
 function reachInfo(J){
@@ -516,13 +516,13 @@ function armHulls(J,fx,fy,a,b){let s="";const W3=armWorld(J);
     s+=`<polygon points="${hull2(pts).map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ")}" fill="${linkColor(J,nm)}" fill-opacity=".78" stroke="#3a2c00" stroke-opacity=".55" stroke-width=".8"/>`}
   return s}
 function render(J){
-  const X=x=>(x+0.30)*1000,Z=z=>(0.80-z)*1000,Y=y=>(0.25-y)*1000;
+  const X=x=>(x+0.45)*666.7,Z=z=>(0.88-z)*666.7,Y=y=>(0.30-y)*666.7;
   const col=g=>{if(g.body==="box")return["var(--box)","var(--box)",.9];if(g.body==="bowl")return["var(--bowl)","var(--bowl)",.3];
     const c=touchColor(g.body,J.touch);return c?[c,c,.45]:[g.solid?"var(--arm)":"#888",g.solid?"var(--arm)":"#888",g.solid?.3:.12]};
   const poly=(pts,fx,fy,c)=>`<polygon points="${pts.map(p=>fx(p[0])+","+fy(p[1])).join(" ")}" fill="${c[0]}" fill-opacity="${c[2]}" stroke="${c[1]}" stroke-width="1.2"/>`;
-  const grid=(horiz)=>{let s="";for(let v=-0.30;v<=0.301;v+=0.05){s+=`<line x1="${X(v)}" y1="0" x2="${X(v)}" y2="${horiz?500:420}" stroke="var(--muted)" stroke-opacity=".15"/><text x="${X(v)}" y="${(horiz?500:420)-3}" font-size="9" text-anchor="middle" fill="var(--muted)">${v.toFixed(2)}</text>`}return s};
+  const grid=(horiz)=>{let s="";for(let v=-0.45;v<=0.451;v+=0.05){s+=`<line x1="${X(v)}" y1="0" x2="${X(v)}" y2="${horiz?500:420}" stroke="var(--muted)" stroke-opacity=".15"/><text x="${X(v)}" y="${(horiz?500:420)-3}" font-size="9" text-anchor="middle" fill="var(--muted)">${v.toFixed(2)}</text>`}return s};
   // cạnh
-  let s=grid(false);for(let v=0.40;v<=0.80;v+=0.05)s+=`<line x1="0" y1="${Z(v)}" x2="600" y2="${Z(v)}" stroke="var(--muted)" stroke-opacity=".15"/><text x="3" y="${Z(v)-2}" font-size="9" fill="var(--muted)">${v.toFixed(2)}</text>`;
+  let s=grid(false);for(let v=0.30;v<=0.88;v+=0.05)s+=`<line x1="0" y1="${Z(v)}" x2="600" y2="${Z(v)}" stroke="var(--muted)" stroke-opacity=".15"/><text x="3" y="${Z(v)-2}" font-size="9" fill="var(--muted)">${v.toFixed(2)}</text>`;
   s+=`<rect x="0" y="${Z(0.42)}" width="600" height="${Z(0.38)-Z(0.42)}" fill="var(--table)"/><line x1="0" y1="${Z(0.42)}" x2="600" y2="${Z(0.42)}" stroke="var(--muted)" stroke-width="1.5"/>`;
   J.geoms.forEach(g=>s+=poly(g.side,X,Z,col(g)));
   s+=armHulls(J,X,Z,0,2);
@@ -533,7 +533,7 @@ function render(J){
   s+=`<path d="M${X(ee[0])-8},${Z(ee[2])}H${X(ee[0])+8}M${X(ee[0])},${Z(ee[2])-8}V${Z(ee[2])+8}" stroke="var(--hand)" stroke-width="2.5"/>`;
   $("side").innerHTML=s;
   // trên
-  s=grid(true);for(let v=-0.25;v<=0.251;v+=0.05)s+=`<line x1="0" y1="${Y(v)}" x2="600" y2="${Y(v)}" stroke="var(--muted)" stroke-opacity=".15"/><text x="3" y="${Y(v)-2}" font-size="9" fill="var(--muted)">${v.toFixed(2)}</text>`;
+  s=grid(true);for(let v=-0.45;v<=0.301;v+=0.05)s+=`<line x1="0" y1="${Y(v)}" x2="600" y2="${Y(v)}" stroke="var(--muted)" stroke-opacity=".15"/><text x="3" y="${Y(v)-2}" font-size="9" fill="var(--muted)">${v.toFixed(2)}</text>`;
   s=`<rect x="0" y="0" width="600" height="500" fill="var(--table)" fill-opacity=".6"/>`+s+reachTop(J);
   J.geoms.forEach(g=>s+=poly(g.top,X,Y,col(g)));
   s+=armHulls(J,X,Y,0,1);
@@ -562,8 +562,8 @@ function draw3d(J){
   const line=(a,b,c,lw,al,dash)=>{const p=P(a),q=P(b);g.globalAlpha=al??1;g.strokeStyle=c;g.lineWidth=lw;g.setLineDash(dash||[]);g.beginPath();g.moveTo(p[0],p[1]);g.lineTo(q[0],q[1]);g.stroke();g.globalAlpha=1;g.setLineDash([])};
   const poly=(pts,fill,stroke,lw,al)=>{g.beginPath();pts.forEach((v,k)=>{const p=P(v);k?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1])});g.closePath();g.globalAlpha=al??1;if(fill){g.fillStyle=fill;g.fill()}if(stroke){g.strokeStyle=stroke;g.lineWidth=lw||1;g.stroke()}g.globalAlpha=1};
   const TZ=0.42;
-  poly([[-.3,-.25,TZ],[.3,-.25,TZ],[.3,.25,TZ],[-.3,.25,TZ]],K.table,K.muted,1,.6);
-  for(let v=-0.2;v<=0.201;v+=0.1){line([v,-.25,TZ],[v,.25,TZ],K.muted,.5,.3);line([-.3,v,TZ],[.3,v,TZ],K.muted,.5,.3)}
+  poly([[-.45,-.40,TZ],[.45,-.40,TZ],[.45,.40,TZ],[-.45,.40,TZ]],K.table,K.muted,1,.6);
+  for(let v=-0.4;v<=0.401;v+=0.1){line([v,-.40,TZ],[v,.40,TZ],K.muted,.5,.3);line([-.45,v,TZ],[.45,v,TZ],K.muted,.5,.3)}
   if(REACH&&$("showReach").checked){const bb=J.joints_xyz[1],ringAt=(rad,n=72)=>Array.from({length:n},(_,k)=>[bb[0]+rad*Math.cos(2*Math.PI*k/n),bb[1]+rad*Math.sin(2*Math.PI*k/n),TZ+0.001]);
     REACH.bands.forEach((bd,i)=>{const c=BANDC[i];bd.free.forEach(([a,r])=>{poly(ringAt(r+REACH.r_step/2),null,c,1.5,.9);if(a>0.03)poly(ringAt(a-REACH.r_step/2),null,c,1.5,.9)});
       bd.vertical.forEach(([a,r])=>{g.setLineDash([6,4]);poly(ringAt(r+REACH.r_step/2),null,c,1.3,.9);g.setLineDash([])})})}
