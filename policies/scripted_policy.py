@@ -43,6 +43,28 @@ class ScriptedPolicy(BasePolicy):
     IK_STEP_GAIN = 0.4        # mỗi vòng chỉ đi 40% bước tính được, cho an toàn
     PHASE_TIMEOUT_STEPS = 200  # ở một phase quá số bước này thì bỏ cuộc và sang phase kế
 
+    # Ưu tiên PHỤ về tư thế "vòm" (khớp 2, 3, 4 cùng cong về một phía, khuỷu ở trên cao) để cánh tay
+    # tránh võng xuống chạm bàn và bát. Đây chỉ là xu hướng "kéo nhẹ", không phải ràng buộc cứng:
+    # IK vẫn tự do uốn khác đi (kể cả duỗi thẳng 2-3-4 để vươn xa) khi đích đòi hỏi.
+    POSTURE_GAIN = 0.1        # K: kéo mạnh cỡ nào (0 = tắt). Quá lớn (>=0.3) thì cản việc tới đích.
+    POSTURE_PREF_DEG = (0, 10, -15, 60, 0)   # góc ưa thích (độ): pan, lift, elbow, wrist_flex, wrist_roll
+    POSTURE_MASK = (0, 1, 1, 1, 0)           # khớp nào được kéo (pan và wrist_roll thì không)
+
+    # Ở các phase gần bát, ép (mềm) tay kẹp chúc xuống thẳng đứng: má kẹp mở theo phương thẳng đứng thì không
+    # quét ngang vào thành bát, và có thể thả sát tâm bát. "Mềm" nghĩa là cộng vào bài toán IK với trọng số nhỏ
+    # chứ không bắt buộc: khớp có giới hạn gập nên nhiều vị trí không thể thẳng đứng hoàn toàn.
+    TOOL_DOWN_PHASES = (6, 7, 8, 9)
+    TOOL_DOWN_WEIGHT = 0.05   # trọng số hướng so với vị trí. 0.03 kém hơn (vẫn chạm bát), >= 0.1 làm đầu tay không tới đích.
+    PLACE_Z = 0.50            # độ cao đầu tay lúc thả (miệng bát ở z 0.46). Đo trên 100 seed:
+                              #   bát cố định:  0.48 -> 199/200, 0.50 -> 198/200 (gần như bằng nhau)
+                              #   bát ngẫu nhiên ±3 cm: 0.48 -> 96/100 (chạm bát 41 ván), 0.50 -> 100/100 (chạm bát 0)
+                              #   bát ngẫu nhiên ±5 cm: 0.48 -> 87/100, 0.50 -> 97/100
+                              # nên chọn 0.50: ngón còn cao hơn miệng bát, ít vướng khi bát lệch khỏi chỗ gốc.
+    PLACE_ARRIVE_THRESHOLD = 0.04   # phase 7: kẹp thẳng đứng làm tay thiếu 2-4 cm tới đích, nên nới ngưỡng "tới nơi"
+    # Lệnh mở kẹp lúc thả (action > 0.5 thì env coi là thả). 0.55 mở mỗi ngón ~33 mm, hai má hở ~67 mm: lớn hơn
+    # đường chéo hộp (42 mm) để hộp rơi xéo vẫn lọt, nhưng nhỏ hơn mở hết (82 mm, rộng hơn lòng bát 84 mm).
+    RELEASE_OPEN_CMD = 0.55
+
     def __init__(self, env):
         self.env = env
         self.model = env.model
@@ -58,6 +80,7 @@ class ScriptedPolicy(BasePolicy):
             for n in self._joint_names
         ]
         self._dof_ids = [self.model.jnt_dofadr[jid] for jid in self._joint_ids]
+        self._wrist_roll_body = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "wrist_roll_link")
         self._qpos_adr = np.array([self.model.jnt_qposadr[jid] for jid in self._joint_ids])  # vị trí của 5 khớp trong data.qpos
         self._ee_site = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, "ee_site")
 
@@ -89,7 +112,7 @@ class ScriptedPolicy(BasePolicy):
         self._safe_z = 0.62        # độ cao an toàn để di chuyển ngang, tránh va vật thể
         self._pre_grasp_z = 0.46   # độ cao chuẩn bị kẹp
         self._grasp_z = 0.455      # độ cao kẹp: đầu tay ngang tâm hộp, má kẹp ôm hai bên hộp (0.434 làm ngón đè bàn nên khép chậm)
-        self._place_z = 0.48       # độ cao thả hộp vào bát
+        self._place_z = self.PLACE_Z   # độ cao thả hộp vào bát
 
     def reset(self):
         """Gọi mỗi đầu episode: đưa policy về phase 0."""
@@ -172,19 +195,19 @@ class ScriptedPolicy(BasePolicy):
             # Hạ hộp xuống trong bát
             target = np.array([bowl_pos[0], bowl_pos[1], self._place_z])
             self._gripper_target = -1.0
-            self._move_toward(target, ee_pos, threshold=0.02)
+            self._move_toward(target, ee_pos, threshold=self.PLACE_ARRIVE_THRESHOLD)
 
         elif self._phase == 8:
-            # Mở kẹp: chờ 20 bước cho hộp rơi vào bát
-            self._gripper_target = 1.0
+            # Mở kẹp vừa phải: chờ 20 bước cho hộp rơi vào bát
+            self._gripper_target = self.RELEASE_OPEN_CMD
             self._phase_step += 1
             if self._phase_step > 20:
                 self._advance_phase()
 
         elif self._phase == 9:
-            # Rút tay lên khỏi bát
+            # Rút tay lên khỏi bát (vẫn mở vừa, để ngón không quét vào thành bát khi rút)
             target = np.array([bowl_pos[0], bowl_pos[1], self._safe_z])
-            self._gripper_target = 1.0
+            self._gripper_target = self.RELEASE_OPEN_CMD
             self._move_toward(target, ee_pos, threshold=0.025)
 
         elif self._phase == 10:
@@ -208,8 +231,16 @@ class ScriptedPolicy(BasePolicy):
         """IK: tìm góc khớp (radian) của 5 khớp để đầu tay (ee_site) tới target_pos.
 
         Chạy trên bản sao dữ liệu `_ik_data` nên không làm robot thật cử động. Chỉ tính HÌNH HỌC:
-        không biết va chạm, không giới hạn góc khớp, và chỉ ép vị trí (x, y, z) của đầu tay chứ
-        không ép hướng của nó. Vì 5 khớp mà chỉ 3 ràng buộc nên cánh tay còn dư tự do để uốn.
+        không biết va chạm và không giới hạn góc khớp. Nhiệm vụ chính là vị trí (x, y, z) của đầu tay.
+        Hai nhiệm vụ phụ (đều "mềm"):
+
+        1. Ở các phase TOOL_DOWN_PHASES: trục kẹp (từ cổ tay tới đầu tay) chúc thẳng xuống. Cộng thêm 3 hàng
+           vào bài toán, nhân với TOOL_DOWN_WEIGHT:  [J_vị_trí ; w·J_hướng] · dq = [lỗi_vị_trí ; w·lỗi_hướng]
+        2. Phần tự do còn lại (không gian null) dùng để kéo về tư thế vòm (xem POSTURE_*):
+
+            dq = J⁺ · e  +  (I − J⁺J) · K · mask · (q_pref − q)
+
+        Số hạng sau nằm trong không gian null của J nên (xấp xỉ bậc nhất) không làm đầu tay lệch khỏi đích.
         """
         ik = self._ik_data
         # Bắt đầu từ tư thế thật hiện tại, nên lời giải "gần" tư thế đang có
@@ -218,24 +249,50 @@ class ScriptedPolicy(BasePolicy):
         mujoco.mj_forward(self.model, ik)
 
         jacp = np.zeros((3, self.model.nv))
-        eye3 = np.eye(3)
+        jacr = np.zeros((3, self.model.nv))
+        eye5 = np.eye(5)
+        q_pref = np.radians(self.POSTURE_PREF_DEG)
+        posture_k = self.POSTURE_GAIN * np.array(self.POSTURE_MASK, dtype=float)   # K · mask
+        tool_down = self._phase in self.TOOL_DOWN_PHASES
+        down = np.array([0.0, 0.0, -1.0])
         for _ in range(self.IK_ITERATIONS):
-            error = target_pos - ik.site_xpos[self._ee_site]      # còn cách đích bao xa (vector 3D)
-            if np.linalg.norm(error) < self.IK_TOLERANCE:
+            ee = ik.site_xpos[self._ee_site]
+            error = target_pos - ee                                # còn cách đích bao xa (vector 3D)
+            axis = ee - ik.xpos[self._wrist_roll_body]             # trục kẹp: từ cổ tay tới đầu tay
+            axis /= np.linalg.norm(axis)
+            axis_error = down - axis                               # còn lệch khỏi "thẳng xuống" bao nhiêu
+            if np.linalg.norm(error) < self.IK_TOLERANCE and (not tool_down or np.linalg.norm(axis_error) < 0.02):
                 break
 
             # Jacobian J (3 x 5): "xoay mỗi khớp một chút thì đầu tay dịch chuyển thế nào"
-            mujoco.mj_jacSite(self.model, ik, jacp, None, self._ee_site)
+            mujoco.mj_jacSite(self.model, ik, jacp, jacr, self._ee_site)
             J = jacp[:, self._dof_ids]
+            if tool_down:
+                # xoay khớp làm trục kẹp đổi hướng:  d(axis) = ω × axis = −[axis]× · ω, với ω = Jr · dq
+                J_axis = -self._skew(axis) @ jacr[:, self._dof_ids]
+                J_all = np.vstack([J, self.TOOL_DOWN_WEIGHT * J_axis])
+                err_all = np.concatenate([error, self.TOOL_DOWN_WEIGHT * axis_error])
+            else:
+                J_all, err_all = J, error
 
-            # Damped least squares: giải dq sao cho J @ dq ≈ error, chọn dq nhỏ nhất.
-            # Damping giúp ổn định khi robot gần tư thế "kỳ dị" (singularity).
-            dq = J.T @ np.linalg.solve(J @ J.T + self.IK_DAMPING ** 2 * eye3, error)
+            # Damped least squares: dq nhỏ nhất sao cho J_all @ dq ≈ err_all.
+            # Damping giúp ổn định khi robot gần tư thế "kỳ dị" (singularity), ví dụ khi 2-3-4 thẳng hàng.
+            J_pinv = J_all.T @ np.linalg.inv(J_all @ J_all.T + self.IK_DAMPING ** 2 * np.eye(J_all.shape[0]))
+            dq = J_pinv @ err_all
+
+            # Nhiệm vụ phụ: kéo khớp về tư thế vòm, chỉ trong không gian null
+            q = ik.qpos[self._qpos_adr]
+            dq = dq + (eye5 - J_pinv @ J_all) @ (posture_k * (q_pref - q))
 
             ik.qpos[self._qpos_adr] += self.IK_STEP_GAIN * dq
             mujoco.mj_forward(self.model, ik)
 
         return ik.qpos[self._qpos_adr].copy()
+
+    @staticmethod
+    def _skew(a):
+        """Ma trận phản đối xứng [a]× sao cho [a]× @ v = a × v."""
+        return np.array([[0.0, -a[2], a[1]], [a[2], 0.0, -a[0]], [-a[1], a[0], 0.0]])
 
     def _move_toward(self, target_pos, ee_pos, threshold=0.02):
         """Hướng đầu tay về target_pos trong bước này, và quyết định có sang phase kế không.
