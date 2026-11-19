@@ -57,7 +57,7 @@ class ScriptedPolicy(BasePolicy):
     # chứ không bắt buộc: khớp có giới hạn gập nên nhiều vị trí không thể thẳng đứng hoàn toàn.
     TOOL_DOWN_PHASES = (2, 3, 4, 5, 6, 7, 8, 9)   # từ lúc hạ xuống hộp tới lúc thả (phase 0, 1 đi ở độ cao cao, tay không thẳng đứng được)
     TOOL_DOWN_WEIGHT = 0.02   # trọng số hướng so với vị trí. 0.03 kém hơn (vẫn chạm bát), >= 0.1 làm đầu tay không tới đích.
-    PLACE_Z = 0.50            # độ cao đầu tay lúc thả (miệng bát ở z 0.46). Đo trên 100 seed:
+    PLACE_Z = 0.475   # độ cao đầu tay lúc thả (miệng bát ở z 0.46). Đo trên 100 seed:
                               #   bát cố định:  0.48 -> 199/200, 0.50 -> 198/200 (gần như bằng nhau)
                               #   bát ngẫu nhiên ±3 cm: 0.48 -> 96/100 (chạm bát 41 ván), 0.50 -> 100/100 (chạm bát 0)
                               #   bát ngẫu nhiên ±5 cm: 0.48 -> 87/100, 0.50 -> 97/100
@@ -106,6 +106,8 @@ class ScriptedPolicy(BasePolicy):
         self._gripper_target = 1.0      # lệnh kẹp: +1 mở, -1 đóng
         self._current_joint_targets = None   # góc khớp đích mà IK vừa tính (radian)
         self._smoothed_action = None    # action đã làm mượt (để chuyển động không giật)
+        self._regrasps = 0              # đã kẹp lại bao nhiêu lần vì hộp tuột khi đang mang
+        self._lost_steps = 0            # số bước liên tiếp hộp nằm xa ee khi đang mang
         self._roll_hold = None          # góc wrist_roll đã chọn để trục kẹp song song mặt hộp (None = chưa chọn)
         self._clamp_dir = np.array([1.0, 0.0, 0.0])   # hướng trục kẹp trong mặt phẳng ngang (từ hàm cố định sang hàm di động)
         self._home_ee = None            # vị trí đầu tay lúc ở home
@@ -141,6 +143,8 @@ class ScriptedPolicy(BasePolicy):
         self._smoothed_action = None
         self._home_ee = self.env.get_ee_pos()
         self._roll_hold = None
+        self._regrasps = 0
+        self._lost_steps = 0
 
     def select_action(self, observation: dict) -> np.ndarray:
         """Hàm chính: nhìn tình hình hiện tại, trả về action (7 số trong [-1, 1]).
@@ -151,6 +155,16 @@ class ScriptedPolicy(BasePolicy):
         box_pos = self.env.get_box_pos()
         bowl_pos = self.env.get_bowl_pos()
         ee_pos = self.env.get_ee_pos()
+
+        # Hộp tuột khi đang mang (nằm xa ee > 5 cm vài bước liền): quay lại phase 1 để kẹp lại (tối đa 2 lần)
+        if 5 <= self._phase <= 7:
+            self._lost_steps = self._lost_steps + 1 if np.linalg.norm(box_pos - ee_pos) > 0.05 else 0
+            if self._lost_steps > 3 and self._regrasps < 2:
+                self._regrasps += 1
+                self._lost_steps = 0
+                self._phase, self._phase_step = 1, 0
+                self._roll_hold = None
+                self._last_finger = None
 
         if self._phase == 0:
             # Nhấc thẳng lên từ home (giữ nguyên x, y; chỉ đổi z)
@@ -205,12 +219,14 @@ class ScriptedPolicy(BasePolicy):
         elif self._phase == 6:
             # Di chuyển tới phía trên bát ở độ cao an toàn
             target = np.array([bowl_pos[0], bowl_pos[1], self._safe_z])
+            target[:2] -= np.clip((box_pos - ee_pos)[:2], -0.04, 0.04)   # hộp nằm lệch khỏi ee (kẹp lệch bên): đưa HỘP, không phải ee, tới tâm bát
             self._gripper_target = -1.0
             self._move_toward(target, ee_pos, threshold=0.02)
 
         elif self._phase == 7:
             # Hạ hộp xuống trong bát
             target = np.array([bowl_pos[0], bowl_pos[1], self._place_z])
+            target[:2] -= np.clip((box_pos - ee_pos)[:2], -0.04, 0.04)
             self._gripper_target = -1.0
             self._move_toward(target, ee_pos, threshold=self.PLACE_ARRIVE_THRESHOLD)
 
