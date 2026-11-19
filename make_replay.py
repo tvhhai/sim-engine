@@ -1,7 +1,8 @@
 """Ghi nhiều ván chạy ra file HTML để xem lại từng bước trên trình duyệt (replay).
 
 Cách dùng (đứng ở thư mục chứa sim_engine, đã kích hoạt .venv):
-    python -m sim_engine.make_replay                    # ghi seed 0-29 ra sim_engine/docs/replay.html
+    python -m sim_engine.make_replay                    # kẹp THẬT; seed lấy từ docs/replay_seeds.json (xem select_seeds), mặc định 0-29
+    python -m sim_engine.make_replay --fake-grasp       # kẹp giả, ghi ra docs/replay_fake.html
     python -m sim_engine.make_replay --seeds 0,2,3      # chỉ vài seed (file nhỏ hơn, ghi nhanh hơn)
     python -m sim_engine.make_replay --policy sim_engine.policies.my_policy:MyPolicy --out docs/replay_my.html
 
@@ -40,6 +41,21 @@ def parse_seeds(text):
         elif part:
             seeds.append(int(part))
     return seeds
+
+
+def bowl_geom_list(env):
+    """Hình học thật của bát ở vị trí HIỆN TẠI (đáy trụ + 8 tấm tường), toạ độ thế giới."""
+    body = mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_BODY, "bowl")
+    return [
+        {
+            "name": mujoco.mj_id2name(env.model, mujoco.mjtObj.mjOBJ_GEOM, g),
+            "type": "cylinder" if env.model.geom_type[g] == mujoco.mjtGeom.mjGEOM_CYLINDER else "box",
+            "pos": r3(env.data.geom_xpos[g]),
+            "size": [round(float(x), 4) for x in env.model.geom_size[g]],
+            "yaw": round(float(np.arctan2(env.data.geom_xmat[g][3], env.data.geom_xmat[g][0])), 4),
+        }
+        for g in range(env.model.ngeom) if env.model.geom_bodyid[g] == body
+    ]
 
 
 def r3(v):
@@ -162,9 +178,9 @@ class Recorder:
             "bc": self.bowl_contacts(),                  # khúc tay / ngón đang chạm bát
         }
 
-    def run(self, seed):
+    def run(self, seed, options=None):
         env, policy = self.env, self.policy
-        obs, info = env.reset(seed=seed)
+        obs, info = env.reset(seed=seed, options=options)
         policy.reset()
         self.target = None
         self.threshold = None
@@ -185,6 +201,8 @@ class Recorder:
                 break
         return {
             "seed": seed,
+            "bowl": r3(self.env.get_bowl_pos()),               # vị trí bát của ván này (có thể khác nhau giữa các seed)
+            "bowl_geoms": bowl_geom_list(self.env),
             "success": bool(info["success"]),
             "steps": len(frames) - 1,
             "frames": frames,
@@ -193,24 +211,54 @@ class Recorder:
 
 def main():
     parser = argparse.ArgumentParser(description="Ghi các ván chạy ra file HTML để xem lại")
-    parser.add_argument("--seeds", default="0-29", help="ví dụ 0-29, hoặc 2,3, hoặc 0-4,10")
-    parser.add_argument("--policy", default="sim_engine.policies.scripted_policy:ScriptedPolicy")
-    parser.add_argument("--real-grasp", action="store_true", help="tắt kẹp giả, hộp chỉ được giữ bằng ma sát thật")
     here = os.path.dirname(os.path.abspath(__file__))
-    parser.add_argument("--out", default=None, help="mặc định docs/replay.html (kẹp giả) hoặc docs/replay_real.html (--real-grasp)")
+    parser.add_argument("--seeds", default=None, help="ví dụ 0-29, hoặc 2,3, hoặc 0-4,10. Mặc định: đọc --seed-file, "
+                        "nếu không có thì 0-29")
+    parser.add_argument("--seed-file", default=os.path.join(here, "docs", "replay_seeds.json"),
+                        help="file do select_seeds ghi: danh sách seed đã chọn kèm nhãn (hỏng, timeout, chậm...)")
+    parser.add_argument("--policy", default="sim_engine.policies.scripted_policy:ScriptedPolicy")
+    parser.add_argument("--fake-grasp", action="store_true", help="dùng kẹp giả (snap-grasp) thay cho kẹp thật mặc định")
+    parser.add_argument("--box-range", type=float, default=None, help="hộp ngẫu nhiên trong ± giá trị này (mét), mặc định theo config")
+    parser.add_argument("--bowl-range", type=float, default=None, help="bát ngẫu nhiên trong ± giá trị này (mét), mặc định theo config")
+    parser.add_argument("--out", default=None, help="mặc định docs/replay.html (kẹp thật) hoặc docs/replay_fake.html (--fake-grasp)")
     args = parser.parse_args()
+    real_grasp = not args.fake_grasp
     if args.out is None:
-        args.out = os.path.join(here, "docs", "replay_real.html" if args.real_grasp else "replay.html")
+        args.out = os.path.join(here, "docs", "replay.html" if real_grasp else "replay_fake.html")
 
     module_name, class_name = args.policy.split(":")
     policy_cls = getattr(importlib.import_module(module_name), class_name)
-    env = SO101PickPlaceEnv(render_images=False, real_grasp=args.real_grasp, end_on_success=False)
+    env = SO101PickPlaceEnv(render_images=False, real_grasp=real_grasp, end_on_success=False,
+                            box_range=args.box_range, bowl_range=args.bowl_range)
     policy = policy_cls(env)
     rec = Recorder(env, policy)
 
+    # Danh sách seed: --seeds (nếu có), hoặc file do select_seeds ghi (kèm nhãn), hoặc 0-29
+    meta = {}
+    if args.seeds is not None:
+        seed_list = parse_seeds(args.seeds)
+    elif os.path.exists(args.seed_file):
+        with open(args.seed_file, encoding="utf-8") as f:
+            chosen = json.load(f)
+        if chosen.get("real_grasp") != real_grasp:
+            print(f"Lưu ý: {args.seed_file} được chọn cho {'kẹp thật' if chosen.get('real_grasp') else 'kẹp giả'}, "
+                  f"còn lần này là {'kẹp thật' if real_grasp else 'kẹp giả'}; nên chạy lại select_seeds.")
+        entries = chosen["selected"] + chosen["rest"]
+        seed_list = [(e.get("name") or e["seed"]) for e in entries]      # trường hợp cực biên có tên riêng thay cho seed
+        meta = {(e.get("name") or e["seed"]): e for e in entries}
+    else:
+        seed_list = parse_seeds("0-29")
+
     episodes = []
-    for seed in parse_seeds(args.seeds):
-        ep = rec.run(seed)
+    for key in seed_list:
+        seed = meta[key]["seed"] if key in meta else key
+        m = meta.get(key)
+        ep = rec.run(seed, options=(m or {}).get("options"))
+        if m:
+            ep["group"] = m["group"]
+            ep["tags"] = m["tags"]
+            if m.get("name"):
+                ep["name"] = m["name"]
         episodes.append(ep)
         print(f"  seed {seed:3d}: {'OK  ' if ep['success'] else 'FAIL'} | {ep['steps']:3d} bước")
 
@@ -221,7 +269,7 @@ def main():
         "bowl_height": config.BOWL_HEIGHT,
         "bowl_inner": config.BOWL_INNER_RADIUS,      # lòng bát: tâm hộp phải cách tâm bát ít hơn mức này
         "settled_speed": config.SETTLED_SPEED,       # hộp phải chậm hơn mức này (m/s) mới tính là nằm yên
-        "real_grasp": bool(args.real_grasp),
+        "real_grasp": bool(real_grasp),
         "box_half": config.BOX_HALF,
         "close_threshold": env._gripper_close_threshold,
         "grasp_threshold": env._grasp_threshold,
@@ -235,17 +283,7 @@ def main():
             for g in [env.model.geom(name).id]
         ],
         # Hình học THẬT của bát (đọc từ model): đáy hình trụ + 8 tấm tường hình hộp. Toạ độ tâm tính theo thế giới.
-        "bowl_geoms": [
-            {
-                "name": mujoco.mj_id2name(env.model, mujoco.mjtObj.mjOBJ_GEOM, g),
-                "type": "cylinder" if env.model.geom_type[g] == mujoco.mjtGeom.mjGEOM_CYLINDER else "box",
-                "pos": r3(env.data.geom_xpos[g]),
-                "size": [round(float(x), 4) for x in env.model.geom_size[g]],
-                "yaw": round(float(np.arctan2(env.data.geom_xmat[g][3], env.data.geom_xmat[g][0])), 4),
-            }
-            for g in range(env.model.ngeom)
-            if env.model.geom_bodyid[g] == mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_BODY, "bowl")
-        ],
+        "bowl_geoms": bowl_geom_list(env),
         "capsule_radii": {
             ARM_BODIES[k]: float(env.model.geom_size[g, 0])
             for k, body in enumerate(rec.arm_ids)
@@ -255,6 +293,13 @@ def main():
         "arm_bodies": ARM_BODIES,            # đoạn k nằm giữa khớp k và khớp k+1 (xem JS: đánh số khớp 1-5)
         "policy": args.policy,
     }
+    # Vùng với tới của cánh tay (do joint_lab tính và lưu); nếu chưa có thì bỏ qua và nhắc cách tạo
+    reach_path = os.path.join(here, "docs", "reach_envelope.json")
+    if os.path.exists(reach_path):
+        with open(reach_path, encoding="utf-8") as f:
+            scene["reach"] = json.load(f)
+    else:
+        print("Chưa có docs/reach_envelope.json nên replay chưa vẽ vùng với tới. Chạy python -m sim_engine.joint_lab một lần để tính.")
     payload = json.dumps({"scene": scene, "episodes": episodes}, separators=(",", ":"), ensure_ascii=False)
 
     template_path = os.path.join(here, "docs", "replay_template.html")

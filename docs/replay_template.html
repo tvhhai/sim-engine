@@ -142,10 +142,16 @@ const OPT = { past:true, future:true, path:true, hz:"1", every:1 };
 app.innerHTML = `
   <div class="hd">
     <h1 title="Mỗi lần sửa policy, chạy lại python -m sim_engine.make_replay để cập nhật file này">Replay</h1>
-    <label>Seed <select id="sel"></select></label>
+    <span style="display:inline-flex;gap:4px;align-items:center">
+      <button id="sPrev" title="seed trước (phím [)">◀ seed</button>
+      <label>Seed <select id="sel" title="chọn nhanh seed ở xa; dùng nút ◀ ▶ để duyệt lần lượt"></select></label>
+      <button id="sNext" title="seed sau (phím ])">seed ▶</button>
+      <span class="sub" id="epPos"></span>
+    </span>
     <span id="res"></span>
+    <span id="tags" class="sub"></span>
     <span class="badge" style="background:color-mix(in srgb,${S.real_grasp ? "var(--ok)" : "var(--warn)"} 20%,transparent);color:${S.real_grasp ? "var(--ok)" : "var(--warn)"}" title="${S.real_grasp ? "Hộp chỉ được giữ bằng ma sát và va chạm thật" : "Hộp được 'dính' vào tay bằng cách gán vị trí (không phải ma sát thật)"}">${S.real_grasp ? "KẸP THẬT" : "KẸP GIẢ"}</span>
-    <a href="${S.real_grasp ? "replay.html" : "replay_real.html"}" style="font-size:12px">mở bản kẹp ${S.real_grasp ? "giả" : "thật"}</a>
+    <a href="${S.real_grasp ? "replay_fake.html" : "replay.html"}" style="font-size:12px">mở bản kẹp ${S.real_grasp ? "giả" : "thật"}</a>
     <span class="sub">Policy <code>${S.policy}</code> · hình 2D vẽ lại từ số liệu thật, không phải vật lý</span>
     <span style="flex:1"></span>
     <div class="legend">
@@ -158,7 +164,7 @@ app.innerHTML = `
     </div>
   </div>
   <div class="main">
-    <div class="card c-small"><h2>NHÌN TỪ TRÊN XUỐNG (x ngang, y dọc, mét) · số 1-5 = khớp</h2><svg id="top" viewBox="0 0 520 340"></svg>
+    <div class="card c-small"><h2>NHÌN TỪ TRÊN XUỐNG (x ngang, y dọc, mét) · số 1-5 = khớp<label style="float:right;font-weight:400"><input type="checkbox" id="showReach" checked> vùng gắp được</label></h2><svg id="top" viewBox="0 0 520 340"></svg>
       <h2>NHÌN TỪ CẠNH (x ngang, z cao, mét)</h2><svg id="side" viewBox="0 0 520 340"></svg></div>
     <div class="card c-3d"><h2>3D (VIEW CHÍNH) · kéo chuột = xoay · lăn = zoom · nhấp đúp = về mặc định<span class="vb"><button id="v1">chéo</button><button id="v2">trước</button><button id="v3">trên</button></span></h2><div class="cv"><canvas id="c3"></canvas></div>
       <div class="ctl">
@@ -196,7 +202,12 @@ app.innerHTML = `
 <div class="card logcard"><h2>LOG TỪNG BƯỚC (bấm một dòng để nhảy tới)</h2><div class="logwrap" id="logw"></div></div>
 `;
 const $ = id => document.getElementById(id);
-$("sel").innerHTML = EPS.map((e, k) => `<option value="${k}">seed ${e.seed} — ${e.success ? "OK" : "FAIL"}</option>`).join("");
+const epLabel = (e, k) => { const ex = (e.tags || []).filter(x => !/^(THÀNH CÔNG|HỎNG)/.test(x)); return `<option value="${k}">${k + 1}. ${e.name || "seed " + e.seed} — ${e.success ? "OK" : "FAIL"}${ex.length ? " · " + ex.join(" · ") : ""}</option>`; };
+{ // dropdown chia nhóm (nếu có): chỉ dùng để nhảy tới seed ở xa; duyệt lần lượt bằng nút ◀ ▶
+  const groups = [...new Set(EPS.map(e => e.group || ""))];
+  $("sel").innerHTML = groups.map(g => g ? `<optgroup label="${g}">${EPS.map((e, k) => (e.group || "") === g ? epLabel(e, k) : "").join("")}</optgroup>`
+    : EPS.map((e, k) => (e.group || "") === g ? epLabel(e, k) : "").join("")).join("");
+}
 
 /* ---------- ánh xạ tọa độ -> pixel ---------- */
 const W = 520, H = 340;
@@ -362,10 +373,36 @@ function hull2(pts) {                                  // bao lồi (monotone ch
   return lo.slice(0, -1).concat(up.slice(0, -1));
 }
 const boxPoly = (fr, fx, fy, a, b) => hull2(boxV(fr.box, bq(fr), S.box_half).map(v => [fx(v[a]), fy(v[b])])).map(p => p.join(",")).join(" ");
+/* ---------- vùng vươn tới của cánh tay (hình vành khuyên quanh trục khớp 1) ---------- */
+const BANDC = ["#0e9aa7", "#d97706", "#8b8f98"];
+const reachOn = () => S.reach && $("showReach") && $("showReach").checked;
+const cpath = (cx, cy, r) => `M${cx + r},${cy}a${r},${r} 0 1 0 ${-2*r},0a${r},${r} 0 1 0 ${2*r},0`;
+function reachTop(k) {                         // MỘT vùng màu nhạt: nơi cánh tay gắp được hộp (cắt theo mặt bàn)
+  if (!reachOn()) return "";
+  const R = S.reach, cx = topX(R.base[0]), cy = topY(R.base[1]), h = R.r_step / 2;
+  const tx0 = topX(-0.30), tx1 = topX(0.30), ty0 = topY(0.25), ty1 = topY(-0.25);
+  let s = `<clipPath id="tblclip"><rect x="${tx0}" y="${ty0}" width="${tx1 - tx0}" height="${ty1 - ty0}"/></clipPath><g clip-path="url(#tblclip)">`;
+  R.bands[0].free.forEach(([a, r]) => { s += `<path d="${cpath(cx, cy, (r + h) * k)}${cpath(cx, cy, Math.max(0, a - h) * k)}" fill="#0e9aa7" fill-opacity=".17" fill-rule="evenodd"/>`; });
+  return s + `</g>`;
+}
+function reachInfo(fs) {
+  if (!S.reach) return "";
+  const R = S.reach, b = fs[0].box, w = S.bowl, bx = R.base[0], by = R.base[1];
+  const rb = Math.hypot(b[0] - bx, b[1] - by), rw = Math.hypot(w[0] - bx, w[1] - by);
+  const inn = (iv, r) => iv.some(([lo, hi]) => r >= lo - R.r_step / 2 && r <= hi + R.r_step / 2);
+  const fmt = iv => iv.length ? iv.map(([lo, hi]) => (lo * 100).toFixed(0) + "–" + (hi * 100).toFixed(0)).join(", ") + " cm" : "không";
+  const mk = ok => `<span class="${ok ? "y" : "n"}">${ok ? "✓" : "✗"}</span>`;
+  const g = R.bands[0], p = R.bands[1];
+  let h = `<div class="note" style="margin:8px 0 3px"><b>Vùng cánh tay gắp được</b> (vùng màu nhạt trên bàn; tính từ trục khớp 1)</div>`;
+  h += `<div class="chk"><span>${mk(inn(g.free, rb))}</span><span>hộp cách trục <b>${cm(rb)}</b> cm; gắp được ở <span class="mono">${fmt(g.free)}</span>, kẹp thẳng đứng ở <span class="mono">${fmt(g.vertical)}</span> ${mk(inn(g.vertical, rb))}</span></div>`;
+  h += `<div class="chk"><span>${mk(inn(p.free, rw))}</span><span>bát cách trục <b>${cm(rw)}</b> cm; thả được ở <span class="mono">${fmt(p.free)}</span>, thả thẳng đứng ở <span class="mono">${fmt(p.vertical)}</span> ${mk(inn(p.vertical, rw))}</span></div>`;
+  return h;
+}
 function drawTop(fr, fs) {
   const k = scaleX(TOP), b = S.bowl, b0 = fs[0].box, h = S.box_half * k;
   let s = `<rect x="${topX(-0.30)}" y="${topY(0.25)}" width="${topX(0.30)-topX(-0.30)}" height="${topY(-0.25)-topY(0.25)}" fill="var(--table)" opacity=".5"/>`;
   s += axes(TOP, topX, topY, TOP.y0, TOP.y1, 0.05, 0.1, "x (m)", "y (m)");
+  s += reachTop(k);
   s += `<text x="${topX(b[0])}" y="${topY(b[1]) - 0.06*k}" font-size="10" text-anchor="middle" fill="var(--bowl)" font-weight="700">bát</text>`;
   s += `<text x="${topX(fr.arm[0][0]) + 9}" y="${topY(fr.arm[0][1]) + 4}" font-size="10" fill="var(--ink)">đế robot</text>`;
   S.bowl_geoms.forEach(g => {                           // bát thật: đáy tròn + 8 tấm tường (chồng lên nhau thành hình sao 8 cạnh)
@@ -522,6 +559,7 @@ function drawChk(fr) {
     : off > 0.01 ? `<div class="alert bad" style="margin-top:3px">Hộp bị đẩy lệch <b>${cm(off)} cm</b> khi chưa được kẹp: hướng đích sẽ lệch theo.</div>` : `<div class="note">Hộp gần như đứng yên (lệch &lt; 0.5 cm là bình thường).</div>`;
   const pu = PUSH[ep];
   h += pu ? `<div class="note" style="margin-top:3px">Bị đẩy lần đầu ở <a href="#" id="jmpPush"><b>bước ${F()[pu].t}</b> (phase ${F()[pu].ph})</a> bởi <b>${F()[pu].ct.join(", ") || "?"}</b>.</div>` : `<div class="note" style="margin-top:3px">Không bị đẩy trước khi kẹp.</div>`;
+  h += reachInfo(F());
   $("chk").innerHTML = h;
   const jp = $("jmpPush"); if (jp) jp.onclick = e => { e.preventDefault(); go(pu); };
 }
@@ -601,6 +639,18 @@ function draw3d(fr, fs) {
     EDGES3.forEach(([p, q]) => line(V[p], V[q], K.bowl, 1, .7));
   });
   poly(ring(b, S.bowl_radius, bz1), null, K.bowl, 1, .8, [4, 3]);
+  if (reachOn()) {                                      // một vùng màu nhạt, cắt theo mặt bàn
+    const R = S.reach, bc = [R.base[0], R.base[1], TZ + 0.001], hh = R.r_step / 2;
+    const path = pts => pts.forEach((v, n) => { const q = P(v); n ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); });
+    g.save();
+    g.beginPath(); path([[-.3, -.25, TZ], [.3, -.25, TZ], [.3, .25, TZ], [-.3, .25, TZ]]); g.closePath(); g.clip();
+    R.bands[0].free.forEach(([lo, hi]) => {
+      g.beginPath(); path(ring(bc, hi + hh, TZ + 0.001, 72)); g.closePath();
+      if (lo > 0.03) { path(ring(bc, lo - hh, TZ + 0.001, 72)); g.closePath(); }
+      g.fillStyle = "#0e9aa7"; g.globalAlpha = .17; g.fill("evenodd"); g.globalAlpha = 1;
+    });
+    g.restore();
+  }
 
   // hộp ban đầu (nét đứt) và mũi tên lệch
   const cube = (c, hs) => { const V = []; for (const sx of [-1,1]) for (const sy of [-1,1]) for (const sz of [-1,1]) V.push([c[0]+sx*hs, c[1]+sy*hs, c[2]+sz*hs]); return V; };
@@ -714,12 +764,18 @@ function play() {
 }
 function loadEp(k) {
   stop(); ep = k; i = 0;
+  if (EPS[ep].bowl) { S.bowl = EPS[ep].bowl; S.bowl_geoms = EPS[ep].bowl_geoms; }   // mỗi ván có thể có bát ở chỗ khác
   const e = EPS[k];
   $("rng").max = e.frames.length - 1;
   $("res").innerHTML = `<span class="badge ${e.success ? "ok" : "bad"}">${e.success ? "THÀNH CÔNG" : "THẤT BẠI"}</span> <span class="sub">${e.steps} bước</span>`;
+  $("sel").value = k; $("epPos").textContent = `${k + 1}/${EPS.length}`;
+  $("tags").innerHTML = e.tags ? e.tags.filter(x => x !== "THÀNH CÔNG").map(x => `<span class="badge ${/HỎNG|timeout/.test(x) ? "bad" : "warn"}" style="margin-right:3px">${x}</span>`).join("") : "";
   buildLog(e.frames); buildTimeline(e.frames); render();
 }
+$("showReach").onchange = () => render();
 $("sel").onchange = () => loadEp(+$("sel").value);
+$("sPrev").onclick = () => loadEp((ep - 1 + EPS.length) % EPS.length);
+$("sNext").onclick = () => loadEp((ep + 1) % EPS.length);
 $("spd").onchange = () => { speed = +$("spd").value; if (timer) { stop(); play(); } };
 $("rng").oninput = () => go(+$("rng").value);
 $("bFirst").onclick = () => go(0);
@@ -756,7 +812,9 @@ $("v3").onclick = () => setCam(-Math.PI / 2, 1.5);
 }
 document.addEventListener("keydown", e => {
   if (e.target.tagName === "SELECT") return;
-  if (e.key === "ArrowRight") go(i + 1);
+  if (e.key === "[") $("sPrev").click();
+  else if (e.key === "]") $("sNext").click();
+  else if (e.key === "ArrowRight") go(i + 1);
   else if (e.key === "ArrowLeft") go(i - 1);
   else if (e.key === "ArrowDown") nextPhase();
   else if (e.key === "ArrowUp") prevPhase();
