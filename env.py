@@ -31,13 +31,19 @@ class SO101PickPlaceEnv(gym.Env):
 
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": config.CONTROL_FREQ}
 
-    def __init__(self, render_mode=None, render_images=True, real_grasp=False, end_on_success=True):
+    def __init__(self, render_mode=None, render_images=True, real_grasp=True, end_on_success=True,
+                 box_range=None, bowl_range=None):
         # render_images=False: không render ảnh camera trong obs -> chạy nhanh hơn nhiều
         # (policy viết tay không cần ảnh nên thường tắt đi)
-        # real_grasp=True: TẮT kẹp giả. Hộp chỉ được giữ bằng va chạm và ma sát thật của hai ngón.
+        # real_grasp=True (MẶC ĐỊNH): kẹp THẬT. Hộp chỉ được giữ bằng va chạm và ma sát thật của hai ngón.
+        # real_grasp=False: "kẹp giả" (snap-grasp): khi ngón khép gần hộp thì gán thẳng vị trí hộp theo tay.
         # end_on_success=False: ván KHÔNG dừng khi vừa thỏa điều kiện thành công, để policy chạy đủ mọi phase
         #   (thả, rút tay, về home). Khi đó đọc info["success"] ở bước CUỐI để biết hộp có còn nằm trong bát không.
+        # box_range / bowl_range: nửa cạnh (mét) của ô vuông mà hộp / bát được đặt ngẫu nhiên trong đó mỗi lần reset.
+        #   Mặc định lấy từ config (hộp ±3 cm, bát đứng yên). Cùng seed thì cùng vị trí.
         super().__init__()
+        self.box_range = config.BOX_RANDOM_RANGE if box_range is None else box_range
+        self.bowl_range = config.BOWL_RANDOM_RANGE if bowl_range is None else bowl_range
         self.render_mode = render_mode
         self.render_images = render_images
         self.real_grasp = real_grasp
@@ -75,6 +81,7 @@ class SO101PickPlaceEnv(gym.Env):
         self._ee_site = mujoco.mj_name2id(
             self.model, mujoco.mjtObj.mjOBJ_SITE, "ee_site"
         )
+        self._bowl_default_xy = self.model.body_pos[self._bowl_body][:2].copy()   # vị trí bát gốc trong file XML
 
         # Khoảng điều khiển (min, max) của từng actuator, dùng để đổi action [-1,1] ra giá trị thật
         self._ctrl_ranges = self.model.actuator_ctrlrange.copy()
@@ -122,9 +129,10 @@ class SO101PickPlaceEnv(gym.Env):
     # ------------------------------------------------------------------
 
     def reset(self, seed=None, options=None):
-        """Bắt đầu episode mới. Đặt robot về home, dịch hộp ngẫu nhiên ±3 cm.
+        """Bắt đầu episode mới. Đặt robot về home, dịch hộp (và bát, nếu bowl_range > 0) ngẫu nhiên.
 
         seed: cùng seed => cùng vị trí hộp => kết quả lặp lại được (rất hữu ích khi debug).
+        options (tùy chọn): {"box_xy": [x, y], "bowl_xy": [x, y]} đặt thẳng vị trí hộp / bát, thay cho vị trí ngẫu nhiên.
         Trả về (obs, info).
         """
         super().reset(seed=seed)
@@ -144,13 +152,23 @@ class SO101PickPlaceEnv(gym.Env):
         fl_qadr = self.model.jnt_qposadr[self._finger_left_jnt]
         self.data.qpos[fl_qadr] = 0.04  # mở tối đa
 
-        # Dịch vị trí hộp ngẫu nhiên trong ±3 cm theo x và y (z giữ nguyên)
+        # Dịch vị trí hộp ngẫu nhiên trong ±box_range theo x và y (z giữ nguyên)
         box_qpos_adr = self.model.jnt_qposadr[
             mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "box_joint")
         ]
         self.data.qpos[box_qpos_adr:box_qpos_adr + 3] = config.BOX_DEFAULT_POS + self.np_random.uniform(
-            low=[-0.03, -0.03, 0.0], high=[0.03, 0.03, 0.0]
+            low=[-self.box_range, -self.box_range, 0.0], high=[self.box_range, self.box_range, 0.0]
         )
+        # Bát: luôn khôi phục về chỗ gốc, rồi (nếu bật) dịch ngẫu nhiên trong ±bowl_range. Rút số ngẫu nhiên SAU hộp
+        # để vị trí hộp của mỗi seed không đổi khi bật random bát.
+        self.model.body_pos[self._bowl_body][:2] = self._bowl_default_xy
+        if self.bowl_range > 0:
+            self.model.body_pos[self._bowl_body][:2] += self.np_random.uniform(-self.bowl_range, self.bowl_range, 2)
+        if "bowl_xy" in (options or {}):
+            self.model.body_pos[self._bowl_body][:2] = options["bowl_xy"]
+        opts = options or {}
+        if "box_xy" in opts:                      # đặt tay vị trí hộp (không ảnh hưởng số ngẫu nhiên đã rút ở trên)
+            self.data.qpos[box_qpos_adr:box_qpos_adr + 2] = opts["box_xy"]
         # Đặt hướng hộp về mặc định (quaternion đơn vị = không xoay)
         self.data.qpos[box_qpos_adr + 3:box_qpos_adr + 7] = [1, 0, 0, 0]
         # Hộp đứng yên (vận tốc = 0)

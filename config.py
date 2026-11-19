@@ -61,6 +61,8 @@ BOWL_RADIUS = 0.05   # (cũ) ngưỡng ngang của tiêu chí thành công kiể
 BOWL_HEIGHT = 0.04   # chiều cao tường bát: miệng bát = z của bát + BOWL_HEIGHT
 BOWL_INNER_RADIUS = 0.042   # lòng bát tới mặt TRONG của tường (tường dày 0.3 cm nên 0.045 - 0.003)
 BOX_HALF = 0.015            # nửa cạnh hộp (hộp 3 cm)
+BOX_RANDOM_RANGE = 0.03     # hộp được đặt ngẫu nhiên trong ±3 cm quanh BOX_DEFAULT_POS (theo x, y)
+BOWL_RANDOM_RANGE = 0.0     # bát đứng yên; đặt > 0 để bát cũng ngẫu nhiên trong ±giá trị này
 SETTLED_SPEED = 0.05        # hộp chuyển động chậm hơn mức này (m/s) mới coi là "đã nằm yên"
 
 # Đường dẫn Python (dùng cho phím 3 Train trong giao diện).
