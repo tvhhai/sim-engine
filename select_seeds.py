@@ -3,7 +3,6 @@
 Cách dùng (đứng ở thư mục chứa sim_engine, đã kích hoạt .venv):
     python -m sim_engine.select_seeds                    # chấm seed 0-199 bằng KẸP THẬT, chọn 30 seed
     python -m sim_engine.select_seeds --count 40         # chọn 40 seed
-    python -m sim_engine.select_seeds --fake-grasp       # dùng kẹp giả
     python -m sim_engine.select_seeds --pool 0-499       # chấm dải lớn hơn
 
 Cách chọn (để 30 seed trong replay không trùng lặp và đáng xem):
@@ -115,7 +114,6 @@ def main():
     ap.add_argument("--pool", default="0-199", help="dải seed để chấm, ví dụ 0-199")
     ap.add_argument("--count", type=int, default=30, help="số seed trong nhóm chính")
     ap.add_argument("--policy", default="sim_engine.policies.scripted_policy:ScriptedPolicy")
-    ap.add_argument("--fake-grasp", action="store_true", help="dùng kẹp giả thay cho kẹp thật mặc định")
     ap.add_argument("--box-range", type=float, default=None)
     ap.add_argument("--bowl-range", type=float, default=None)
     ap.add_argument("--slow-factor", type=float, default=1.5, help="chậm = số bước >= hệ số này x số bước trung vị")
@@ -126,7 +124,7 @@ def main():
 
     module_name, class_name = args.policy.split(":")
     policy_cls = getattr(importlib.import_module(module_name), class_name)
-    env = SO101PickPlaceEnv(render_images=False, real_grasp=not args.fake_grasp, end_on_success=False,
+    env = SO101PickPlaceEnv(render_images=False, end_on_success=False,
                             box_range=args.box_range, bowl_range=args.bowl_range)
     rec = Recorder(env, policy_cls(env))
 
@@ -147,7 +145,7 @@ def main():
     slow = [r["seed"] for r in rows if r["steps"] >= slow_steps]
     kinds = collections.Counter(r["kind"] for r in rows)
 
-    print(f"\n=== Chấm {len(rows)} seed ({'kẹp giả' if args.fake_grasp else 'kẹp THẬT'}) ===")
+    print(f"\n=== Chấm {len(rows)} seed (kẹp THẬT) ===")
     print(f"thành công {len(rows) - len(fails)}/{len(rows)} | bước trung vị {median:.0f} | chậm (>= {slow_steps:.0f} bước): {len(slow)} seed")
     print("kiểu kết quả:", dict(kinds))
     print("số seed có timeout theo phase:", dict(sorted(to_count.items())))
@@ -190,7 +188,7 @@ def main():
         print(f"Số seed hỏng nhiều hơn {args.count}: đưa thêm {len(others)} seed hỏng còn lại lên replay.")
 
     data = {
-        "pool": args.pool, "count": args.count, "real_grasp": not args.fake_grasp, "slow_steps": slow_steps,
+        "pool": args.pool, "count": args.count, "slow_steps": slow_steps,
         "summary": {"success": len(rows) - len(fails), "total": len(rows), "median_steps": median, "kinds": dict(kinds),
                     "timeouts_by_phase": {str(k): v for k, v in sorted(to_count.items())}, "slow_seeds": slow},
         "selected": selected, "rest": others,

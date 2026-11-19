@@ -90,13 +90,12 @@ def main():
                         help="module:Class của policy cần chấm")
     parser.add_argument("--box-range", type=float, default=None, help="hộp ngẫu nhiên trong ± giá trị này (mét)")
     parser.add_argument("--bowl-range", type=float, default=None, help="bát ngẫu nhiên trong ± giá trị này (mét)")
-    parser.add_argument("--fake-grasp", action="store_true", help="dùng kẹp giả (snap-grasp) thay cho kẹp thật mặc định")
     parser.add_argument("-v", "--verbose", action="store_true", help="in timeline từng phase")
     args = parser.parse_args()
 
     seeds = parse_seeds(args.seeds)
     policy_cls = load_policy_class(args.policy)
-    env = SO101PickPlaceEnv(render_images=False, real_grasp=not args.fake_grasp, end_on_success=False,
+    env = SO101PickPlaceEnv(render_images=False, end_on_success=False,
                             box_range=args.box_range, bowl_range=args.bowl_range)   # chạy đủ mọi phase, chấm ở bước cuối
     policy = policy_cls(env)
 

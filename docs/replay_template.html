@@ -150,8 +150,7 @@ app.innerHTML = `
     </span>
     <span id="res"></span>
     <span id="tags" class="sub"></span>
-    <span class="badge" style="background:color-mix(in srgb,${S.real_grasp ? "var(--ok)" : "var(--warn)"} 20%,transparent);color:${S.real_grasp ? "var(--ok)" : "var(--warn)"}" title="${S.real_grasp ? "Hộp chỉ được giữ bằng ma sát và va chạm thật" : "Hộp được 'dính' vào tay bằng cách gán vị trí (không phải ma sát thật)"}">${S.real_grasp ? "KẸP THẬT" : "KẸP GIẢ"}</span>
-    <a href="${S.real_grasp ? "replay_fake.html" : "replay.html"}" style="font-size:12px">mở bản kẹp ${S.real_grasp ? "giả" : "thật"}</a>
+    <span class="badge" style="background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)" title="Hộp chỉ được giữ bằng ma sát và va chạm thật">KẸP THẬT</span>
     <span class="sub">Policy <code>${S.policy}</code> · hình 2D vẽ lại từ số liệu thật, không phải vật lý</span>
     <span style="flex:1"></span>
     <div class="legend">
@@ -555,11 +554,12 @@ function drawChk(fr) {
   const rim = bz + S.bowl_height, zMax = rim - S.box_half;
   const zOk = z > bz && z < zMax, hOk = fr.hd < S.bowl_radius, relOk = !fr.gr, setOk = (fr.bs ?? 0) < S.settled_speed;
   const clsy = ok => ok ? "hlg" : "hlb";
-  let h = `<div class="note" style="margin:0 0 3px"><b>Hộp dính vào tay</b> khi đủ cả 3 điều (env._update_grasp):</div>`;
-  h += yn(fr.ag < -0.5, `lệnh đóng kẹp (action &lt; -0.5): <span class="${clsy(fr.ag < -0.5)}">${fr.ag}</span>`);
-  h += yn(fr.fo < S.close_threshold, `hàm kẹp đã khép: góc <span class="${clsy(fr.fo < S.close_threshold)}">${fr.fo.toFixed(2)}</span> rad (cần &lt; ${S.close_threshold})`);
-  h += yn(dEB < S.grasp_threshold, `tay gần hộp: <span class="${clsy(dEB < S.grasp_threshold)}">${cm(dEB)} cm</span> (cần &lt; ${(S.grasp_threshold*100).toFixed(0)})`);
-  h += `<div class="chk"><span>→</span><span>Đang dính: <span class="big ${clsy(fr.gr)}">${fr.gr ? "CÓ" : "KHÔNG"}</span></span></div>`;
+  const fixedOn = (fr.ct || []).includes("gripper"), movOn = (fr.ct || []).includes("moving_jaw_so101_v1");
+  let h = `<div class="note" style="margin:0 0 3px"><b>Kẹp thật</b> (chỉ ma sát + va chạm, 1 hàm cố định + 1 hàm di động):</div>`;
+  h += yn(fr.ag < -0.5, `lệnh đóng kẹp: <span class="${clsy(fr.ag < -0.5)}">${fr.ag}</span>`);
+  h += yn(fixedOn, `hàm cố định chạm hộp`);
+  h += yn(movOn, `hàm di động chạm hộp (góc ${fr.fo.toFixed(2)} rad)`);
+  h += `<div class="chk"><span>→</span><span>Hai hàm cùng chạm hộp (đang kẹp): <span class="big ${clsy(fr.gr)}">${fr.gr ? "CÓ" : "KHÔNG"}</span></span></div>`;
   h += `<div class="note" style="margin:8px 0 3px"><b>Hộp vào bát</b> khi đủ cả 4 điều (env._get_info):</div>`;
   h += yn(hOk, `tâm hộp cách tâm bát <span class="${clsy(hOk)}">${cm(fr.hd)} cm</span> (cần &lt; ${(S.bowl_radius*100).toFixed(1)} = lòng bát)`);
   h += yn(zOk, `tâm hộp cao <span class="${clsy(zOk)}">${z.toFixed(3)}</span> trong (${bz.toFixed(2)}, ${zMax.toFixed(3)}): đỉnh hộp thấp hơn miệng bát ${rim.toFixed(2)}`);

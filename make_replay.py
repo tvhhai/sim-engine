@@ -1,8 +1,7 @@
 """Ghi nhiều ván chạy ra file HTML để xem lại từng bước trên trình duyệt (replay).
 
 Cách dùng (đứng ở thư mục chứa sim_engine, đã kích hoạt .venv):
-    python -m sim_engine.make_replay                    # kẹp THẬT; seed lấy từ docs/replay_seeds.json (xem select_seeds), mặc định 0-29
-    python -m sim_engine.make_replay --fake-grasp       # kẹp giả, ghi ra docs/replay_fake.html
+    python -m sim_engine.make_replay                    # seed lấy từ docs/replay_seeds.json (xem select_seeds), mặc định 0-29
     python -m sim_engine.make_replay --seeds 0,2,3      # chỉ vài seed (file nhỏ hơn, ghi nhanh hơn)
     python -m sim_engine.make_replay --policy sim_engine.policies.my_policy:MyPolicy --out docs/replay_my.html
 
@@ -271,18 +270,16 @@ def main():
     parser.add_argument("--seed-file", default=os.path.join(here, "docs", "replay_seeds.json"),
                         help="file do select_seeds ghi: danh sách seed đã chọn kèm nhãn (hỏng, timeout, chậm...)")
     parser.add_argument("--policy", default="sim_engine.policies.scripted_policy:ScriptedPolicy")
-    parser.add_argument("--fake-grasp", action="store_true", help="dùng kẹp giả (snap-grasp) thay cho kẹp thật mặc định")
     parser.add_argument("--box-range", type=float, default=None, help="hộp ngẫu nhiên trong ± giá trị này (mét), mặc định theo config")
     parser.add_argument("--bowl-range", type=float, default=None, help="bát ngẫu nhiên trong ± giá trị này (mét), mặc định theo config")
-    parser.add_argument("--out", default=None, help="mặc định docs/replay.html (kẹp thật) hoặc docs/replay_fake.html (--fake-grasp)")
+    parser.add_argument("--out", default=None, help="mặc định docs/replay.html")
     args = parser.parse_args()
-    real_grasp = not args.fake_grasp
     if args.out is None:
-        args.out = os.path.join(here, "docs", "replay.html" if real_grasp else "replay_fake.html")
+        args.out = os.path.join(here, "docs", "replay.html")
 
     module_name, class_name = args.policy.split(":")
     policy_cls = getattr(importlib.import_module(module_name), class_name)
-    env = SO101PickPlaceEnv(render_images=False, real_grasp=real_grasp, end_on_success=False,
+    env = SO101PickPlaceEnv(render_images=False, end_on_success=False,
                             box_range=args.box_range, bowl_range=args.bowl_range)
     policy = policy_cls(env)
     rec = Recorder(env, policy)
@@ -294,9 +291,6 @@ def main():
     elif os.path.exists(args.seed_file):
         with open(args.seed_file, encoding="utf-8") as f:
             chosen = json.load(f)
-        if chosen.get("real_grasp") != real_grasp:
-            print(f"Lưu ý: {args.seed_file} được chọn cho {'kẹp thật' if chosen.get('real_grasp') else 'kẹp giả'}, "
-                  f"còn lần này là {'kẹp thật' if real_grasp else 'kẹp giả'}; nên chạy lại select_seeds.")
         entries = chosen["selected"] + chosen["rest"]
         seed_list = [(e.get("name") or e["seed"]) for e in entries]      # trường hợp cực biên có tên riêng thay cho seed
         meta = {(e.get("name") or e["seed"]): e for e in entries}
@@ -323,10 +317,7 @@ def main():
         "bowl_height": config.BOWL_HEIGHT,
         "bowl_inner": config.BOWL_INNER_RADIUS,      # lòng bát: tâm hộp phải cách tâm bát ít hơn mức này
         "settled_speed": config.SETTLED_SPEED,       # hộp phải chậm hơn mức này (m/s) mới tính là nằm yên
-        "real_grasp": bool(real_grasp),
         "box_half": config.BOX_HALF,
-        "close_threshold": env._gripper_close_threshold,   # góc hàm kẹp (rad) dưới mức này = coi là đã khép
-        "grasp_threshold": env._grasp_threshold,
         "max_steps": config.MAX_EPISODE_STEPS,
         "joints": config.JOINT_NAMES[:5],
         # Hình học THẬT của bát (đọc từ model): đáy hình trụ + 8 tấm tường hình hộp. Toạ độ tâm tính theo thế giới.

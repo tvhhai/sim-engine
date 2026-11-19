@@ -31,12 +31,11 @@ class SO101PickPlaceEnv(gym.Env):
 
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": config.CONTROL_FREQ}
 
-    def __init__(self, render_mode=None, render_images=True, real_grasp=True, end_on_success=True,
+    def __init__(self, render_mode=None, render_images=True, end_on_success=True,
                  box_range=None, bowl_range=None):
         # render_images=False: không render ảnh camera trong obs -> chạy nhanh hơn nhiều
         # (policy viết tay không cần ảnh nên thường tắt đi)
-        # real_grasp=True (MẶC ĐỊNH): kẹp THẬT. Hộp chỉ được giữ bằng va chạm và ma sát thật của hai ngón.
-        # real_grasp=False: "kẹp giả" (snap-grasp): khi ngón khép gần hộp thì gán thẳng vị trí hộp theo tay.
+        # Kẹp THẬT: hộp chỉ được giữ bằng va chạm và ma sát thật của hai hàm kẹp (không có kẹp giả / snap-grasp).
         # end_on_success=False: ván KHÔNG dừng khi vừa thỏa điều kiện thành công, để policy chạy đủ mọi phase
         #   (thả, rút tay, về home). Khi đó đọc info["success"] ở bước CUỐI để biết hộp có còn nằm trong bát không.
         # box_range / bowl_range: nửa cạnh (mét) của ô vuông mà hộp / bát được đặt ngẫu nhiên trong đó mỗi lần reset.
@@ -46,7 +45,6 @@ class SO101PickPlaceEnv(gym.Env):
         self.bowl_range = config.BOWL_RANDOM_RANGE if bowl_range is None else bowl_range
         self.render_mode = render_mode
         self.render_images = render_images
-        self.real_grasp = real_grasp
         self.end_on_success = end_on_success
 
         # Nạp mô hình MuJoCo từ file XML (robot, bàn, hộp, bát, camera)
@@ -87,14 +85,8 @@ class SO101PickPlaceEnv(gym.Env):
         # Khoảng điều khiển (min, max) của từng actuator, dùng để đổi action [-1,1] ra giá trị thật
         self._ctrl_ranges = self.model.actuator_ctrlrange.copy()
 
-        # --- Snap-grasp: "kẹp giả" ---
-        # Khi gripper đóng và tay ở gần hộp, code DÍNH hộp vào tay bằng cách gán vị trí
-        # (kinematic attachment), chứ không dựa vào ma sát thật. Dễ hơn robot thật rất nhiều.
-        self._grasped = False                 # hộp đang bị dính vào tay không
-        self._grasp_offset = np.zeros(3)      # độ lệch hộp so với tay lúc bắt đầu dính
-        self._grasp_threshold = 0.06          # tay cách hộp < 6 cm mới cho dính
-        self._gripper_close_threshold = 0.5   # góc hàm kẹp (rad) nhỏ hơn giá trị này = coi là đã đóng
-        # Hai má kẹp, dùng để biết "hộp đang bị kẹp thật" (cả hai má cùng chạm hộp) khi bật real_grasp
+        self._grasped = False                 # THÔNG TIN: cả hai hàm kẹp đang cùng chạm hộp (không điều khiển gì cả)
+        # Hai má kẹp, dùng để biết "hộp đang bị kẹp thật" (cả hai má cùng chạm hộp) 
         self._pad_geoms = {
             mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "fixed_jaw_col"),
             mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "moving_jaw_col"),
@@ -180,7 +172,6 @@ class SO101PickPlaceEnv(gym.Env):
 
         # Xóa trạng thái kẹp
         self._grasped = False
-        self._grasp_offset = np.zeros(3)
 
         # Đặt lệnh điều khiển (ctrl) bằng đúng vị trí hiện tại để robot không giật
         for i in range(5):
@@ -218,17 +209,12 @@ class SO101PickPlaceEnv(gym.Env):
 
         # action[6] không được dùng (robot thật chỉ có 1 hàm di động)
 
-        # Cập nhật "kẹp giả" dựa trên lệnh kẹp (bỏ qua khi bật kẹp thật)
-        if not self.real_grasp:
-            self._update_grasp(action[5])
-
         # Chạy vật lý: 1 bước điều khiển = PHYSICS_SUBSTEPS bước vật lý nhỏ (16 bước x 0.002s)
         for _ in range(config.PHYSICS_SUBSTEPS):
             mujoco.mj_step(self.model, self.data)
 
-        # Kẹp thật: _grasped chỉ còn là THÔNG TIN ("cả hai má đang chạm hộp"), không còn gán vị trí hộp
-        if self.real_grasp:
-            self._grasped = self._both_pads_touch_box()
+        # _grasped chỉ là THÔNG TIN ("cả hai hàm đang chạm hộp"), không gán vị trí hộp
+        self._grasped = self._both_pads_touch_box()
 
         self._step_count += 1
         obs = self._get_obs()
@@ -268,33 +254,6 @@ class SO101PickPlaceEnv(gym.Env):
                 if pad in self._pad_geoms and self.model.geom_bodyid[other] == self._box_body:
                     touching.add(pad)
         return len(touching) == len(self._pad_geoms)
-
-    def _update_grasp(self, gripper_action):
-        """Kẹp giả (snap-grasp): dính hộp vào tay khi gripper đóng gần hộp.
-
-        Điều kiện DÍNH: chưa dính + lệnh đóng (action < -0.5) + ngón kẹp đã khép + tay gần hộp.
-        Điều kiện NHẢ: lệnh mở (action > 0.5).
-        Khi đang dính: mỗi bước ghi đè vị trí hộp = vị trí tay + độ lệch ban đầu.
-        """
-        ee_pos = self.data.site_xpos[self._ee_site].copy()
-        box_pos = self.data.xpos[self._box_body].copy()
-        dist = np.linalg.norm(ee_pos - box_pos)
-
-        fl_qadr = self.model.jnt_qposadr[self._gripper_jnt]
-        finger_qpos = self.data.qpos[fl_qadr]
-        gripper_closing = gripper_action < -0.5  # lệnh đang yêu cầu đóng
-        gripper_opening = gripper_action > 0.5   # lệnh đang yêu cầu mở
-
-        if not self._grasped and gripper_closing and finger_qpos < self._gripper_close_threshold and dist < self._grasp_threshold:
-            self._grasp_offset = box_pos - ee_pos
-            self._grasped = True
-        elif self._grasped and gripper_opening:
-            self._grasped = False
-
-        if self._grasped:
-            new_box_pos = ee_pos + self._grasp_offset
-            self.data.qpos[self._box_qpos_adr:self._box_qpos_adr + 3] = new_box_pos
-            self.data.qvel[self._box_dof_adr:self._box_dof_adr + 6] = 0.0
 
     def _get_obs(self):
         """Lấy quan sát hiện tại: state (7 số) và ảnh camera (nếu bật render_images)."""

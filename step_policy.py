@@ -79,10 +79,10 @@ def project(env, cam_id, width, height, point):
 class Runner:
     """Giữ env + policy, chạy từng bước và ghi lại thông tin để in log / vẽ."""
 
-    def __init__(self, policy_path, seed, real_grasp=True):
+    def __init__(self, policy_path, seed):
         module_name, class_name = policy_path.split(":")
         policy_cls = getattr(importlib.import_module(module_name), class_name)
-        self.env = SO101PickPlaceEnv(render_images=False, real_grasp=real_grasp, end_on_success=False)
+        self.env = SO101PickPlaceEnv(render_images=False, end_on_success=False)
         self.policy = policy_cls(self.env)
         self.seed = seed
         self.target = None          # đích của phase hiện tại (None nếu phase chờ)
@@ -140,7 +140,7 @@ class Runner:
         self.go_to_step(self.step_no - n)
 
     def finger_open(self):
-        """Góc hàm kẹp di động (rad). Cần < _gripper_close_threshold thì mới tính là đã khép."""
+        """Góc hàm kẹp di động (rad): lớn = mở."""
         adr = self.env.model.jnt_qposadr[self.env._gripper_jnt]
         return float(self.env.data.qpos[adr])
 
@@ -320,14 +320,13 @@ def main():
     parser = argparse.ArgumentParser(description="Chạy policy từng bước bằng phím bấm")
     parser.add_argument("--viewer", action="store_true", help="dùng cửa sổ MuJoCo viewer (xoay được, thấy va chạm thật)")
     parser.add_argument("--seed", type=int, default=2)
-    parser.add_argument("--fake-grasp", action="store_true", help="dùng kẹp giả (snap-grasp) thay cho kẹp thật mặc định")
     parser.add_argument("--policy", default="sim_engine.policies.scripted_policy:ScriptedPolicy")
     parser.add_argument("--headless", action="store_true", help="không mở cửa sổ, chạy hết ván và in log")
     parser.add_argument("--goto", type=int, default=0, help="chạy sẵn N bước (không in log) rồi mới dừng chờ phím; "
                         "dùng số 'tổng bước' trên replay.html để demo dừng đúng chỗ đó")
     args = parser.parse_args()
 
-    runner = Runner(args.policy, args.seed, real_grasp=not args.fake_grasp)
+    runner = Runner(args.policy, args.seed)
 
     def goto(n):
         """Chạy lặng lẽ n bước đầu để demo dừng đúng bước đang xem trên replay.html."""
@@ -416,7 +415,7 @@ def main():
         if runner.target is not None:
             d = float(np.linalg.norm(ee - runner.target)) * 100
             lines.append((f"dich (xanh la) {fmt(runner.target)} | tay cach dich {d:.1f} cm, nguong {runner.threshold * 100:.1f}", GRN))
-        lines.append((f"ngon mo {runner.finger_open():.3f} (can <{env._gripper_close_threshold}) | hop dinh vao tay: {env._grasped}", WHT))
+        lines.append((f"ngon mo {runner.finger_open():.3f} | 2 ham cung cham hop: {env._grasped}", WHT))
         lines.append((f"vao bat? ngang {horiz * 100:.1f} cm (can <{config.BOWL_INNER_RADIUS * 100:.1f}) | do cao hop: {'OK' if z_ok else 'chua'}", BLU))
         if runner.finished:
             ok = runner.info["success"]

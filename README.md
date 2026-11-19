@@ -421,24 +421,11 @@ The scene (`assets/so101_real_scene.xml`) defines:
 
 Physics runs at 500 Hz internally (timestep = 0.002s), but the policy runs at 30 Hz. Each `env.step()` takes ~16 physics substeps.
 
-### Grasping (Kinematic Snap-Grasp)
+### Grasping (real contact + friction)
 
-Real friction-based grasping in simulation is unreliable. Instead, SimEngine uses **kinematic snap-grasp**, the same approach used by Robosuite, MetaWorld, and other standard benchmarks:
+The box is held only by contact and friction between the fixed jaw and the single moving jaw of the real SO-101 (there is no snap/kinematic grasp). Two settings make this stable: `impratio="10"` and `noslip_iterations="5"` in the scene options (without them MuJoCo friction creeps and the 30 g box slides out), and stiff jaw/box contacts (`solref="0.005 1"`). `env._grasped` is only an information flag: both jaws touch the box.
 
-1. **Grasp triggers** when ALL of these are true:
-   - Gripper action < -0.5 (close command)
-   - Gripper jaw angle < 0.5 rad (jaw actually closing)
-   - End-effector is within 6cm of the box center
-
-2. **While grasped**: The box position is set to track the end-effector every step (kinematic attachment). The box velocity is zeroed to prevent it flying off on release.
-
-3. **Release triggers** when gripper action > 0.5 (open command). The box is then free to fall under gravity.
-
-This means your policy needs to learn a specific sequence:
-- Get the end-effector close to the box (within 6cm)
-- Output a strong close signal (action[5] = -1.0)
-- Keep it closed while transporting
-- Output a strong open signal (action[5] = +1.0) when over the bowl
+The policy therefore rotates `wrist_roll` so the jaws are parallel to a pair of box faces, puts the end-effector 1.6 cm beside the box centre along the clamp axis, closes (action[5] = -1), carries, and opens (action[5] = +1) over the bowl. See the constants at the top of `policies/scripted_policy.py`.
 
 ### Reward Function
 
