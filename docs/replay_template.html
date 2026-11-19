@@ -159,7 +159,7 @@ app.innerHTML = `
       <span><i style="background:var(--hand)"></i>tay (giữa 2 ngón)</span><span><i style="background:var(--goal)"></i>đích</span>
       <span><i style="background:var(--arm)"></i>Nét giữa = xương tay · vùng nhạt = bề rộng khâu · khung hộp = bộ kẹp. Đỏ = khâu chạm hộp, cam = chạm bàn hoặc sàn, <b style="color:#a855f7">tím = chạm bát</b>.</span>
       <span><i style="background:var(--past)"></i>cánh tay mờ xanh lục = QUÁ KHỨ</span><span><i style="background:var(--future)"></i>cánh tay mờ cam = TƯƠNG LAI</span>
-      <span>5 khớp: ${JMEAN}. Đoạn <b>base</b> (đế) đứng yên; 2 ngón kẹp không có trong IK.</span>
+      <span>5 khớp: ${JMEAN}. Đoạn <b>base</b> (đế) đứng yên; hàm kẹp (1 hàm cố định + 1 hàm di động) không có trong IK.</span>
       <span>số nhỏ cạnh cánh tay = lệch bao nhiêu bước so với hiện tại · chấm trên đường đứt = 1 bước</span>
     </div>
   </div>
@@ -230,20 +230,54 @@ function futureEnd() {
   if (OPT.hz === "phase") { const cur = fs[nx].ph; let k = nx; while (k < n && fs[k+1].ph === cur) k++; return k; }
   return Math.min(n, i + (+OPT.hz));
 }
-// Tám đỉnh hộp theo hệ trục cổ tay. Hai ngón trượt độc lập dọc ray.
-function gripperEdges(fr, edge) {
-  const [w, x, y, z] = fr.wq;
-  for (const part of S.gripper) {
-    const origin = part.origin < 0 ? fr.arm[5] : fr.fg[part.origin];
-    const vertices = Array.from({length: 8}, (_, k) => {
-      const [a,b,c] = part.offset.map((v,j) => v + ((k & (1 << j)) ? 1 : -1) * part.half[j]);
-      const u = 2*(y*c-z*b), v = 2*(z*a-x*c), t = 2*(x*b-y*a);
-      return [origin[0]+a+w*u+y*t-z*v, origin[1]+b+w*v+z*u-x*t, origin[2]+c+w*t+x*v-y*u];
-    });
-    for (let k=0; k<8; k++) for (const bit of [1,2,4]) {
-      if (!(k & bit)) edge(vertices[k], vertices[k | bit], part.body);
-    }
+/* ---------- cánh tay THẬT (SO-101): động học thuận từ góc khớp + lưới tam giác giản lược của từng link ---------- */
+const mmul = (A, B) => [0,1,2].map(r => [0,1,2].map(c => A[r][0]*B[0][c] + A[r][1]*B[1][c] + A[r][2]*B[2][c]));
+const mvec = (A, v) => [0,1,2].map(r => A[r][0]*v[0] + A[r][1]*v[1] + A[r][2]*v[2]);
+function quatMat(q) {
+  const [w, x, y, z] = q;
+  return [[1-2*(y*y+z*z), 2*(x*y-w*z), 2*(x*z+w*y)], [2*(x*y+w*z), 1-2*(x*x+z*z), 2*(y*z-w*x)], [2*(x*z-w*y), 2*(y*z+w*x), 1-2*(x*x+y*y)]];
+}
+const KIN = (S.kin || []).map(k => ({ ...k, Rl: quatMat(k.quat) }));
+function fkPose(fr) {                                    // tư thế world của từng link: base (đứng yên) -> ... -> hàm kẹp di động
+  if (fr._pose) return fr._pose;
+  const ang = {}; S.joints.forEach((n, k) => ang[n] = fr.jq[k] * Math.PI / 180); ang.gripper = fr.fo;
+  const out = {};
+  for (const k of KIN) {
+    let R = k.Rl, p = k.pos;
+    if (k.parent) { const P = out[k.parent]; R = mmul(P.R, k.Rl); p = mvec(P.R, k.pos).map((v, j) => v + P.p[j]); }
+    if (k.joint) { const c = Math.cos(ang[k.joint]), s2 = Math.sin(ang[k.joint]); R = mmul(R, [[c, -s2, 0], [s2, c, 0], [0, 0, 1]]); }
+    out[k.name] = { R, p };
   }
+  return (fr._pose = out);
+}
+function armWorld(fr) {                                  // đỉnh lưới của từng link trong toạ độ world
+  if (fr._w) return fr._w;
+  const pose = fkPose(fr), out = {};
+  for (const nm in S.arm_mesh) {
+    const { R, p } = pose[nm], v = S.arm_mesh[nm].v, w = new Float64Array(v.length);
+    for (let i = 0; i < v.length; i += 3) {
+      w[i] = R[0][0]*v[i] + R[0][1]*v[i+1] + R[0][2]*v[i+2] + p[0];
+      w[i+1] = R[1][0]*v[i] + R[1][1]*v[i+1] + R[1][2]*v[i+2] + p[1];
+      w[i+2] = R[2][0]*v[i] + R[2][1]*v[i+1] + R[2][2]*v[i+2] + p[2];
+    }
+    out[nm] = w;
+  }
+  return (fr._w = out);
+}
+const ARMCOL = "#e8b923";
+function linkColor(fr, nm, main) {                       // đỏ = chạm hộp, cam = chạm bàn, tím = chạm bát
+  if (!main) return ARMCOL;
+  return (fr.ct || []).includes(nm) ? "#e5484d" : (fr.tb || []).includes(nm) ? "#f59e0b" : touchBowl(fr, nm) ? BOWLC : ARMCOL;
+}
+function armHulls(fr, fx, fy, a, b) {                    // bóng 2D của từng link = bao lồi của các đỉnh đã chiếu
+  let s = "";
+  const W3 = armWorld(fr);
+  for (const nm of Object.keys(S.arm_mesh)) {
+    const w = W3[nm], pts = [];
+    for (let i = 0; i < w.length; i += 6) pts.push([fx(w[i+a]), fy(w[i+b])]);
+    s += `<polygon points="${hull2(pts).map(p => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")}" fill="${linkColor(fr, nm, true)}" fill-opacity=".78" stroke="#3a2c00" stroke-opacity=".55" stroke-width=".8"/>`;
+  }
+  return s;
 }
 // Bát thật = đáy hình trụ + 8 tấm tường hình hộp (đọc từ model.xml). Các hàm dưới đây vẽ đúng hình đó.
 const BOWLC = "#a855f7";                              // màu nhãn "đang chạm bát"
@@ -262,23 +296,13 @@ function wallCorners3(g) {                            // 8 đỉnh (x, y, z) c�
 }
 function armSeg(fr, fx, fy, a, b, w, op, red, col) {
   const A = fr.arm.map(p => [p[a], p[b]]); A.push([fr.ee[a], fr.ee[b]]);
-  let s = "";
+  let s = red ? armHulls(fr, fx, fy, a, b) : "";
   for (let k = 0; k < A.length - 1; k++) {
     const nm = S.arm_bodies[k];                       // đoạn k nằm giữa khớp k và khớp k+1, mang tên link nm
     const hit = red && fr.ct.includes(nm), tb = red && fr.tb.includes(nm), bw = red && touchBowl(fr, nm);
     const c = hit ? "var(--bad)" : tb ? "var(--warn)" : bw ? BOWLC : (col || "var(--arm)");
-    const radius = red && S.capsule_radii[nm];
-    if (radius) {
-      const sx = fx(1) - fx(0), sy = fy(1) - fy(0);
-      // Vẽ theo mét rồi chiếu cả bề rộng lên hai trục.
-      s += `<line transform="matrix(${sx} 0 0 ${sy} ${fx(0)} ${fy(0)})" x1="${A[k][0]}" y1="${A[k][1]}" x2="${A[k+1][0]}" y2="${A[k+1][1]}" stroke="${c}" stroke-width="${2 * radius}" stroke-linecap="round" opacity=".13"/>`;
-    }
-    s += `<line x1="${fx(A[k][0])}" y1="${fy(A[k][1])}" x2="${fx(A[k+1][0])}" y2="${fy(A[k+1][1])}" stroke="${c}" stroke-width="${red ? 2.5 : w}" stroke-linecap="round" opacity="${hit || tb || bw ? 1 : op}"/>`;
+    s += `<line x1="${fx(A[k][0])}" y1="${fy(A[k][1])}" x2="${fx(A[k+1][0])}" y2="${fy(A[k+1][1])}" stroke="${c}" stroke-width="${red ? 1.6 : w}" stroke-linecap="round" opacity="${hit || tb || bw ? 1 : red ? .55 : op}"/>`;
   }
-  if (red) gripperEdges(fr, (p, q, body) => {
-    const color = fr.ct.includes(body) ? "var(--bad)" : fr.tb.includes(body) ? "var(--warn)" : touchBowl(fr, body) ? BOWLC : "var(--ink)";
-    s += `<line x1="${fx(p[a])}" y1="${fy(p[b])}" x2="${fx(q[a])}" y2="${fy(q[b])}" stroke="${color}" stroke-width="1.25"/>`;
-  });
   if (red) for (let k = 1; k <= 5; k++)                // đánh số khớp 1..5 trên cánh tay chính
     s += `<circle cx="${fx(A[k][0])}" cy="${fy(A[k][1])}" r="7" fill="var(--card)" stroke="var(--ink)" stroke-width="1.2"/><text x="${fx(A[k][0])}" y="${fy(A[k][1]) + 3.2}" font-size="9" font-weight="700" text-anchor="middle" fill="var(--ink)">${k}</text>`;
   return s;
@@ -533,7 +557,7 @@ function drawChk(fr) {
   const clsy = ok => ok ? "hlg" : "hlb";
   let h = `<div class="note" style="margin:0 0 3px"><b>Hộp dính vào tay</b> khi đủ cả 3 điều (env._update_grasp):</div>`;
   h += yn(fr.ag < -0.5, `lệnh đóng kẹp (action &lt; -0.5): <span class="${clsy(fr.ag < -0.5)}">${fr.ag}</span>`);
-  h += yn(fr.fo < S.close_threshold, `ngón đã khép: mở <span class="${clsy(fr.fo < S.close_threshold)}">${fr.fo.toFixed(3)}</span> (cần &lt; ${S.close_threshold})`);
+  h += yn(fr.fo < S.close_threshold, `hàm kẹp đã khép: góc <span class="${clsy(fr.fo < S.close_threshold)}">${fr.fo.toFixed(2)}</span> rad (cần &lt; ${S.close_threshold})`);
   h += yn(dEB < S.grasp_threshold, `tay gần hộp: <span class="${clsy(dEB < S.grasp_threshold)}">${cm(dEB)} cm</span> (cần &lt; ${(S.grasp_threshold*100).toFixed(0)})`);
   h += `<div class="chk"><span>→</span><span>Đang dính: <span class="big ${clsy(fr.gr)}">${fr.gr ? "CÓ" : "KHÔNG"}</span></span></div>`;
   h += `<div class="note" style="margin:8px 0 3px"><b>Hộp vào bát</b> khi đủ cả 4 điều (env._get_info):</div>`;
@@ -661,24 +685,54 @@ function draw3d(fr, fs) {
   if (Math.hypot(fr.box[0]-b0[0], fr.box[1]-b0[1]) > 0.004) line(b0, fr.box, K.bad, 2, 1, [2, 2]);
 
   // cánh tay (xương) từ danh sách điểm: 6 khớp + điểm giữa 2 ngón
+  // lưới tam giác THẬT của cánh tay (vẽ xa trước), shading theo hướng pháp tuyến
+  const LIGHT = (() => { const l = [0.35, -0.45, 0.82], n = Math.hypot(...l); return l.map(v => v / n); })();
+  const hexRgb = h => [1, 3, 5].map(k => parseInt(h.slice(k, k + 2), 16));
+  const drawMesh = f => {
+    const W3 = armWorld(f), tris = [];
+    for (const nm of Object.keys(S.arm_mesh)) {
+      const w = W3[nm], F = S.arm_mesh[nm].f, n = w.length / 3, sc = new Float64Array(n * 3);
+      for (let k = 0; k < n; k++) { const q = P([w[3*k], w[3*k+1], w[3*k+2]]); sc[3*k] = q[0]; sc[3*k+1] = q[1]; sc[3*k+2] = q[2]; }
+      const base = hexRgb(linkColor(f, nm, true));
+      for (let t = 0; t < F.length; t += 3) {
+        const i0 = F[t], i1 = F[t+1], i2 = F[t+2];
+        const ux = w[3*i1]-w[3*i0], uy = w[3*i1+1]-w[3*i0+1], uz = w[3*i1+2]-w[3*i0+2];
+        const vx = w[3*i2]-w[3*i0], vy = w[3*i2+1]-w[3*i0+1], vz = w[3*i2+2]-w[3*i0+2];
+        let nx = uy*vz - uz*vy, ny = uz*vx - ux*vz, nz = ux*vy - uy*vx; const nl = Math.hypot(nx, ny, nz) || 1;
+        const lam = Math.abs((nx*LIGHT[0] + ny*LIGHT[1] + nz*LIGHT[2]) / nl), sh = 0.42 + 0.58 * lam;
+        tris.push([(sc[3*i0+2] + sc[3*i1+2] + sc[3*i2+2]) / 3, i0, i1, i2, sc, base, sh]);
+      }
+    }
+    // hộp hiện tại cùng được sắp theo độ sâu với cánh tay, để tay che / bị hộp che đúng chỗ
+    { const Vb = boxV(f.box, bq(f), S.box_half), sb = new Float64Array(24);
+      Vb.forEach((v, k) => { const q = P(v); sb[3*k] = q[0]; sb[3*k+1] = q[1]; sb[3*k+2] = q[2]; });
+      [[0,1,3,2],[4,5,7,6],[0,1,5,4],[2,3,7,6],[0,2,6,4],[1,3,7,5]].forEach(([a, b, c, d], k) => {
+        const ctr = (sb[3*a+2] + sb[3*b+2] + sb[3*c+2] + sb[3*d+2]) / 4, sh = [0.55, 1, 0.75, 0.9, 0.65, 0.8][k];
+        tris.push([ctr, a, b, c, sb, [217, 54, 62], sh], [ctr, a, c, d, sb, [217, 54, 62], sh]);
+      }); }
+    tris.sort((p, q) => q[0] - p[0]);
+    g.lineJoin = "round"; g.lineWidth = .6;
+    for (const [, i0, i1, i2, sc, base, sh] of tris) {
+      const col = `rgb(${(base[0]*sh)|0},${(base[1]*sh)|0},${(base[2]*sh)|0})`;
+      g.fillStyle = col; g.strokeStyle = col;
+      g.beginPath(); g.moveTo(sc[3*i0], sc[3*i0+1]); g.lineTo(sc[3*i1], sc[3*i1+1]); g.lineTo(sc[3*i2], sc[3*i2+1]); g.closePath(); g.fill(); g.stroke();
+    }
+  };
+  // cánh tay (xương) từ danh sách điểm: 6 khớp + điểm giữa 2 ngón; cánh tay chính vẽ thêm lưới thật bên dưới
   const pts = f => [...f.arm, f.ee];
   const drawArm = (f, lw, al, col, main) => {
     const A = pts(f);
+    if (main) drawMesh(f);
     for (let k = 0; k < A.length - 1; k++) {
       const nm = S.arm_bodies[k], hit = main && f.ct.includes(nm), tb = main && f.tb.includes(nm), bw = main && touchBowl(f, nm);
-      const radius = main && S.capsule_radii[nm];
-      const mid = A[k].map((v, axis) => (v + A[k+1][axis]) / 2);
-      const width = radius ? 2 * radius * Math.min(w, h) * 1.45 / Math.max(.001, P(mid)[2]) : lw;
       g.save();
       g.lineCap = "round";
       const color = hit ? K.bad : tb ? K.warn : bw ? BOWLC : (col || K.arm);
-      if (radius) line(A[k], A[k+1], color, width, .13);
-      line(A[k], A[k+1], color, main ? 2.5 : lw, al);
+      line(A[k], A[k+1], color, main ? 1.6 : lw, main ? .6 : al);
       g.restore();
       if (hit || tb || bw) { const m = [0,1,2].map(a => (A[k][a] + A[k+1][a]) / 2); txt(m, nm + (hit ? " CHẠM HỘP" : tb ? " chạm bàn" : " chạm BÁT"), hit ? K.bad : tb ? K.warn : BOWLC, 11, "left"); }
     }
     if (main) {
-      gripperEdges(f, (p, q, body) => line(p, q, f.ct.includes(body) ? K.bad : f.tb.includes(body) ? K.warn : touchBowl(f, body) ? BOWLC : K.ink, 1.25));
       for (let k = 1; k <= 5; k++) {
         const q = P(A[k]); g.fillStyle = K.card; g.strokeStyle = K.ink; g.lineWidth = 1.3; g.beginPath(); g.arc(q[0], q[1], 8, 0, 7); g.fill(); g.stroke();
         g.fillStyle = K.ink; g.font = "bold 10px system-ui,sans-serif"; g.textAlign = "center"; g.fillText(k, q[0], q[1] + 3.5);
@@ -699,12 +753,6 @@ function draw3d(fr, fs) {
     if (OPT.path) { g.strokeStyle = K.future; g.lineWidth = 2; g.setLineDash([5, 3]); g.beginPath(); fs.slice(i, e + 1).forEach((f, k) => { const p = P(f.ee); k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }); g.stroke(); g.setLineDash([]); }
     idx.slice().reverse().forEach(k => { const t = Math.abs(k - i) / Math.max(1, Math.abs(e - i)); drawArm(fs[k], 4, .4 - .22*t, K.future); });
   }
-
-  // hộp hiện tại: 6 mặt, vẽ mặt xa trước
-  const V = boxV(fr.box, bq(fr), S.box_half);
-  const FACES = [[0,1,3,2],[4,5,7,6],[0,1,5,4],[2,3,7,6],[0,2,6,4],[1,3,7,5]];
-  FACES.map(f => ({ f, z: f.reduce((s, k) => s + P(V[k])[2], 0) / 4 })).sort((a, c) => c.z - a.z)
-    .forEach(({ f }, k) => poly(f.map(j => V[j]), K.box, "#00000066", 1, k > 3 ? 1 : .88));
 
   // cánh tay hiện tại (trên cùng), tay, hình chiếu xuống bàn và đích
   drawArm(fr, 7, .95, K.arm, true);

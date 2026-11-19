@@ -27,7 +27,66 @@ from . import config
 from .env import SO101PickPlaceEnv
 
 # Các khớp nối của cánh tay, theo thứ tự từ đế tới cổ tay (để vẽ "xương" cánh tay)
-ARM_BODIES = ["base_link", "shoulder_link", "upper_arm_link", "forearm_link", "wrist_flex_link", "wrist_roll_link"]
+ARM_BODIES = ["base", "shoulder", "upper_arm", "lower_arm", "wrist", "gripper"]
+JAW_BODY = "moving_jaw_so101_v1"          # hàm kẹp di động (khớp "gripper"); hàm cố định thuộc body "gripper"
+MESH_CELL = 0.005                         # ô lưới (m) khi gộp đỉnh để giảm số tam giác; nhỏ hơn = chi tiết hơn, file lớn hơn
+
+
+def _quat_to_mat(q):
+    w, x, y, z = q
+    return np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+                     [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
+                     [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)]])
+
+
+def decimate(verts, faces, cell):
+    """Giảm số tam giác bằng cách gộp các đỉnh cùng một ô lưới (vertex clustering). Trả (đỉnh, mặt) đã gọn."""
+    key = np.floor(verts / cell).astype(np.int64)
+    _, first, inv = np.unique(key, axis=0, return_index=True, return_inverse=True)
+    inv = inv.reshape(-1)
+    newv = np.zeros((len(first), 3))
+    np.add.at(newv, inv, verts)
+    newv /= np.bincount(inv, minlength=len(first))[:, None]
+    f = inv[faces]
+    f = f[(f[:, 0] != f[:, 1]) & (f[:, 1] != f[:, 2]) & (f[:, 0] != f[:, 2])]
+    f = np.unique(np.sort(f, axis=1), axis=0) if len(f) else f
+    return newv, f
+
+
+def arm_model_export(env):
+    """Cánh tay THẬT để HTML tự vẽ: cây khung (vị trí/hướng cục bộ + trục khớp) và lưới tam giác đã giản lược của từng
+    body, toạ độ trong khung body. Mỗi khung hình chỉ cần góc khớp (jq, fo) rồi HTML tự tính động học thuận.
+    """
+    m = env.model
+    names = ARM_BODIES + [JAW_BODY]
+    kin, meshes = [], {}
+    for n in names:
+        b = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, n)
+        par = int(m.body_parentid[b])
+        jid = int(m.body_jntadr[b]) if m.body_jntnum[b] else -1
+        kin.append({
+            "name": n,
+            "parent": mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_BODY, par) if par > 0 else None,
+            "pos": [round(float(x), 6) for x in m.body_pos[b]],
+            "quat": [round(float(x), 6) for x in m.body_quat[b]],
+            "joint": mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_JOINT, jid) if jid >= 0 else None,
+        })
+        V, T = [], []
+        for g in range(m.ngeom):
+            if m.geom_bodyid[g] != b or m.geom_type[g] != mujoco.mjtGeom.mjGEOM_MESH or m.geom_group[g] != 2:
+                continue
+            mid = m.geom_dataid[g]
+            va, vn = m.mesh_vertadr[mid], m.mesh_vertnum[mid]
+            fa, fn = m.mesh_faceadr[mid], m.mesh_facenum[mid]
+            v = m.mesh_vert[va:va + vn].astype(float)
+            v = v @ _quat_to_mat(m.geom_quat[g]).T + m.geom_pos[g]       # khung body
+            nv, nf = decimate(v, m.mesh_face[fa:fa + fn], MESH_CELL)
+            T.append(nf + sum(len(x) for x in V))
+            V.append(nv)
+        if V:
+            meshes[n] = {"v": [round(float(x), 4) for x in np.concatenate(V).ravel()],
+                         "f": np.concatenate(T).ravel().astype(int).tolist()}
+    return kin, meshes
 
 
 def parse_seeds(text):
@@ -74,9 +133,6 @@ class Recorder:
         self.target = None
         self.threshold = None
         self.arm_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, n) for n in ARM_BODIES]
-        self.finger_ids = [
-            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, n) for n in ("left_finger", "right_finger")
-        ]
         self.skip_bodies = {
             mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "table"),
             mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "world"),
@@ -148,7 +204,7 @@ class Recorder:
         return deg, round(float(np.linalg.norm(shadow - self.target)), 4)
 
     def finger_open(self):
-        adr = self.model.jnt_qposadr[self.env._finger_left_jnt]
+        adr = self.model.jnt_qposadr[self.env._gripper_jnt]
         return round(float(self.data.qpos[adr]), 4)
 
     def frame(self, step, ph, phn, ps, info, action_grip):
@@ -165,15 +221,13 @@ class Recorder:
             "bq": [round(float(x), 4) for x in self.data.xquat[self.env._box_body]],   # hướng của hộp (quaternion w,x,y,z): để vẽ hộp bị nghiêng/lật
             "tg": r3(self.target) if self.target is not None else None,   # đích của phase
             "th": self.threshold if self.target is not None else None,    # ngưỡng để sang phase kế
-            "fo": self.finger_open(),                    # độ mở 1 ngón kẹp (m)
+            "fo": self.finger_open(),                    # góc hàm kẹp di động (rad): lớn = mở
             "gr": bool(self.env._grasped),               # hộp đang dính vào tay
             "ag": round(float(action_grip), 2),          # lệnh kẹp: +1 mở, -1 đóng
             "hd": round(float(info["box_to_bowl_dist"]), 3),   # khoảng cách ngang hộp-bát
             "ok": bool(info["success"]),
             "bs": round(float(info["box_speed"]), 3),    # tốc độ hộp (m/s): chỉ tính thành công khi hộp đã nằm yên
             "arm": [r3(self.data.xpos[i]) for i in self.arm_ids],
-            "wq": [round(float(x), 6) for x in self.data.xquat[self.arm_ids[-1]]],
-            "fg": [r3(self.data.xpos[i]) for i in self.finger_ids],
             "ct": self.box_contacts(),
             "bc": self.bowl_contacts(),                  # khúc tay / ngón đang chạm bát
         }
@@ -271,28 +325,16 @@ def main():
         "settled_speed": config.SETTLED_SPEED,       # hộp phải chậm hơn mức này (m/s) mới tính là nằm yên
         "real_grasp": bool(real_grasp),
         "box_half": config.BOX_HALF,
-        "close_threshold": env._gripper_close_threshold,
+        "close_threshold": env._gripper_close_threshold,   # góc hàm kẹp (rad) dưới mức này = coi là đã khép
         "grasp_threshold": env._grasp_threshold,
         "max_steps": config.MAX_EPISODE_STEPS,
         "joints": config.JOINT_NAMES[:5],
-        "gripper": [
-            {"origin": origin, "offset": r3(env.model.geom_pos[g]), "half": r3(env.model.geom_size[g]),
-             "body": mujoco.mj_id2name(env.model, mujoco.mjtObj.mjOBJ_BODY, env.model.geom_bodyid[g])}
-            for origin, name in [(-1, "gripper_mount"), (0, "left_finger_slider"), (0, "left_finger_pad"),
-                                 (1, "right_finger_slider"), (1, "right_finger_pad")]
-            for g in [env.model.geom(name).id]
-        ],
         # Hình học THẬT của bát (đọc từ model): đáy hình trụ + 8 tấm tường hình hộp. Toạ độ tâm tính theo thế giới.
         "bowl_geoms": bowl_geom_list(env),
-        "capsule_radii": {
-            ARM_BODIES[k]: float(env.model.geom_size[g, 0])
-            for k, body in enumerate(rec.arm_ids)
-            for g in range(env.model.ngeom)
-            if env.model.geom_bodyid[g] == body and env.model.geom_type[g] == mujoco.mjtGeom.mjGEOM_CAPSULE
-        },
         "arm_bodies": ARM_BODIES,            # đoạn k nằm giữa khớp k và khớp k+1 (xem JS: đánh số khớp 1-5)
         "policy": args.policy,
     }
+    scene["kin"], scene["arm_mesh"] = arm_model_export(env)     # cánh tay THẬT: cây khung + lưới tam giác để HTML tự vẽ
     # Vùng với tới của cánh tay (do joint_lab tính và lưu); nếu chưa có thì bỏ qua và nhắc cách tạo
     reach_path = os.path.join(here, "docs", "reach_envelope.json")
     if os.path.exists(reach_path):
