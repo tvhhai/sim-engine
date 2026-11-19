@@ -4,7 +4,7 @@ A MuJoCo-based simulation engine for learning robotic manipulation policies. Bui
 
 Simulate a SO-101 robot arm performing pick-and-place tasks. Record demonstrations, implement your own policy (ACT, Diffusion, SmolVLA, or anything custom), train it, and evaluate -- all from a single UI.
 
-![Main Menu](docs/main_menu.png)
+![Main Menu](docs/image/main_menu.png)
 
 ---
 
@@ -50,7 +50,7 @@ python -m sim_engine
 
 That's it. The UI will open.
 
-![Scene Overview](docs/scene_overview.png)
+![Scene Overview](docs/image/scene_overview.png)
 
 ### 3. First run (5 minutes)
 
@@ -122,7 +122,7 @@ Launch with `python -m sim_engine` (or `python -m sim_engine app`).
 
 ### Record Screen
 
-![Record Screen](docs/record_screen.png)
+![Record Screen](docs/image/record_screen.png)
 
 - Automatically runs the scripted policy for 10 episodes
 - Each episode is saved as an HDF5 file in `datasets/sim_demos/`
@@ -131,7 +131,7 @@ Launch with `python -m sim_engine` (or `python -m sim_engine app`).
 
 ### Policies Screen
 
-![Policies Screen](docs/policies_screen.png)
+![Policies Screen](docs/image/policies_screen.png)
 
 - Lists all policies and their status (implemented / skeleton)
 - Press a policy's key to open it in your code editor (VS Code or default)
@@ -140,7 +140,7 @@ Launch with `python -m sim_engine` (or `python -m sim_engine app`).
 
 ### Train Screen
 
-![Training](docs/training_screen.png)
+![Training](docs/image/training_screen.png)
 
 - Lists all implemented policies
 - Select one to train (100 epochs, MSE loss on actions)
@@ -150,7 +150,7 @@ Launch with `python -m sim_engine` (or `python -m sim_engine app`).
 
 ### Evaluate Screen
 
-![Evaluate Screen](docs/evaluate_screen.png)
+![Evaluate Screen](docs/image/evaluate_screen.png)
 
 - Lists scripted baseline, random baseline, and all trained policies
 - Select one to watch it run for 10 episodes
@@ -175,7 +175,7 @@ The robot needs to:
 
 | Approaching | Grasping | Transporting | Placing |
 |:-----------:|:--------:|:------------:|:-------:|
-| ![](docs/approaching.png) | ![](docs/grasping.png) | ![](docs/transporting.png) | ![](docs/placing.png) |
+| ![](docs/image/approaching.png) | ![](docs/image/grasping.png) | ![](docs/image/transporting.png) | ![](docs/image/placing.png) |
 
 ### Step 2: Record demonstrations
 
