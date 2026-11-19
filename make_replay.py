@@ -52,6 +52,25 @@ def decimate(verts, faces, cell):
     return newv, f
 
 
+def cameras_export(env):
+    """Các camera có sẵn trong model (webcam, arm_cam): vị trí, hướng, fovy; camera gắn vào body thì lưu tư thế cục bộ."""
+    m, d = env.model, env.data
+    mujoco.mj_forward(m, d)
+    out = {}
+    for c in range(m.ncam):
+        name = mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_CAMERA, c)
+        b = int(m.cam_bodyid[c])
+        if b == 0:     # gắn vào thế giới: lấy tư thế world
+            pos, R = d.cam_xpos[c], d.cam_xmat[c].reshape(3, 3)
+            body = None
+        else:          # gắn vào một body: tư thế cục bộ, HTML tự cộng động học thuận
+            pos, R = m.cam_pos[c], _quat_to_mat(m.cam_quat[c])
+            body = mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_BODY, b)
+        out[name] = {"body": body, "pos": [round(float(x), 5) for x in pos],
+                     "R": [[round(float(x), 5) for x in row] for row in R], "fovy": float(m.cam_fovy[c])}
+    return out
+
+
 def arm_model_export(env):
     """Cánh tay THẬT để HTML tự vẽ: cây khung (vị trí/hướng cục bộ + trục khớp) và lưới tam giác đã giản lược của từng
     body, toạ độ trong khung body. Mỗi khung hình chỉ cần góc khớp (jq, fo) rồi HTML tự tính động học thuận.
@@ -326,7 +345,8 @@ def main():
         "arm_bodies": ARM_BODIES,            # đoạn k nằm giữa khớp k và khớp k+1 (xem JS: đánh số khớp 1-5)
         "policy": args.policy,
     }
-    scene["kin"], scene["arm_mesh"] = arm_model_export(env)     # cánh tay THẬT: cây khung + lưới tam giác để HTML tự vẽ
+    scene["kin"], scene["arm_mesh"] = arm_model_export(env)
+    scene["cams"] = cameras_export(env)           # camera trong model, để HTML dựng lại góc nhìn của chúng     # cánh tay THẬT: cây khung + lưới tam giác để HTML tự vẽ
     # Vùng với tới của cánh tay (do joint_lab tính và lưu); nếu chưa có thì bỏ qua và nhắc cách tạo
     reach_path = os.path.join(here, "docs", "reach_envelope.json")
     if os.path.exists(reach_path):
