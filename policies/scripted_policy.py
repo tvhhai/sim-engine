@@ -8,6 +8,8 @@ IK chạy trên một bản sao dữ liệu MuJoCo ("shadow copy") nên không l
 Đầu ra là action đã chuẩn hóa về [-1, 1] để đưa vào env.step().
 """
 
+import math
+
 import numpy as np
 import mujoco
 
@@ -53,13 +55,24 @@ class ScriptedPolicy(BasePolicy):
     # Ở các phase gần bát, ép (mềm) tay kẹp chúc xuống thẳng đứng: má kẹp mở theo phương thẳng đứng thì không
     # quét ngang vào thành bát, và có thể thả sát tâm bát. "Mềm" nghĩa là cộng vào bài toán IK với trọng số nhỏ
     # chứ không bắt buộc: khớp có giới hạn gập nên nhiều vị trí không thể thẳng đứng hoàn toàn.
-    TOOL_DOWN_PHASES = (6, 7, 8, 9)
-    TOOL_DOWN_WEIGHT = 0.05   # trọng số hướng so với vị trí. 0.03 kém hơn (vẫn chạm bát), >= 0.1 làm đầu tay không tới đích.
+    TOOL_DOWN_PHASES = (2, 3, 4, 5, 6, 7, 8, 9)   # từ lúc hạ xuống hộp tới lúc thả (phase 0, 1 đi ở độ cao cao, tay không thẳng đứng được)
+    TOOL_DOWN_WEIGHT = 0.02   # trọng số hướng so với vị trí. 0.03 kém hơn (vẫn chạm bát), >= 0.1 làm đầu tay không tới đích.
     PLACE_Z = 0.50            # độ cao đầu tay lúc thả (miệng bát ở z 0.46). Đo trên 100 seed:
                               #   bát cố định:  0.48 -> 199/200, 0.50 -> 198/200 (gần như bằng nhau)
                               #   bát ngẫu nhiên ±3 cm: 0.48 -> 96/100 (chạm bát 41 ván), 0.50 -> 100/100 (chạm bát 0)
                               #   bát ngẫu nhiên ±5 cm: 0.48 -> 87/100, 0.50 -> 97/100
                               # nên chọn 0.50: ngón còn cao hơn miệng bát, ít vướng khi bát lệch khỏi chỗ gốc.
+    # Kẹp THẬT với SO-101: hàm cố định nhọn như mũi kim, hàm di động xoay quanh bản lề nên hai hàm tạo hình chữ V.
+    # Đo trên model: mặt hàm cố định ở sát điểm ee (≈ +0.1 cm dọc trục kẹp), mặt hàm di động ở +1.5 cm khi góc 0 rad
+    # và rộng ra ~0.65 cm mỗi 0.1 rad, nên hộp 3 cm nằm giữa hai hàm khi hàm mở ~0.25 rad. Vì vậy:
+    #   - điểm ee phải lệch khỏi tâm hộp GRASP_SIDE_OFFSET theo trục kẹp (về phía hàm cố định), không đặt ngay trên hộp
+    #     (đặt ngay trên hộp thì mũi hàm cố định đè lên mặt hộp);
+    #   - ee hạ xuống GRASP_Z (ngang tâm hộp) để hai hàm ôm ở phần giữa thân hộp;
+    #   - wrist_roll xoay để trục kẹp song song với một cặp mặt hộp (nếu không hai hàm kẹp vào GÓC hộp).
+    GRASP_Z = 0.43
+    GRASP_SIDE_OFFSET = 0.016
+    CARRY_Z = 0.51            # độ cao đầu tay khi mang: tay kẹp thẳng đứng được ở độ cao này, miệng bát z 0.46 nên hộp (đáy ~0.49) vẫn cao hơn
+    LIFT_STEP_LIMIT = 0.01    # phase 5-7: mỗi bước, lệnh khớp (thang -1..1) đổi tối đa chừng này, để hộp không bị giật
     PLACE_ARRIVE_THRESHOLD = 0.04   # phase 7: kẹp thẳng đứng làm tay thiếu 2-4 cm tới đích, nên nới ngưỡng "tới nơi"
     # Lệnh mở kẹp lúc thả (action > 0.5 thì env coi là thả). 0.55 mở mỗi ngón ~33 mm, hai má hở ~67 mm: lớn hơn
     # đường chéo hộp (42 mm) để hộp rơi xéo vẫn lọt, nhưng nhỏ hơn mở hết (82 mm, rộng hơn lòng bát 84 mm).
@@ -81,6 +94,7 @@ class ScriptedPolicy(BasePolicy):
         ]
         self._dof_ids = [self.model.jnt_dofadr[jid] for jid in self._joint_ids]
         self._wrist_roll_body = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "gripper")
+        self._gripper_joint = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "gripper")
         self._qpos_adr = np.array([self.model.jnt_qposadr[jid] for jid in self._joint_ids])  # vị trí của 5 khớp trong data.qpos
         self._ee_site = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, "ee_site")
 
@@ -92,6 +106,8 @@ class ScriptedPolicy(BasePolicy):
         self._gripper_target = 1.0      # lệnh kẹp: +1 mở, -1 đóng
         self._current_joint_targets = None   # góc khớp đích mà IK vừa tính (radian)
         self._smoothed_action = None    # action đã làm mượt (để chuyển động không giật)
+        self._roll_hold = None          # góc wrist_roll đã chọn để trục kẹp song song mặt hộp (None = chưa chọn)
+        self._clamp_dir = np.array([1.0, 0.0, 0.0])   # hướng trục kẹp trong mặt phẳng ngang (từ hàm cố định sang hàm di động)
         self._home_ee = None            # vị trí đầu tay lúc ở home
         # Hệ số làm mượt theo từng phase: càng lớn thì bám đích càng nhanh
         self._phase_smoothing = {
@@ -109,9 +125,9 @@ class ScriptedPolicy(BasePolicy):
         }
 
         # Các độ cao (z trong hệ tọa độ world, đơn vị mét)
-        self._safe_z = 0.62        # độ cao an toàn để di chuyển ngang, tránh va vật thể
+        self._safe_z = self.CARRY_Z   # độ cao an toàn để di chuyển ngang (đi tới hộp và mang hộp), tránh va vật thể
         self._pre_grasp_z = 0.46   # độ cao chuẩn bị kẹp
-        self._grasp_z = 0.455      # độ cao kẹp: đầu tay ngang tâm hộp, má kẹp ôm hai bên hộp (0.434 làm ngón đè bàn nên khép chậm)
+        self._grasp_z = self.GRASP_Z   # độ cao kẹp: đầu tay ngang tâm hộp
         self._place_z = self.PLACE_Z   # độ cao thả hộp vào bát
 
     def reset(self):
@@ -124,6 +140,7 @@ class ScriptedPolicy(BasePolicy):
         self._current_joint_targets = None
         self._smoothed_action = None
         self._home_ee = self.env.get_ee_pos()
+        self._roll_hold = None
 
     def select_action(self, observation: dict) -> np.ndarray:
         """Hàm chính: nhìn tình hình hiện tại, trả về action (7 số trong [-1, 1]).
@@ -227,6 +244,37 @@ class ScriptedPolicy(BasePolicy):
         self._phase += 1
         self._phase_step = 0
 
+    def _clamp_direction(self, q5):
+        """Hướng trục kẹp (ngang, vector đơn vị) ở tư thế khớp q5: hàm di động xoay quanh trục bản lề a, trục kẹp = a × xuống."""
+        ik = self._ik_data
+        ik.qpos[:] = self.data.qpos[:]
+        ik.qpos[self._qpos_adr] = q5
+        mujoco.mj_kinematics(self.model, ik)
+        c = np.cross(ik.xaxis[self._gripper_joint], [0.0, 0.0, -1.0])
+        return c / (np.linalg.norm(c) + 1e-9)
+
+    def _choose_roll(self, q5):
+        """Chọn góc wrist_roll để trục kẹp song song với một cặp mặt hộp (gần góc hiện tại nhất, để khỏi xoay vòng).
+
+        Quét roll trong giới hạn khớp; với mỗi góc tính hướng trục kẹp rồi lệch của nó so với mặt hộp (mod 90 độ).
+        """
+        qb = self.data.xquat[self.env._box_body]
+        box_yaw = math.atan2(2 * (qb[0] * qb[3] + qb[1] * qb[2]), 1 - 2 * (qb[2] ** 2 + qb[3] ** 2))
+        lo, hi = self.model.jnt_range[self._joint_ids[4]]
+        cur = self._roll_hold if self._roll_hold is not None else self.data.qpos[self._qpos_adr[4]]
+        best = None
+        for r in np.radians(np.arange(-157.0, 163.1, 2.0)):
+            if not lo <= r <= hi:
+                continue
+            q = np.array(q5, dtype=float)
+            q[4] = r
+            c = self._clamp_direction(q)
+            dev = (math.atan2(c[1], c[0]) - box_yaw + math.pi / 4) % (math.pi / 2) - math.pi / 4
+            score = abs(dev) + 0.02 * abs(r - cur)
+            if best is None or score < best[0]:
+                best = (score, r, c)
+        return best[1], best[2]
+
     def _solve_ik(self, target_pos, roll=None):
         """IK: tìm góc khớp (radian) của 5 khớp để đầu tay (ee_site) tới target_pos.
 
@@ -242,6 +290,8 @@ class ScriptedPolicy(BasePolicy):
 
         Số hạng sau nằm trong không gian null của J nên (xấp xỉ bậc nhất) không làm đầu tay lệch khỏi đích.
         """
+        if roll is None:
+            roll = self._roll_hold
         ik = self._ik_data
         # Bắt đầu từ tư thế thật hiện tại, nên lời giải "gần" tư thế đang có
         ik.qpos[:] = self.data.qpos[:]
@@ -314,7 +364,16 @@ class ScriptedPolicy(BasePolicy):
         Lưu ý: khoảng cách đo bằng `ee_pos` của đầu bước, nên "tới nơi" được nhận ra chậm 1 bước
         (không đáng kể).
         """
-        self._current_joint_targets = self._solve_ik(target_pos)
+        if self._phase in (2, 3):
+            # Hạ xuống hộp: chọn roll theo hướng mặt hộp rồi dịch điểm ee sang bên (xem GRASP_SIDE_OFFSET)
+            roll, clamp = self._choose_roll(self._solve_ik(target_pos))
+            self._roll_hold, self._clamp_dir = roll, clamp
+            target_pos = np.array(target_pos, dtype=float) - self.GRASP_SIDE_OFFSET * np.append(clamp[:2], 0.0)
+            self._current_joint_targets = self._solve_ik(target_pos, roll)
+        else:
+            self._current_joint_targets = self._solve_ik(target_pos)
+            if self._roll_hold is not None:                        # đã chọn roll thì giữ nguyên tới hết ván
+                self._current_joint_targets[4] = self._roll_hold
 
         self._phase_step += 1
         arrived = np.linalg.norm(ee_pos - target_pos) < threshold
@@ -340,7 +399,10 @@ class ScriptedPolicy(BasePolicy):
         if self._smoothed_action is None:
             self._smoothed_action = raw.copy()
         else:
-            self._smoothed_action[:5] += alpha * (raw[:5] - self._smoothed_action[:5])
+            step = alpha * (raw[:5] - self._smoothed_action[:5])
+            if 5 <= self._phase <= 7:                         # mang hộp: không đổi lệnh khớp quá nhanh
+                step = np.clip(step, -self.LIFT_STEP_LIMIT, self.LIFT_STEP_LIMIT)
+            self._smoothed_action[:5] += step
             self._smoothed_action[5:] = raw[5:]  # gripper đổi ngay lập tức, không làm mượt
         return self._smoothed_action.copy()
 
