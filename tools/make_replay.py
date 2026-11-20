@@ -89,7 +89,7 @@ def arm_model_export(env):
             "quat": [round(float(x), 6) for x in m.body_quat[b]],
             "joint": mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_JOINT, jid) if jid >= 0 else None,
         })
-        V, T = [], []
+        V, T, colors = [], [], []
         for g in range(m.ngeom):
             if m.geom_bodyid[g] != b or m.geom_type[g] != mujoco.mjtGeom.mjGEOM_MESH or m.geom_group[g] != 2:
                 continue
@@ -98,12 +98,16 @@ def arm_model_export(env):
             fa, fn = m.mesh_faceadr[mid], m.mesh_facenum[mid]
             v = m.mesh_vert[va:va + vn].astype(float)
             v = v @ _quat_to_mat(m.geom_quat[g]).T + m.geom_pos[g]       # khung body
-            nv, nf = decimate(v, m.mesh_face[fa:fa + fn], MESH_CELL)
+            small = (mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_MESH, mid) or "").startswith("wrist_cam")   # vật nhỏ (camera): giữ chi tiết
+            nv, nf = decimate(v, m.mesh_face[fa:fa + fn], 0.0015 if small else MESH_CELL)
             T.append(nf + sum(len(x) for x in V))
+            material_id = m.geom_matid[g]
+            rgba = m.mat_rgba[material_id] if material_id >= 0 else m.geom_rgba[g]
+            colors.append([len(nf), [round(float(channel) * 255) for channel in rgba[:3]]])
             V.append(nv)
         if V:
             meshes[n] = {"v": [round(float(x), 4) for x in np.concatenate(V).ravel()],
-                         "f": np.concatenate(T).ravel().astype(int).tolist()}
+                         "f": np.concatenate(T).ravel().astype(int).tolist(), "colors": colors}
     return kin, meshes
 
 
