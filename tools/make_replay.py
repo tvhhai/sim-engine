@@ -76,7 +76,7 @@ def arm_model_export(env):
     body, toạ độ trong khung body. Mỗi khung hình chỉ cần góc khớp (jq, fo) rồi HTML tự tính động học thuận.
     """
     m = env.model
-    names = ARM_BODIES + [JAW_BODY]
+    names = ARM_BODIES + [JAW_BODY, "wrist_cam_arm"]      # + giá đỡ camera gập được (con của gripper)
     kin, meshes = [], {}
     for n in names:
         b = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, n)
@@ -367,6 +367,7 @@ def main():
         "box_half": config.BOX_HALF,
         "table": list(config.TABLE_HALF),            # nửa kích thước bàn (x, y)
         "max_steps": config.MAX_EPISODE_STEPS,
+        "cam_tilt_deg": config.WRIST_CAM_TILT_DEG,     # độ gập hiện tại của giá đỡ camera cổ tay (để thanh "Gập cam" trong replay tính độ gập thêm)
         "step_dt": config.PHYSICS_SUBSTEPS * config.PHYSICS_TIMESTEP,   # giây mô phỏng thật mỗi bước điều khiển (để phát replay đúng thời gian thực)
         "joints": config.JOINT_NAMES[:5],
         # Hình học THẬT của bát (đọc từ model): đáy hình trụ + 8 tấm tường hình hộp. Toạ độ tâm tính theo thế giới.

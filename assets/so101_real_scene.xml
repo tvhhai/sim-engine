@@ -44,7 +44,8 @@
     <mesh file="motor_holder_so101_base_v1.stl"/>
     <mesh file="wrist_roll_follower_so101_v1.stl"/>
     <mesh file="moving_jaw_so101_v1.stl"/>
-    <mesh name="wrist_cam_bracket" file="wrist_cam_bracket.stl"/>
+    <mesh name="wrist_cam_post" file="wrist_cam_post.stl"/>
+    <mesh name="wrist_cam_link" file="wrist_cam_link.stl"/>
     <mesh name="wrist_cam_module" file="wrist_cam_module.stl"/>
     <!-- hai hàm kẹp chia thành các khối nhỏ để bao lồi va chạm bám sát hình thật (xem tools/split_jaw_mesh.py) -->
     <mesh name="fixed_jaw_part00" file="split/fixed_jaw_part00.stl"/>
@@ -165,11 +166,16 @@
                 <geom name="fixed_jaw_col_09" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="fixed_jaw_part09"/>
                 <geom name="fixed_jaw_col_10" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="fixed_jaw_part10"/>
                 <geom name="fixed_jaw_col_11" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="fixed_jaw_part11"/>
-                <!-- Wrist camera pose from asdqwe9501/Soarm101_Mujoco sim/so101.xml. -->
-                <camera name="arm_cam" pos="-0.00296 0.05436 -0.05310" quat="0.954498 -0.284308 -0.085070 0.029438" fovy="78"/>
-                <!-- Giá đỡ + module camera cổ tay (chỉ để nhìn, không va chạm). Hình dựng bởi tools/make_camera_mount.py theo đúng tư thế arm_cam. -->
-                <geom type="mesh" class="visual" mesh="wrist_cam_bracket" material="wrist_cam_bracket_material"/>
-                <geom type="mesh" class="visual" mesh="wrist_cam_module" material="wrist_cam_module_material"/>
+                <!-- Camera cổ tay: trụ cố định + hai khớp chữ C ôm chốt (xem tools/make_camera_mount.py). Body wrist_cam_arm gập quanh trục x
+                     của chốt; độ gập = euler đầu tiên (rad), env áp config.WRIST_CAM_TILT_DEG lúc khởi tạo. Tư thế camera ở độ gập 0 lấy từ
+                     asdqwe9501/Soarm101_Mujoco sim/so101.xml. -->
+                <geom type="mesh" class="visual" mesh="wrist_cam_post" material="wrist_cam_bracket_material"/>
+                <body name="wrist_cam_arm" pos="-0.00300 0.04600 -0.03400" euler="0 0 0">
+                  <inertial pos="0 0 0" mass="0.001" diaginertia="1e-8 1e-8 1e-8"/>
+                  <camera name="arm_cam" pos="0.00004 0.00836 -0.01910" quat="0.954498 -0.284308 -0.085070 0.029438" fovy="78"/>
+                  <geom type="mesh" class="visual" mesh="wrist_cam_link" material="wrist_cam_bracket_material"/>
+                  <geom type="mesh" class="visual" mesh="wrist_cam_module" material="wrist_cam_module_material"/>
+                </body>
                 <site group="3" name="ee_site" pos="-0.0079 -0.000218121 -0.0981274" quat="0.707107 -0 0.707107 -2.37788e-17"/>
                 <body name="moving_jaw_so101_v1" pos="0.0202 0.0188 -0.0234" quat="0.707107 0.707107 -1.85362e-08 1.85362e-08">
                   <joint axis="0 0 1" name="gripper" type="hinge" range="-0.17453297762778586 1.7453291995659765" class="sts3215"/>

@@ -49,6 +49,11 @@ class SO101PickPlaceEnv(gym.Env):
 
         # Nạp mô hình MuJoCo từ file XML (robot, bàn, hộp, bát, camera)
         self.model = mujoco.MjModel.from_xml_path(config.SCENE_XML)
+        # Độ gập của giá đỡ camera cổ tay (body wrist_cam_arm gập quanh trục x của chốt): đặt theo config
+        cam_arm = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "wrist_cam_arm")
+        if cam_arm >= 0:
+            half = np.radians(config.WRIST_CAM_TILT_DEG) / 2
+            self.model.body_quat[cam_arm] = [np.cos(half), np.sin(half), 0.0, 0.0]
         self.model.opt.timestep = config.PHYSICS_TIMESTEP
         # model = "bản thiết kế" (cố định); data = "trạng thái hiện tại" (thay đổi mỗi bước)
         self.data = mujoco.MjData(self.model)
@@ -132,6 +137,7 @@ class SO101PickPlaceEnv(gym.Env):
         super().reset(seed=seed)
 
         # Khôi phục trạng thái ban đầu
+        mujoco.mj_resetData(self.model, self.data)      # xoá cả bộ nhớ ấm của solver (qacc_warmstart...): ván sau không phụ thuộc ván trước
         self.data.qpos[:] = self._init_qpos
         self.data.qvel[:] = self._init_qvel
         self.data.ctrl[:] = 0.0
