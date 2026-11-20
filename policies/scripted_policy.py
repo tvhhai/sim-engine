@@ -55,6 +55,9 @@ class ScriptedPolicy(BasePolicy):
     # Ở các phase gần bát, ép (mềm) tay kẹp chúc xuống thẳng đứng: má kẹp mở theo phương thẳng đứng thì không
     # quét ngang vào thành bát, và có thể thả sát tâm bát. "Mềm" nghĩa là cộng vào bài toán IK với trọng số nhỏ
     # chứ không bắt buộc: khớp có giới hạn gập nên nhiều vị trí không thể thẳng đứng hoàn toàn.
+    # True: phase 0 đi thẳng tới phía trên hộp rồi sang phase 2 (bỏ điểm dừng giữa của phase 0 và phase 1).
+    # Đã đo 200 seed: nhanh hơn ~9 bước/ván (163 -> 154) nhưng thành công 195/200 (hỏng 15, 93, 150, 180, 187), nên để TẮT.
+    MERGE_LIFT_AND_MOVE = False
     TOOL_DOWN_PHASES = (2, 3, 4, 5, 6, 7, 8, 9)   # từ lúc hạ xuống hộp tới lúc thả (phase 0, 1 đi ở độ cao cao, tay không thẳng đứng được)
     TOOL_DOWN_WEIGHT = 0.02   # trọng số hướng so với vị trí. 0.03 kém hơn (vẫn chạm bát), >= 0.1 làm đầu tay không tới đích.
     PLACE_Z = 0.475   # độ cao đầu tay lúc thả (miệng bát ở z 0.46). Đo trên 100 seed:
@@ -173,9 +176,15 @@ class ScriptedPolicy(BasePolicy):
 
         if self._phase == 0:
             # Nhấc thẳng lên từ home (giữ nguyên x, y; chỉ đổi z)
-            target = np.array([self._home_ee[0], self._home_ee[1], self._safe_z])
             self._gripper_target = 1.0
-            self._move_toward(target, ee_pos, threshold=0.02)
+            if self.MERGE_LIFT_AND_MOVE:
+                target = np.array([box_pos[0], box_pos[1], self._safe_z])
+                self._move_toward(target, ee_pos, threshold=0.025)
+                if self._phase == 1:                       # đã tới phía trên hộp: bỏ qua phase 1
+                    self._phase = 2
+            else:
+                target = np.array([self._home_ee[0], self._home_ee[1], self._safe_z])
+                self._move_toward(target, ee_pos, threshold=0.02)
 
         elif self._phase == 1:
             # Di chuyển ngang tới phía trên hộp ở độ cao an toàn
