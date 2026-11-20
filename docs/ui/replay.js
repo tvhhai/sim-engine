@@ -420,7 +420,7 @@ function drawSide(fr, fs) {
     }
   }
   s += `<text x="${sideX(bm[0])}" y="${sideY(b[2]+S.bowl_height)-5}" text-anchor="middle" fill="var(--bowl)" font-size="10">bát</text>`;
-  const rim = b[2] + S.bowl_height, lim = rim - S.box_half;
+  const rim = b[2] + S.bowl_height, lim = rim - (S.bowl_z_margin ?? S.box_half);
   s += `<line x1="${sideX(bm[0]-0.09)}" y1="${sideY(rim)}" x2="${sideX(bm[0]+0.09)}" y2="${sideY(rim)}" stroke="var(--bowl)" stroke-width="1.2"/>`;
   s += `<text x="${sideX(bm[0]+0.095)}" y="${sideY(rim) + 3}" font-size="9" fill="var(--bowl)">miệng bát ${rim.toFixed(2)}</text>`;
   s += `<line x1="${sideX(bm[0]-0.09)}" y1="${sideY(lim)}" x2="${sideX(bm[0]+0.09)}" y2="${sideY(lim)}" stroke="var(--bowl)" stroke-width="1" stroke-dasharray="2 3"/>`;
@@ -513,7 +513,7 @@ const PUSH = EPS.map(e => {
 function yn(ok, text) { return `<div class="chk"><span class="${ok ? "y" : "n"}">${ok ? "✓" : "✗"}</span><span>${text}</span></div>`; }
 function drawChk(fr) {
   const dEB = dist(fr.ee, fr.box), z = fr.box[2], bz = S.bowl[2];
-  const rim = bz + S.bowl_height, zMax = rim - S.box_half;
+  const rim = bz + S.bowl_height, zMax = rim - (S.bowl_z_margin ?? S.box_half);
   const zOk = z > bz && z < zMax, hOk = fr.hd < S.bowl_radius, relOk = !fr.gr, setOk = (fr.bs ?? 0) < S.settled_speed;
   const clsy = ok => ok ? "hlg" : "hlb";
   const fixedOn = (fr.ct || []).includes("gripper"), movOn = (fr.ct || []).includes("moving_jaw_so101_v1");
@@ -524,7 +524,7 @@ function drawChk(fr) {
   h += `<div class="chk"><span>→</span><span>Hai hàm cùng chạm hộp (đang kẹp): <span class="big ${clsy(fr.gr)}">${fr.gr ? "CÓ" : "KHÔNG"}</span></span></div>`;
   h += `<div class="note" style="margin:8px 0 3px"><b>Hộp vào bát</b> khi đủ cả 4 điều (env._get_info):</div>`;
   h += yn(hOk, `tâm hộp cách tâm bát <span class="${clsy(hOk)}">${cm(fr.hd)} cm</span> (cần &lt; ${(S.bowl_radius*100).toFixed(1)} = lòng bát)`);
-  h += yn(zOk, `tâm hộp cao <span class="${clsy(zOk)}">${z.toFixed(3)}</span> trong (${bz.toFixed(2)}, ${zMax.toFixed(3)}): đỉnh hộp thấp hơn miệng bát ${rim.toFixed(2)}`);
+  h += yn(zOk, `tâm hộp cao <span class="${clsy(zOk)}">${z.toFixed(3)}</span> trong (${bz.toFixed(2)}, ${zMax.toFixed(3)}): tâm hộp thấp hơn miệng bát ${rim.toFixed(2)} ít nhất ${((S.bowl_z_margin ?? S.box_half) * 1000).toFixed(0)} mm (hộp nghiêng tựa thành vẫn tính là trong bát)`);
   h += yn(relOk, `đã thả hộp (không còn bị kẹp giữ)`);
   h += yn(setOk, `hộp nằm yên: <span class="${clsy(setOk)}">${(fr.bs ?? 0).toFixed(3)}</span> m/s (cần &lt; ${S.settled_speed})`);
   h += `<div class="chk"><span>→</span><span>Thành công: <span class="big ${clsy(fr.ok)}">${fr.ok ? "CÓ" : "chưa"}</span></span></div>`;
