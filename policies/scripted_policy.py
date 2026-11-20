@@ -53,6 +53,9 @@ class ScriptedPolicy(BasePolicy):
     IK_RESPECT_LIMITS = False  # True: mọi lời giải IK bị kẹp trong giới hạn khớp. Đo 200 seed: bật cho mọi phase làm 3-4 seed mất kẹp (91, 149...)
     PHASE5_ADAPTIVE_Z = False  # True: phase 5 cũng hạ độ cao nhấc xuống mức tới được. Đo 200 seed: 192-194/200 (xấu hơn), nên TẮT
     PHASE1_ADAPTIVE_Z = True   # phase 1 hạ độ cao đích xuống mức tới được
+    BOWL_HIT_STEPS = 3         # tay chạm bát liền chừng này bước khi hạ xuống kẹp (phase 2-4) thì nhấc lên, xoay wrist_roll rồi kẹp lại
+    ROLL_FLIP_OFFSETS = (math.pi, -math.pi, math.pi / 2, -math.pi / 2)   # thứ tự thử khi đổi roll (rad so với roll đang giữ)
+    MAX_ROLL_FLIPS = 3         # số lần đổi roll tối đa trong một ván (thử lần lượt: xoay 180°, +90°, -90° so với roll đang giữ)
     STALL_STEPS = 20           # đầu tay không tiến gần đích thêm STALL_PROGRESS trong chừng này bước liền thì coi là KẸT, sang phase kế
     STALL_PROGRESS = 0.001     # mét
 
@@ -136,6 +139,11 @@ class ScriptedPolicy(BasePolicy):
         self.last_exit = None           # lý do thoát phase ở bước này: arrived / stall / timeout (None = vẫn trong phase)
         self._p1_z = None               # độ cao đích của phase 1 (hạ thấp nếu độ cao an toàn nằm ngoài tầm với)
         self._lift_z = None             # độ cao đích của phase 5 (nhấc hộp), cũng hạ thấp khi hộp sát đế
+        self._bowl_hits = 0             # số bước liền tay đang chạm bát khi hạ xuống kẹp
+        self._roll_flips = 0            # đã đổi roll bao nhiêu lần vì tay chạm bát
+        self._roll_pref = None          # roll ưu tiên sau khi đổi (None = chọn roll gần roll hiện tại nhất)
+        self._arm_body_ids = {mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, n) for n in
+                              ("shoulder", "upper_arm", "lower_arm", "wrist", "gripper", "moving_jaw_so101_v1", "wrist_cam_arm")}
         self._place_retries = 0
         self._place_retract_target = None
         self._place_hold_action = None
@@ -185,6 +193,7 @@ class ScriptedPolicy(BasePolicy):
         self._settle_wait = 0
         self._still = 0
         self._best_dist, self._stall, self.last_exit, self._p1_z, self._lift_z = 0.0, 0, None, None, None
+        self._bowl_hits, self._roll_flips, self._roll_pref = 0, 0, None
 
     def select_action(self, observation: dict) -> np.ndarray:
         """Hàm chính: nhìn tình hình hiện tại, trả về action (7 số trong [-1, 1]).
@@ -211,6 +220,12 @@ class ScriptedPolicy(BasePolicy):
                 self._phase, self._phase_step = 1, 0
                 self._roll_hold = None
                 self._last_finger = None
+
+        if self._phase in (2, 3, 4) and not self.env._grasped:
+            # chỉ đếm khi tay chạm bát MÀ hàm kẹp chưa chạm hộp: hàm đã chạm hộp nghĩa là việc kẹp đang tiến triển, đừng cắt ngang
+            self._bowl_hits = self._bowl_hits + 1 if (self._arm_touches_bowl() and not self._jaw_touches_box()) else 0
+            if self._bowl_hits >= self.BOWL_HIT_STEPS and self._roll_flips < self.MAX_ROLL_FLIPS:
+                self._flip_roll()
 
         match self._phase:
             case 0:
@@ -411,6 +426,42 @@ class ScriptedPolicy(BasePolicy):
             z -= 0.01
         return best[1]
 
+    def _arm_touches_bowl(self):
+        """True nếu có khâu tay (kể cả hàm kẹp) đang chạm bát."""
+        bowl = self.env._bowl_body
+        for c in self.data.contact[:self.data.ncon]:
+            b1, b2 = self.model.geom_bodyid[c.geom1], self.model.geom_bodyid[c.geom2]
+            if (b1 == bowl and b2 in self._arm_body_ids) or (b2 == bowl and b1 in self._arm_body_ids):
+                return True
+        return False
+
+    def _jaw_touches_box(self):
+        """True nếu hàm kẹp (cố định hoặc di động) đang chạm hộp."""
+        box = self.env._box_body
+        jaws = {mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, n) for n in ("gripper", "moving_jaw_so101_v1")}
+        for c in self.data.contact[:self.data.ncon]:
+            b1, b2 = self.model.geom_bodyid[c.geom1], self.model.geom_bodyid[c.geom2]
+            if (b1 == box and b2 in jaws) or (b2 == box and b1 in jaws):
+                return True
+        return False
+
+    def _flip_roll(self):
+        """Tay chạm bát lúc hạ xuống kẹp: nhấc lên (về phase 1, đứng trên hộp), xoay wrist_roll sang một phương án khác rồi kẹp lại.
+
+        Hộp vuông nên trục kẹp song song mặt hộp đúng với 4 góc roll cách nhau 90°. Đổi sang góc khác đổi phía hàm di động
+        (đang mở rộng) quay về, để nó không quét vào thành bát. Thử lần lượt xoay 180°, +90°, -90° (bỏ phương án ngoài giới hạn khớp)."""
+        lo, hi = self.model.jnt_range[self._joint_ids[4]]
+        r0 = self._roll_hold if self._roll_hold is not None else float(self.data.qpos[self._qpos_adr[4]])
+        cands = [r0 + off for off in self.ROLL_FLIP_OFFSETS]
+        cands = [r for r in cands if lo + 0.05 <= r <= hi - 0.05]
+        if cands:
+            self._roll_pref = cands[self._roll_flips % len(cands)]
+        self._roll_flips += 1
+        self._roll_hold = None
+        self._last_finger = None
+        self._bowl_hits = 0
+        self._phase, self._phase_step = 1, 0
+
     def _advance_phase(self):
         """Chuyển sang phase kế tiếp và đặt lại bộ đếm bước của phase."""
         self._phase += 1
@@ -442,7 +493,7 @@ class ScriptedPolicy(BasePolicy):
         qb = self.data.xquat[self.env._box_body]
         box_yaw = math.atan2(2 * (qb[0] * qb[3] + qb[1] * qb[2]), 1 - 2 * (qb[2] ** 2 + qb[3] ** 2))
         lo, hi = self.model.jnt_range[self._joint_ids[4]]
-        cur = self._roll_hold if self._roll_hold is not None else self.data.qpos[self._qpos_adr[4]]
+        cur = self._roll_pref if self._roll_pref is not None else (self._roll_hold if self._roll_hold is not None else self.data.qpos[self._qpos_adr[4]])
         best = None
         for r in np.radians(np.arange(-157.0, 163.1, 2.0)):
             if not lo <= r <= hi:
