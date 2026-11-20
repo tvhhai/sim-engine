@@ -103,7 +103,7 @@ def arm_model_export(env):
             T.append(nf + sum(len(x) for x in V))
             material_id = m.geom_matid[g]
             rgba = m.mat_rgba[material_id] if material_id >= 0 else m.geom_rgba[g]
-            colors.append([len(nf), [round(float(channel) * 255) for channel in rgba[:3]]])
+            colors.append([len(nf), [round(float(channel) * 255) for channel in rgba[:3]], 1 if small else 0])   # phần tử 3 = 1: mesh camera, không đổi màu theo va chạm
             V.append(nv)
         if V:
             meshes[n] = {"v": [round(float(x), 4) for x in np.concatenate(V).ravel()],
