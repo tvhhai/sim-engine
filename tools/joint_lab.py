@@ -265,6 +265,16 @@ class Lab:
                 "tilt": round(math.degrees(math.acos(max(-1, min(1, -a[2])))), 1), "iters": used + 1}
 
     # ---------- vùng với tới ----------
+    PICK_SCAN_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "pick_scan.json")
+
+    def pick_scan(self):
+        """Các điểm đã quét gắp thật (tools/scan_pick_region.py): [[x, y, 1 nếu gắp được], ...]."""
+        try:
+            with open(self.PICK_SCAN_FILE, encoding="utf-8") as f:
+                return [[q["xy"][0], q["xy"][1], 1 if q["ok"] else 0] for q in json.load(f)["points"]]
+        except OSError:
+            return []
+
     REACH_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "reach_envelope.json")
     REACH_BANDS = [(0.455, "gắp (đầu tay z 0.455)"), (0.50, "thả (z 0.50)"), (0.62, "trên cao an toàn (z 0.62)")]
 
@@ -463,10 +473,19 @@ let GOPEN=1.2,GCLOSE=-0.1,MODEL=null;
 let LIM=[[-180,180],[-90,90],[-180,0],[-90,90],[-180,180]],busy=false,again=false,last=null,REACH=null;
 const BANDC=["#0e9aa7","#d97706","#8b8f98"];
 async function loadReach(){try{const r=await (await fetch("/reach")).json();if(r.status==="ready"){REACH=r.reach;if(last)render(last)}else{setTimeout(loadReach,3000)}}catch(e){setTimeout(loadReach,5000)}}
+let PICK=null,PSCAN=[];
+const sector=(n=48)=>{const P=PICK,pts=[];for(let q=0;q<=n;q++){const a=(P.angle_min_deg+(P.angle_max_deg-P.angle_min_deg)*q/n)*Math.PI/180;pts.push([P.pan[0]+P.r_max*Math.sin(a),P.pan[1]+P.r_max*Math.cos(a)])}
+  for(let q=n;q>=0;q--){const a=(P.angle_min_deg+(P.angle_max_deg-P.angle_min_deg)*q/n)*Math.PI/180;pts.push([P.pan[0]+P.r_min*Math.sin(a),P.pan[1]+P.r_min*Math.cos(a)])}return pts};
 const cpath=(cx,cy,r)=>`M${cx+r},${cy}a${r},${r} 0 1 0 ${-2*r},0a${r},${r} 0 1 0 ${2*r},0`;
 function reachTop(J){
-  if(!REACH||!$("showReach").checked)return "";
-  const X=x=>(x+0.45)*666.7,Y=y=>(0.30-y)*666.7,b=J.joints_xyz[1],cx=X(b[0]),cy=Y(b[1]);let s="";
+  if(!(REACH||PICK)||!$("showReach").checked)return "";
+  const X=x=>(x+0.45)*666.7,Y=y=>(0.30-y)*666.7;let s="";
+  if(PICK){   // vùng gắp được THẬT: hình quạt đo bằng quét gắp; chấm = gắp được, x đỏ = hỏng
+    s+=`<polygon points="${sector().map(([x,y])=>X(x)+","+Y(y)).join(" ")}" fill="#0e9aa7" fill-opacity=".16" stroke="#0e9aa7" stroke-width="1.6" stroke-dasharray="6 4"/>`;
+    PSCAN.forEach(([x,y,ok])=>{const a=X(x),b=Y(y);s+=ok?`<circle cx="${a}" cy="${b}" r="2.6" fill="#0e9aa7" opacity=".6"/>`:`<path d="M${a-3.4},${b-3.4}l6.8,6.8m0,-6.8l-6.8,6.8" stroke="#cf222e" stroke-width="1.8" opacity=".9"/>`});
+  }
+  if(!REACH)return s;
+  const b=J.joints_xyz[1],cx=X(b[0]),cy=Y(b[1]);
   REACH.bands.forEach((bd,i)=>{const c=BANDC[i];
     bd.free.forEach(([a,r])=>{s+=`<path d="${cpath(cx,cy,(r+REACH.r_step/2)*666.7)}${cpath(cx,cy,Math.max(0,a-REACH.r_step/2)*666.7)}" fill="${c}" fill-opacity="${i===0?.13:.05}" fill-rule="evenodd" stroke="${c}" stroke-width="1.6" stroke-opacity=".9"/>`});
     bd.vertical.forEach(([a,r])=>{s+=`<circle cx="${cx}" cy="${cy}" r="${(r+REACH.r_step/2)*666.7}" fill="none" stroke="${c}" stroke-width="1.6" stroke-dasharray="6 4"/>`+(a>0.03?`<circle cx="${cx}" cy="${cy}" r="${Math.max(0,a-REACH.r_step/2)*666.7}" fill="none" stroke="${c}" stroke-width="1.6" stroke-dasharray="6 4"/>`:"")});
@@ -477,7 +496,7 @@ function reachInfo(J){
   const b=J.joints_xyz[1],rb=Math.hypot(J.box[0]-b[0],J.box[1]-b[1]),rw=Math.hypot(J.bowl[0]-b[0],J.bowl[1]-b[1]);
   const inn=(iv,r)=>iv.some(([a,c])=>r>=a-REACH.r_step/2&&r<=c+REACH.r_step/2),fmt=iv=>iv.length?iv.map(([a,c])=>(a*100).toFixed(0)+"–"+(c*100).toFixed(0)).join(", ")+" cm":"không";
   const mark=ok=>ok?'<span class="good">✓</span>':'<span class="bad">✗</span>';
-  let h=`<div style="margin-top:8px"><b>Vùng với tới</b> <span class="muted">(bán kính từ trục khớp 1; nét liền = hướng tay tự do, nét đứt = tay kẹp gần thẳng đứng)</span></div><table><tr><th>độ cao đầu tay</th><th>tự do</th><th>thẳng đứng</th></tr>`;
+  let h=`<div style="margin-top:8px"><b>Vùng với tới (hình học IK)</b> <span class="muted">(bán kính từ trục khớp 1, KHÔNG tính giới hạn xoay khớp 1 hay va chạm; nét liền = hướng tay tự do, nét đứt = tay kẹp gần thẳng đứng). Vùng GẮP ĐƯỢC thật là hình quạt xanh có chấm quét.</span></div><table><tr><th>độ cao đầu tay</th><th>tự do</th><th>thẳng đứng</th></tr>`;
   REACH.bands.forEach((bd,i)=>{h+=`<tr><td><span style="color:${BANDC[i]}">●</span> ${bd.label}</td><td class="mono">${fmt(bd.free)}</td><td class="mono">${fmt(bd.vertical)}</td></tr>`});
   h+=`</table><div style="margin-top:4px">Hộp cách trục <span class="mono">${(rb*100).toFixed(1)} cm</span>: vùng gắp tự do ${mark(inn(REACH.bands[0].free,rb))} · thẳng đứng ${mark(inn(REACH.bands[0].vertical,rb))}</div>`;
   h+=`<div>Bát cách trục <span class="mono">${(rw*100).toFixed(1)} cm</span>: vùng thả tự do ${mark(inn(REACH.bands[1].free,rw))} · thẳng đứng ${mark(inn(REACH.bands[1].vertical,rw))} · trên cao ${mark(inn(REACH.bands[2].free,rw))}</div>`;
@@ -566,6 +585,7 @@ function draw3d(J){
   const TZ=0.42;
   poly([[-.45,-.40,TZ],[.45,-.40,TZ],[.45,.40,TZ],[-.45,.40,TZ]],K.table,K.muted,1,.6);
   for(let v=-0.4;v<=0.401;v+=0.1){line([v,-.40,TZ],[v,.40,TZ],K.muted,.5,.3);line([-.45,v,TZ],[.45,v,TZ],K.muted,.5,.3)}
+  if(PICK&&$("showReach").checked){poly(sector().map(([x,y])=>[x,y,TZ+0.001]),"#0e9aa7","#0e9aa7",1.2,.22)}
   if(REACH&&$("showReach").checked){const bb=J.joints_xyz[1],ringAt=(rad,n=72)=>Array.from({length:n},(_,k)=>[bb[0]+rad*Math.cos(2*Math.PI*k/n),bb[1]+rad*Math.sin(2*Math.PI*k/n),TZ+0.001]);
     REACH.bands.forEach((bd,i)=>{const c=BANDC[i];bd.free.forEach(([a,r])=>{poly(ringAt(r+REACH.r_step/2),null,c,1.5,.9);if(a>0.03)poly(ringAt(a-REACH.r_step/2),null,c,1.5,.9)});
       bd.vertical.forEach(([a,r])=>{g.setLineDash([6,4]);poly(ringAt(r+REACH.r_step/2),null,c,1.3,.9);g.setLineDash([])})})}
@@ -655,7 +675,7 @@ $("bPol").onclick=async()=>{
 };
 $("showReach").onchange=()=>{if(last)render(last)};
 let HOME={};
-(async()=>{const r=await (await fetch("/meta")).json();LIM=r.limits;HOME=r.home;GOPEN=r.gopen;GCLOSE=r.gclose;Object.assign(S,r.home);MODEL=await (await fetch("/model")).json();build();syncUI();go();loadReach()})();
+(async()=>{const r=await (await fetch("/meta")).json();LIM=r.limits;HOME=r.home;GOPEN=r.gopen;GCLOSE=r.gclose;Object.assign(S,r.home);PICK=r.pick_region;PSCAN=r.pick_scan||[];MODEL=await (await fetch("/model")).json();build();syncUI();go();loadReach()})();
 </script></body></html>"""
 
 
@@ -688,6 +708,8 @@ def make_handler(lab):
                                            "home": {"pan": h[0], "lift": h[1], "elbow": h[2], "wflex": h[3], "wroll": h[4],
                                                     "grip": config.GRIPPER_OPEN_RAD},
                                            "gopen": config.GRIPPER_OPEN_RAD, "gclose": config.GRIPPER_CLOSED_RAD,
+                                           "pick_region": dict(config.PICK_REGION, pan=list(config.PICK_PAN_XY)),
+                                           "pick_scan": lab.pick_scan(),
                                            "glim": [float(lab.m.jnt_range[lab.m.jnt_qposadr.tolist().index(lab.fl)][0]) if False else -10, 100]}))
                 elif u.path == "/model":
                     self._send(json.dumps({"kin": lab.kin, "mesh": lab.mesh}))
