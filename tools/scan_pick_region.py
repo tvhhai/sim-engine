@@ -118,7 +118,7 @@ def update_seeds(rows):
                 seed += 1
                 n_outside += 1
     n_unreach = 0
-    for a, r in ((-130, 0.20), (-120, 0.30), (120, 0.20), (130, 0.30)):
+    for a, r in ():                                        # vùng đỏ (chắc chắn không gắp được) không còn seed: bỏ các seed ngoài tầm
         th = math.radians(a)
         x, y = PAN[0] + r * math.sin(th), PAN[1] + r * math.cos(th)
         lines.append(f'    {seed}: ("ngoài tầm (khớp 1 không xoay tới): góc {a:+d}°, r = {r * 100:.0f} cm", ({x:.4f}, {y:.4f})),')

@@ -79,6 +79,7 @@ PICK_REGION = {                       # vùng hộp đặt được: r = khoản
 }
 PAN_LIMIT_DEG = 110.0                # giới hạn khớp 1 (pan) trong XML: +-110 độ so với hướng tay
 PAN_UNREACHABLE_MARGIN_DEG = 5.0     # hộp lệch quá PAN_LIMIT_DEG + biên này thì CHẮC CHẮN không với tới: policy về home ngay (đo: +-120 hỏng hết)
+PICK_UNREACHABLE_RADIUS = 0.44      # m: outer scan still finds successes at 0.43 m. Keep 0.44 m as the cutoff.
 BOX_BOWL_CLEARANCE = 0.10            # hộp cách tâm bát tối thiểu (m)
 BOX_SAMPLING = "sector"              # "sector": 200 seed chia đều các ô góc x bán kính trong hình quạt (phủ đủ vùng gắp); "square": ô ±BOX_RANDOM_RANGE cũ
 BOX_SECTOR_CELLS = (10, 20)          # (số khoảng góc, số vòng bán kính chia đều DIỆN TÍCH): 10 x 20 = 200 ô, mỗi seed 0-199 một ô
@@ -125,10 +126,6 @@ BOX_FIXED_SEEDS = {
     218: ("ngoài vùng nhưng gắp được: r = 40 cm, góc -40°", (-0.2571, 0.1564)),
     219: ("ngoài vùng nhưng gắp được: r = 40 cm, góc +40°", (0.2571, 0.1564)),
     220: ("ngoài vùng nhưng gắp được: r = 40 cm, góc +90°", (0.4000, -0.1500)),
-    221: ("ngoài tầm (khớp 1 không xoay tới): góc -130°, r = 20 cm", (-0.1532, -0.2786)),
-    222: ("ngoài tầm (khớp 1 không xoay tới): góc -120°, r = 30 cm", (-0.2598, -0.3000)),
-    223: ("ngoài tầm (khớp 1 không xoay tới): góc +120°, r = 20 cm", (0.1732, -0.2500)),
-    224: ("ngoài tầm (khớp 1 không xoay tới): góc +130°, r = 30 cm", (0.2298, -0.3428)),
     225: ("cặp đối xứng r = 38 cm, góc +5° (gắp được; đối xứng hỏng)", (0.0331, 0.2286)),
     226: ("cặp đối xứng r = 38 cm, góc -5° (hỏng; đối xứng gắp được)", (-0.0331, 0.2286)),
     227: ("cặp đối xứng r = 38 cm, góc +85° (hỏng; đối xứng gắp được)", (0.3786, -0.1169)),

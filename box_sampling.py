@@ -81,10 +81,10 @@ def fixed_seed_name(seed):
 
 
 def is_unreachable(xy):
-    """Hộp CHẮC CHẮN không gắp được: nằm lệch quá giới hạn khớp 1 (cộng biên), cánh tay không xoay tới.
-
-    Góc đo từ hướng tay (+y) về phía +x quanh trục khớp 1. Chỉ xét phần chắc chắn (góc pan); vùng ngoài hình quạt gắp được nhưng chưa chắc
-    không gắp được (r sát đế hoặc quá xa) để xem xét riêng, không loại ở đây."""
+    """Check the conservative stop limits in the tabletop workspace."""
     dx, dy = xy[0] - config.PICK_PAN_XY[0], xy[1] - config.PICK_PAN_XY[1]
     ang = math.degrees(math.atan2(dx, dy))
-    return abs(ang) > config.PAN_LIMIT_DEG + config.PAN_UNREACHABLE_MARGIN_DEG
+    return (
+        abs(ang) > config.PAN_LIMIT_DEG + config.PAN_UNREACHABLE_MARGIN_DEG
+        or math.hypot(dx, dy) > config.PICK_UNREACHABLE_RADIUS
+    )

@@ -421,7 +421,7 @@ def main():
         "bowl_inner": config.BOWL_INNER_RADIUS,      # lòng bát: tâm hộp phải cách tâm bát ít hơn mức này
         "settled_speed": config.SETTLED_SPEED,       # hộp phải chậm hơn mức này (m/s) mới tính là nằm yên
         "box_half": config.BOX_HALF,
-        "unreachable_region": {"pan": list(config.PICK_PAN_XY), "angle_deg": config.PAN_LIMIT_DEG + config.PAN_UNREACHABLE_MARGIN_DEG},   # vùng CHẮC CHẮN không gắp: góc > này (phía sau khớp 1)
+        "unreachable_region": {"pan": list(config.PICK_PAN_XY), "angle_deg": config.PAN_LIMIT_DEG + config.PAN_UNREACHABLE_MARGIN_DEG, "radius_m": config.PICK_UNREACHABLE_RADIUS},   # giới hạn đỏ dùng chung với policy
         "bowl_z_margin": config.BOX_IN_BOWL_MARGIN,   # tâm hộp phải thấp hơn miệng bát chừng này mới tính trong bát
         "table": list(config.TABLE_HALF),            # nửa kích thước bàn (x, y)
         "max_steps": config.MAX_EPISODE_STEPS,
@@ -438,10 +438,14 @@ def main():
     # Vùng với tới của cánh tay (do joint_lab tính và lưu); nếu chưa có thì bỏ qua và nhắc cách tạo
     # Vùng GẮP ĐƯỢC THẬT: hình quạt trong config.PICK_REGION và các điểm đã quét (tools/scan_pick_region.py -> docs/pick_scan.json)
     scene["pick_region"] = dict(config.PICK_REGION, pan=list(config.PICK_PAN_XY), bowl_clearance=config.BOX_BOWL_CLEARANCE)
-    scan_path = os.path.join(here, "docs", "pick_scan.json")
-    if os.path.exists(scan_path):
-        with open(scan_path, encoding="utf-8") as f:
-            scene["pick_scan"] = [[p["xy"][0], p["xy"][1], 1 if p["ok"] else 0] for p in json.load(f)["points"]]
+    scan_points = []
+    for filename in ("pick_scan.json", "pick_scan_inner.json", "pick_scan_outer.json"):
+        scan_path = os.path.join(here, "docs", filename)
+        if os.path.isfile(scan_path):
+            with open(scan_path, encoding="utf-8") as f:
+                scan_points.extend([[*point["xy"], int(point["ok"])] for point in json.load(f)["points"]])
+    if scan_points:
+        scene["pick_scan"] = scan_points
     reach_path = os.path.join(here, "docs", "reach_envelope.json")
     if os.path.exists(reach_path):
         with open(reach_path, encoding="utf-8") as f:

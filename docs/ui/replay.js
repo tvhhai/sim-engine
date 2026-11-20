@@ -30,7 +30,8 @@ app.innerHTML = `
     <h1 title="Mỗi lần sửa policy, chạy lại python -m sim_engine.make_replay để cập nhật file này">Replay</h1>
     <span class="seed-controls">
       <button id="sPrev" title="seed trước (phím [)">◀ seed</button>
-      <label>Lọc <select id="flt" title="lọc danh sách seed; ◀ ▶ chỉ duyệt trong danh sách đã lọc"><option value="all">tất cả</option><option value="fail">chỉ FAIL</option><option value="ok">chỉ OK</option></select></label>
+      <label>Vùng <select id="flt"><option value="all">Tất cả</option><option value="green">Gắp được</option><option value="red">Không gắp được</option><option value="mixed">Hỗn hợp</option></select></label>
+      <label id="mixResultLabel">Kết quả <select id="mixResult"><option value="all">Tất cả</option><option value="ok">Thành công</option><option value="fail">Thất bại</option></select></label>
       <label>Seed <select id="sel" title="chọn nhanh seed ở xa; dùng nút ◀ ▶ để duyệt lần lượt"></select></label>
       <button id="sNext" title="seed sau (phím ])">seed ▶</button>
       <span class="sub" id="epPos"></span>
@@ -51,7 +52,8 @@ app.innerHTML = `
     </div>
   </header>
   <main class="main">
-    <div class="card c-small"><h2>Nhìn từ trên · XY từ khớp 1 (m)<span style="float:right;font-weight:400"><label><input type="checkbox" id="showReach" checked> vùng gắp được</label> <label style="color:#a855f7"><input type="checkbox" id="showUnreach" checked> vùng KHÔNG gắp được</label></span></h2><svg id="top" role="img" aria-label="Hình chiếu XY cố định" viewBox="0 0 520 340"></svg>
+    <div class="card c-small"><h2>Nhìn từ trên · XY từ khớp 1 (m)<label class="pick-zone-toggle"><input type="checkbox" id="showReach" checked> Vùng gắp</label></h2>
+      <div class="pick-zone-legend"><span class="zone-green">Gắp được</span><span class="zone-red">Không gắp · về home</span><span class="zone-mixed">Hỗn hợp · cần tối ưu</span></div><svg id="top" role="img" aria-label="Hình chiếu XY cố định" viewBox="0 0 520 340"></svg>
       <h2>Nhìn từ cạnh · Y ngang, Z cao (m)</h2><svg id="side" role="img" aria-label="Hình chiếu YZ cố định" viewBox="0 18 520 202"></svg></div>
     <div class="card c-3d"><h2><span>3D (VIEW CHÍNH)</span><span class="hint">kéo = xoay · lăn = zoom · nhấp đúp = về mặc định</span></h2>
       <div class="cv"><canvas id="c3"></canvas>
@@ -102,11 +104,18 @@ app.innerHTML = `
 `;
 const $ = id => document.getElementById(id);
 const epLabel = (e, k) => { const ex = (e.tags || []).filter(x => !/^(THÀNH CÔNG|HỎNG)/.test(x)); return `<option value="${k}">${k + 1}. ${e.name || "seed " + e.seed} — ${e.success ? "OK" : "FAIL"}${ex.length ? " · " + ex.join(" · ") : ""}</option>`; };
-const passFlt = e => { const f = $("flt").value; return f === "all" || (f === "fail" ? !e.success : e.success); };
+const passFlt = e => {
+  const zone = $("flt").value, result = $("mixResult").value;
+  return (zone === "all" || e._pickZone === zone) && (result === "all" || e.success === (result === "ok"));
+};
 function buildSel() {      // dropdown chia nhóm, chỉ giữ ván hợp bộ lọc (OK/FAIL); duyệt lần lượt bằng nút ◀ ▶ cũng chỉ trong danh sách này
   const groups = [...new Set(EPS.map(e => e.group || ""))];
   const opts = g => EPS.map((e, k) => (e.group || "") === g && passFlt(e) ? epLabel(e, k) : "").join("");
   $("sel").innerHTML = groups.map(g => { const o = opts(g); return !o ? "" : g ? `<optgroup label="${g}">${o}</optgroup>` : o; }).join("");
+  const count = $("sel").options.length;
+  if (!count) $("sel").add(new Option("Không có seed phù hợp", ""));
+  $("sel").disabled = !count;
+  $("sPrev").disabled = $("sNext").disabled = count < 2;
 }
 const visible = () => EPS.map((e, k) => k).filter(k => passFlt(EPS[k]));
 function stepEp(d) {
@@ -336,40 +345,66 @@ const boxPoly = (fr, fx, fy, a, b) => hull2(boxV(fr.box, bq(fr), S.box_half).map
 /* ---------- vùng vươn tới của cánh tay (hình vành khuyên quanh trục khớp 1) ---------- */
 const BANDC = ["#0e9aa7", "#d97706", "#8b8f98"];
 const reachOn = () => (S.pick_region || S.reach) && $("showReach") && $("showReach").checked;
-// Vùng gắp được THẬT = hình quạt quanh trục khớp 1 (S.pick_region): r từ r_min tới r_max, góc đo từ hướng tay (+y) về phía +x.
-const sectorPts = (n = 48) => { const P0 = S.pick_region, pan = P0.pan, pts = [];
-  for (let q = 0; q <= n; q++) { const a = (P0.angle_min_deg + (P0.angle_max_deg - P0.angle_min_deg) * q / n) * Math.PI / 180; pts.push([pan[0] + P0.r_max * Math.sin(a), pan[1] + P0.r_max * Math.cos(a)]); }
-  for (let q = n; q >= 0; q--) { const a = (P0.angle_min_deg + (P0.angle_max_deg - P0.angle_min_deg) * q / n) * Math.PI / 180; pts.push([pan[0] + P0.r_min * Math.sin(a), pan[1] + P0.r_min * Math.cos(a)]); }
-  return pts; };
-const cpath = (cx, cy, r) => `M${cx + r},${cy}a${r},${r} 0 1 0 ${-2*r},0a${r},${r} 0 1 0 ${2*r},0`;
-const unreachOn = () => S.unreachable_region && $("showUnreach") && $("showUnreach").checked;
-// Vùng CHẮC CHẮN không gắp được: phía sau khớp 1, góc đo từ hướng tay (+y) lớn hơn S.unreachable_region.angle_deg ở cả hai phía.
-// Mỗi phía là một hình quạt từ góc A tới 180 độ, bán kính đủ lớn (sẽ bị cắt theo mặt bàn).
-function unreachPolys(R = 0.9, n = 36) {
-  const U = S.unreachable_region, pan = U.pan, polys = [];
-  for (const sg of [1, -1]) {
-    const pts = [[pan[0], pan[1]]];
-    for (let q = 0; q <= n; q++) { const a = (U.angle_deg + (180 - U.angle_deg) * q / n) * sg * Math.PI / 180; pts.push([pan[0] + R * Math.sin(a), pan[1] + R * Math.cos(a)]); }
-    polys.push(pts);
-  }
-  return polys;
+const PICK_COLORS = { green:"#16834f", red:"#d14049", mixed:"#8b55bd" };
+const PICK_LABELS = { green:"Vùng gắp được", red:"Vùng không gắp được", mixed:"Vùng hỗn hợp" };
+const scanPts = S.pick_scan || [];          // điểm quét [x, y, ok]; điểm nằm trong vùng đỏ không vẽ (đã chắc chắn không gắp được)
+
+function pickZone(x, y) {
+  const region = S.pick_region, stop = S.unreachable_region;
+  if (!region) return "mixed";
+  const dx = x - region.pan[0], dy = y - region.pan[1];
+  const r = Math.hypot(dx, dy), angle = Math.atan2(dx, dy) * 180 / Math.PI;
+  if (stop && (r > stop.radius_m || Math.abs(angle) > stop.angle_deg)) return "red";
+  if (r < region.r_min - 1e-9 || r > region.r_max + 1e-9 ||
+      angle < region.angle_min_deg - 1e-9 || angle > region.angle_max_deg + 1e-9) return "mixed";
+  return "green";
 }
-function unreachTop() {
-  if (!unreachOn()) return "";
-  const tx0 = topX(-S.table[0]), tx1 = topX(S.table[0]), ty0 = topY(S.table[1]), ty1 = topY(-S.table[1]);
-  let s = `<clipPath id="tblclip2"><rect x="${tx0}" y="${ty0}" width="${tx1 - tx0}" height="${ty1 - ty0}"/></clipPath><g clip-path="url(#tblclip2)">`;
-  unreachPolys().forEach(pts => { s += `<polygon points="${pts.map(([x, y]) => topX(x) + "," + topY(y)).join(" ")}" fill="#a855f7" fill-opacity=".17" stroke="#a855f7" stroke-opacity=".7" stroke-width="1.2" stroke-dasharray="5 3"/>`; });
-  return s + `</g><text x="${topX(-0.30)}" y="${topY(-0.27)}" font-size="10" fill="#a855f7" font-weight="700">không gắp được</text><text x="${topX(0.19)}" y="${topY(-0.27)}" font-size="10" fill="#a855f7" font-weight="700">không gắp được</text>`;
+EPS.forEach(e => { e._pickZone = pickZone(...e.frames[0].box); });
+
+function sectorPts(pan, inner, outer, start, end, n = 72) {
+  const point = (r, q) => {
+    const angle = (start + (end-start)*q/n)*Math.PI/180;
+    return [pan[0]+r*Math.sin(angle), pan[1]+r*Math.cos(angle)];
+  };
+  const points = Array.from({length:n+1}, (_, q) => point(outer,q));
+  if (!inner) return points.concat([pan]);
+  return points.concat(Array.from({length:n+1}, (_, q) => point(inner,n-q)));
+}
+
+const cpath = (cx, cy, r) => `M${cx + r},${cy}a${r},${r} 0 1 0 ${-2*r},0a${r},${r} 0 1 0 ${2*r},0`;
+function pickZonePolygons() {
+  const R = S.pick_region, U = S.unreachable_region;
+  if (!R || !U) return [];
+  const {pan, r_min:lo, r_max:hi, angle_min_deg:left, angle_max_deg:right} = R;
+  const edge = U.angle_deg, limit = U.radius_m;
+  const sector = (zone, ...args) => [zone, sectorPts(pan, ...args)];
+  return [
+    sector("green",lo,hi,left,right),
+    sector("mixed",0,lo,-edge,edge), sector("mixed",hi,limit,-edge,edge),
+    sector("mixed",lo,hi,-edge,left), sector("mixed",lo,hi,right,edge),
+    sector("red",0,limit,edge,360-edge), sector("red",limit,1.2,-180,180,144),
+  ];
+}
+const zonePolygons = pickZonePolygons();
+function pickZoneOverlayTop(k) {
+  const [tx,ty] = S.table;
+  const rect = `x="${topX(-tx)}" y="${topY(ty)}" width="${2*tx*k}" height="${2*ty*k}"`;
+  let s = `<defs><clipPath id="zoneTable"><rect ${rect}/></clipPath>`;
+  s += `</defs><g clip-path="url(#zoneTable)">`;
+  for (const [zone, points] of zonePolygons) {
+    s += `<polygon points="${points.map(([x,y])=>[topX(x),topY(y)].join(",")).join(" ")}" fill="${PICK_COLORS[zone]}" fill-opacity="${zone === "mixed" ? .13 : .12}" stroke="${PICK_COLORS[zone]}" stroke-opacity=".55" stroke-width=".8"/>`;
+  }
+  return s + "</g>";
 }
 function reachTop(k) {                         // vùng gắp được: hình quạt đo thật + các điểm quét (chấm = gắp được, dấu x = hỏng)
   if (!reachOn()) return "";
   if (S.pick_region) {
-    const poly = sectorPts().map(([x, y]) => topX(x) + "," + topY(y)).join(" ");
-    let s = `<polygon points="${poly}" fill="#0e9aa7" fill-opacity=".17" stroke="#0e9aa7" stroke-opacity=".7" stroke-width="1.2" stroke-dasharray="5 3"/>`;
-    (S.pick_scan || []).forEach(([x, y, ok]) => {
+    let s = pickZoneOverlayTop(k);
+    scanPts.forEach(([x, y, ok]) => {                  // chấm xanh = quét gắp được, ✕ đỏ = quét hỏng; không vẽ trong vùng đỏ
+      if (pickZone(x, y) === "red") return;
       const X = topX(x), Y = topY(y);
-      s += ok ? `<circle cx="${X}" cy="${Y}" r="1.8" fill="#0e9aa7" opacity=".55"/>`
-              : `<path d="M${X - 2.35},${Y - 2.35}l4.7,4.7m0,-4.7l-4.7,4.7" stroke="var(--bad)" stroke-width="1.35" stroke-linecap="round" opacity=".95"/>`;
+      s += ok ? `<circle cx="${X}" cy="${Y}" r="1.6" fill="${PICK_COLORS.green}" opacity=".75"/>`
+              : `<path d="M${X - 2.2},${Y - 2.2}l4.4,4.4m0,-4.4l-4.4,4.4" stroke="${PICK_COLORS.red}" stroke-width="1.3" stroke-linecap="round"/>`;
     });
     return s;
   }
@@ -388,7 +423,7 @@ function reachInfo(fs) {
     const sc = S.pick_scan || [], inQ = sc.filter(([x, y]) => { const r = Math.hypot(x - P0.pan[0], y - P0.pan[1]), a = Math.atan2(x - P0.pan[0], y - P0.pan[1]) * 180 / Math.PI;
       return r >= P0.r_min - 1e-6 && r <= P0.r_max + 1e-6 && a >= P0.angle_min_deg - 1e-6 && a <= P0.angle_max_deg + 1e-6; });
     const failQ = inQ.filter(q => !q[2]).length;
-    return `<div class="note" style="margin:8px 0 3px"><b>Vùng gắp được</b> (hình quạt đo thật quanh trục khớp 1; chấm = quét gắp được, <span style="color:var(--bad)">✕ đỏ</span> = quét hỏng)</div>` +
+    return `<div class="note" style="margin:8px 0 3px"><b>Vùng khảo sát</b> (hình quạt quanh trục khớp 1; chấm = quét gắp được, <span style="color:var(--bad)">✕ đỏ</span> = quét hỏng)</div>` +
       `<div class="chk"><span></span><span>quét <b>${sc.length}</b> điểm; trong quạt <b>${inQ.length}</b>, <span style="color:var(--bad)"><b>${failQ}</b> hỏng</span> (do kẹp sát ngưỡng, xem seed lân cận)</span></div>` +
       `<div class="chk"><span>${mk(inR)}</span><span>hộp cách trục <b>${cm(rb)}</b> cm; vùng ${(P0.r_min * 100).toFixed(0)}–${(P0.r_max * 100).toFixed(0)} cm</span></div>` +
       `<div class="chk"><span>${mk(inA)}</span><span>hộp lệch <b>${ang.toFixed(0)}°</b> so với hướng tay; vùng ${P0.angle_min_deg}° … +${P0.angle_max_deg}°</span></div>`;
@@ -411,7 +446,6 @@ function drawTop(fr, fs) {
   let s = `<rect x="${topX(-S.table[0])}" y="${topY(S.table[1])}" width="${topX(S.table[0])-topX(-S.table[0])}" height="${topY(-S.table[1])-topY(S.table[1])}" fill="var(--table)" opacity=".5"/>`;
   s += axes(TOP, topX, topY, TOP.y0, TOP.y1, 0.05, 0.1, "x (m)", "y (m)", pan[0], pan[1]);
   s += reachTop(k);
-  s += unreachTop();
   s += `<text x="${topX(b[0])}" y="${topY(b[1]) - 0.06*k}" font-size="10" text-anchor="middle" fill="var(--bowl)" font-weight="700">bát</text>`;
   S.bowl_geoms.forEach(g => {                           // bát thật: đáy tròn + 24 tấm tường hẹp xếp thành vòng tròn (gần đúng hình trụ rỗng)
     if (g.type === "cylinder") s += `<circle cx="${topX(g.pos[0])}" cy="${topY(g.pos[1])}" r="${g.size[0]*k}" fill="var(--bowl)" opacity=".2"/>`;
@@ -480,6 +514,7 @@ function drawSide(fr, fs) {
 
 /* ---------- thông tin và cảnh báo ---------- */
 function reasonOf(fr) {
+  if (fr.ex === "unreachable") return "hộp ra vùng đỏ, về home";
   if (fr.phn === fr.ph) return "";
   if (fr.tg) return dist(fr.ee, fr.tg) < fr.th ? "tới đích" : "TIMEOUT 200 bước (không tới được đích)";
   return "hết thời gian chờ";
@@ -682,18 +717,18 @@ function draw3d(fr, fs) {
     EDGES3.forEach(([p, q]) => line(V[p], V[q], K.bowl, 1, .7));
   });
   poly(ring(b, S.bowl_radius, bz1), null, K.bowl, 1, .8, [4, 3]);
-  if (unreachOn()) {                                    // vùng KHÔNG gắp được (tím), cắt theo mặt bàn
-    const path3 = pts => pts.forEach((v, n) => { const q = P(v); n ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); });
-    g.save(); g.beginPath(); path3([[-TX, -TY, TZ], [TX, -TY, TZ], [TX, TY, TZ], [-TX, TY, TZ]]); g.closePath(); g.clip();
-    unreachPolys(0.9, 24).forEach(pts => { g.beginPath(); path3(pts.map(([x, y]) => [x, y, TZ + 0.001])); g.closePath();
-      g.fillStyle = "#a855f7"; g.globalAlpha = .2; g.fill(); g.globalAlpha = .75; g.strokeStyle = "#a855f7"; g.lineWidth = 1.2; g.setLineDash([5, 3]); g.stroke(); g.setLineDash([]); g.globalAlpha = 1; });
-    g.restore();
-  }
-  if (reachOn()) {                                      // vùng gắp được: hình quạt màu nhạt trên mặt bàn
+  if (reachOn()) {
     const path = pts => pts.forEach((v, n) => { const q = P(v); n ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); });
     if (S.pick_region) {
-      g.beginPath(); path(sectorPts().map(([x, y]) => [x, y, TZ + 0.001])); g.closePath();
-      g.fillStyle = "#0e9aa7"; g.globalAlpha = .17; g.fill(); g.globalAlpha = .7; g.strokeStyle = "#0e9aa7"; g.lineWidth = 1.2; g.setLineDash([5, 3]); g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
+      g.save();
+      g.beginPath(); path([[-TX,-TY,TZ],[TX,-TY,TZ],[TX,TY,TZ],[-TX,TY,TZ]]); g.closePath(); g.clip();
+      for (const [zone, points] of zonePolygons) {
+        poly(points.map(([x,y]) => [x,y,TZ+.001]),PICK_COLORS[zone],null,0,.17);
+      }
+      for (const [x,y,ok] of scanPts) {
+        if (pickZone(x,y) !== "red") poly(ring([x,y],ok ? .003 : .005,TZ+.002,10),ok ? PICK_COLORS.green : PICK_COLORS.red,null,0,ok ? .6 : .9);
+      }
+      g.restore();
     } else {
       const R = S.reach, bc = [R.base[0], R.base[1], TZ + 0.001], hh = R.r_step / 2;
       g.save();
@@ -910,18 +945,33 @@ function loadEp(k) {
   if (EPS[ep].bowl) { S.bowl = EPS[ep].bowl; S.bowl_geoms = EPS[ep].bowl_geoms; }   // mỗi ván có thể có bát ở chỗ khác
   const e = EPS[k];
   $("rng").max = e.frames.length - 1;
-  $("res").innerHTML = `<span class="badge ${e.success ? "ok" : "bad"}">${e.success ? "THÀNH CÔNG" : "THẤT BẠI"}</span> <strong>${e.steps} bước tổng</strong>`;
+  $("res").innerHTML = `<span class="badge ${e.success ? "ok" : "bad"}">${e.success ? "THÀNH CÔNG" : "THẤT BẠI"}</span> <strong>${e.steps} bước tổng</strong> <span class="zone-${e._pickZone}">${PICK_LABELS[e._pickZone]}</span>`;
   $("sel").value = k; $("epPos").textContent = `${k + 1}/${EPS.length}` + ($("flt").value !== "all" ? ` (lọc ${visible().indexOf(k) + 1}/${visible().length})` : "");
   $("tags").innerHTML = e.tags ? e.tags.filter(x => x !== "THÀNH CÔNG").map(x => `<span class="badge ${/HỎNG|timeout/.test(x) ? "bad" : "warn"}" style="margin-right:3px">${x}</span>`).join("") : "";
   buildLog(e.frames); buildTimeline(e.frames); render();
 }
 $("showReach").onchange = () => render();
-$("showUnreach").onchange = () => render();
 $("sel").onchange = () => loadEp(+$("sel").value);
 $("sPrev").onclick = () => stepEp(-1);
 $("sNext").onclick = () => stepEp(1);
-$("flt").onchange = () => { buildSel(); $("sel").value = ep; if ($("sel").selectedIndex < 0 || +$("sel").value !== ep) { const v = visible(); if (v.length) loadEp(v[0]); } };
-buildSel();
+function applySeedFilters() {
+  buildSel();
+  const matches = visible();
+  if (!matches.length) {
+    stop();
+    $("epPos").textContent = "0 seed · vẫn xem ván hiện tại";
+    return;
+  }
+  if (!matches.includes(ep)) {
+    loadEp(matches[0]);
+  } else {
+    $("sel").value = ep;
+    $("epPos").textContent = `${matches.indexOf(ep)+1}/${matches.length} seed`;
+  }
+}
+$("flt").onchange = applySeedFilters;
+$("mixResult").onchange = applySeedFilters;
+applySeedFilters();
 $("rng").oninput = () => go(+$("rng").value);
 $("bFirst").onclick = () => go(0);
 $("bPrev").onclick = () => go(i - 1);
