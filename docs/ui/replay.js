@@ -61,24 +61,24 @@ app.innerHTML = `
         <div id="cameraFeeds"><canvas id="camA" width="320" height="240" aria-label="Ảnh dựng lại từ camera cổ tay"></canvas></div>
       </div>
       <div class="ctl">
-        <div class="transport mb-1.5 flex flex-wrap items-center gap-x-3 gap-y-2">
-          <button id="bFirst" class="min-h-0 inline-flex h-7 w-7 items-center justify-center rounded-full border-0 bg-transparent !p-0 shrink-0 text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_10%,transparent)] hover:text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ink)]" title="Về bước đầu (Home)" aria-label="Về bước đầu"><svg class="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 19V5"/><path d="m13 6-6 6 6 6"/><path d="M7 12h14"/></svg></button>
-          <div class="inline-flex items-center gap-0.5 rounded-full bg-[color-mix(in_srgb,var(--ink)_7%,transparent)] px-1 py-0.5" role="group" aria-label="Điều khiển phát">
-            <button id="bPP" class="min-h-0 inline-flex h-7 w-7 items-center justify-center rounded-full border-0 bg-transparent !p-0 shrink-0 text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_10%,transparent)] hover:text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ink)]" title="Phase trước (↑)" aria-label="Phase trước"><svg class="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" x2="5" y1="19" y2="5"/></svg></button>
-            <button id="bPrev" class="min-h-0 inline-flex h-7 w-7 items-center justify-center rounded-full border-0 bg-transparent !p-0 shrink-0 text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_10%,transparent)] hover:text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ink)]" title="Lùi 1 bước (←)" aria-label="Lùi 1 bước"><svg class="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
-            <button id="bPlay" class="min-h-0 inline-flex h-8 w-8 items-center justify-center rounded-full border-0 bg-[var(--ink)] !p-0 shrink-0 text-[var(--card)] transition-opacity hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ink)]" title="Phát / dừng (Space)" aria-label="Phát"><svg class="h-[14px] w-[14px]" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg></button>
-            <button id="bNext" class="min-h-0 inline-flex h-7 w-7 items-center justify-center rounded-full border-0 bg-transparent !p-0 shrink-0 text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_10%,transparent)] hover:text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ink)]" title="Tiến 1 bước (→)" aria-label="Tiến 1 bước"><svg class="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
-            <button id="bPhase" class="min-h-0 inline-flex h-7 w-7 items-center justify-center rounded-full border-0 bg-transparent !p-0 shrink-0 text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_10%,transparent)] hover:text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ink)]" title="Phase kế (↓)" aria-label="Phase kế"><svg class="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/></svg></button>
+        <div class="transport">
+          <div class="transport-buttons" role="group" aria-label="Điều khiển phát">
+            <button id="bFirst" class="media-button" title="Về bước đầu (Home)" aria-label="Về bước đầu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5v14m13-13-8 6 8 6z"/></svg></button>
+            <button id="bPP" class="media-button" title="Phase trước (↑)" aria-label="Phase trước"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 6-6 6 6 6m7-12-6 6 6 6"/></svg></button>
+            <button id="bPrev" class="media-button" title="Lùi 1 bước (←)" aria-label="Lùi 1 bước"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+            <button id="bPlay" class="media-button media-play" title="Phát / tạm dừng (Space)" aria-label="Phát"><svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="7 5 19 12 7 19"/></svg></button>
+            <button id="bNext" class="media-button" title="Tiến 1 bước (→)" aria-label="Tiến 1 bước"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+            <button id="bPhase" class="media-button" title="Phase kế (↓)" aria-label="Phase kế"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 6 6 6-6 6m7-12 6 6-6 6"/></svg></button>
           </div>
-          <label class="ml-auto inline-flex items-center gap-2 text-xs text-[var(--muted)]">Tốc độ <select id="spd" class="min-h-0 h-7 rounded-full border border-solid border-[var(--line)] bg-transparent !px-2.5 !py-0 text-xs text-[var(--ink)]"><option value="0.5">chậm 0,5×</option><option value="1" selected>bình thường (thực tế)</option><option value="1.5">nhanh 1,5×</option><option value="2">nhanh 2×</option></select></label>
+          <label class="media-speed">Tốc độ <select id="spd"><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="1.5">1,5×</option><option value="2">2×</option></select></label>
         </div>
         <div class="scrub">
           <label for="rng">Thời gian <output id="stepCount" for="rng"></output></label>
           <input type="range" id="rng" min="0" value="0">
         </div>
         <div class="phasebar" id="phasebar">
-          <div class="tlcur" id="tlc"><button type="button" id="tlh" role="slider" aria-label="Kéo để chọn bước trong các phase" aria-valuemin="0" aria-valuenow="0"><svg viewBox="0 0 18 24" aria-hidden="true"><path class="pin" d="M3 1h12a2 2 0 0 1 1.5 3.3L10.4 17a2 2 0 0 1-2.8 0L1.5 4.3A2 2 0 0 1 3 1z"/><rect class="needle" x="8.2" y="16" width="1.6" height="8"/></svg></button></div>
           <div class="tl" id="tl"></div>
+          <span id="tlh" class="phase-playhead" aria-hidden="true"></span>
         </div>
         <details class="opts"><summary>Hiển thị quá khứ / tương lai</summary>
           <div class="row">
@@ -552,8 +552,13 @@ function tlPos(i) {                                    // vị trí vạch con t
   const el = $("tl").children[k], W = $("tl").clientWidth;
   return W ? (el.offsetLeft + (i - a + 0.5) / (b - a + 1) * el.offsetWidth) / W * 100 : 0;
 }
+function updatePlayhead() {
+  const timeline = $("tl");
+  const offset = tlPos(i) * timeline.clientWidth / 100;
+  $("tlh").style.left = timeline.clientLeft + Math.min(Math.max(1, offset), Math.max(1, timeline.clientWidth - 1)) + "px";
+}
 function stepAtX(clientX) {                           // ngược lại của tlPos: vị trí chuột trên thanh phase -> bước
-  const tl = $("tl"), x = clientX - tl.getBoundingClientRect().left, els = [...tl.children];
+  const tl = $("tl"), x = clientX - tl.getBoundingClientRect().left - tl.clientLeft, els = [...tl.children];
   if (!els.length) return 0;
   let k = els.findIndex(el => x < el.offsetLeft + el.offsetWidth + 1);
   if (k < 0) k = els.length - 1;
@@ -795,8 +800,7 @@ function render() {
   drawTop(fr, fs); drawSide(fr, fs); draw3d(fr, fs); drawCams(fr); drawInfo(fr, fs); drawChk(fr);
   $("rng").value = i;
   $("stepCount").value = `${i} / ${fs.length - 1} · ${(i * STEP_DT).toFixed(2)} / ${((fs.length - 1) * STEP_DT).toFixed(2)} s thực tế`;
-  $("tlh").style.left = tlPos(i) + "%"; $("tlh").setAttribute("aria-valuenow", i); $("tlh").setAttribute("aria-valuemax", fs.length - 1);
-  $("tlh").setAttribute("aria-valuetext", "bước " + i + ", phase " + fr.ph);
+  updatePlayhead();
   const cur = $("logw").querySelector("tr.cur"); if (cur) cur.classList.remove("cur");
   const row = $("logw").querySelector(`tr[data-k="${i}"]`);
   if (row) { row.classList.add("cur"); const w = $("logw"), t = row.offsetTop; if (t < w.scrollTop + 30 || t > w.scrollTop + w.clientHeight - 30) w.scrollTop = t - w.clientHeight / 2; }
@@ -812,12 +816,12 @@ function prevPhase() {
   while (k > 0 && fs[k-1].ph === fs[k].ph) k--;
   go(Math.max(0, k - 1));
 }
-const PLAY_ICON = '<svg class="h-[14px] w-[14px]" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>', PAUSE_ICON = '<svg class="h-[14px] w-[14px]" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>';
+const PLAY_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="7 5 19 12 7 19"/></svg>', PAUSE_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="14" y="5" width="3" height="14" rx="1"/><rect x="7" y="5" width="3" height="14" rx="1"/></svg>';
 function stop() { if (timer) { clearInterval(timer); timer = null; } $("bPlay").innerHTML = PLAY_ICON; $("bPlay").setAttribute("aria-label", "Phát"); }
 function play() {
   if (timer) return stop();
   if (i >= F().length - 1) i = 0;
-  $("bPlay").innerHTML = PAUSE_ICON; $("bPlay").setAttribute("aria-label", "Dừng");
+  $("bPlay").innerHTML = PAUSE_ICON; $("bPlay").setAttribute("aria-label", "Tạm dừng");
   // Phát theo ĐỒNG HỒ thật: khung hình = thời gian đã trôi × tốc độ / STEP_DT, nên không bị chậm đi khi máy vẽ không kịp
   let t0 = performance.now(), i0 = i;
   timer = setInterval(() => {
@@ -867,13 +871,16 @@ $("vCams").onclick = () => setCam(CAM0.yaw, CAM0.pitch, CAM0.dist, true);
 $("v3").onclick = () => setCam(-Math.PI / 2, Math.PI / 2, CAM0.dist, true);
 {
   const base = S.cam_tilt_deg || 0, sl = $("camTilt");
-  const apply = v => { CAM_TILT_EXTRA = (v - base) * Math.PI / 180; $("camTiltV").textContent = v + "°";
+  // KHÔNG lưu độ gập vào localStorage: F5 luôn quay về đúng độ gập của config lúc dựng replay, nên số hiển thị luôn khớp dữ liệu.
+  // Kéo thanh chỉ là xem thử; lệch khỏi config thì hiện nhãn cảnh báo.
+  try { localStorage.removeItem("camTilt"); } catch (e) {}                                   // dọn khoá của bản cũ
+  const apply = v => { CAM_TILT_EXTRA = (v - base) * Math.PI / 180;
+    $("camTiltV").innerHTML = v + "°" + (v !== base ? ` <span style="color:var(--warn)" title="Đang xem thử: khác độ gập trong config (WRIST_CAM_TILT_DEG)">· config ${base}°</span>` : "");
     EPS.forEach(e => e.frames.forEach(f => { delete f._pose; delete f._w; })); render(); };
-  let saved = null; try { saved = localStorage.getItem("camTilt"); } catch (e) {}
-  sl.value = saved !== null ? saved : base;
-  sl.oninput = () => { apply(+sl.value); try { localStorage.setItem("camTilt", sl.value); } catch (e) {} };
+  sl.value = base;
+  sl.oninput = () => apply(+sl.value);
   sl.ondblclick = () => { sl.value = base; sl.oninput(); };
-  if (+sl.value !== base) apply(+sl.value); else $("camTiltV").textContent = base + "°";
+  $("camTiltV").textContent = base + "°";
 }
 $("bCam").onclick = () => { SHOW_CAM = !SHOW_CAM; try { localStorage.setItem("showArmCam", SHOW_CAM ? "1" : "0"); } catch (e) {} applyCamToggle(); render(); };
 applyCamToggle();
@@ -890,6 +897,7 @@ applyCamToggle();
   cv.onwheel = e => { e.preventDefault(); CAM.dist = Math.max(0.3, Math.min(2.5, CAM.dist * Math.exp(e.deltaY * 0.001))); redraw3(); };
   cv.ondblclick = () => setCam(CAM0.yaw, CAM0.pitch, CAM0.dist);
   new ResizeObserver(redraw3).observe(cv);
+  new ResizeObserver(updatePlayhead).observe($("tl"));
 }
 document.addEventListener("keydown", e => {
   if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey ||
@@ -913,14 +921,16 @@ const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
 };
-const saveView = () => { store.set("replayEp", epKey(EPS[ep])); store.set("replayFrame", String(i)); };
+// Chỉ lưu VỊ TRÍ xem (ván + khung hình), không lưu cấu hình hay dữ liệu. Khung hình chỉ được khôi phục khi ván đó có đúng cùng số khung
+// (replay dựng lại sau khi đổi policy sẽ khác số khung -> về khung 0 thay vì nhảy tới một thời điểm không còn tương ứng).
+const saveView = () => { store.set("replayEp", epKey(EPS[ep])); store.set("replayFrame", String(i)); store.set("replayLen", String(F().length)); };
 {
   const saved = store.get("replayEp");
   let def = saved ? EPS.findIndex(e => epKey(e) === saved) : -1;
   const restored = def >= 0;
   if (def < 0) def = EPS.findIndex(e => /^CASE 1/.test(e.name || ""));   // mặc định: hộp XA nhất
   loadEp(def >= 0 ? def : 0);
-  if (restored) go(Math.min(+store.get("replayFrame") || 0, F().length - 1));
+  if (restored && store.get("replayLen") === String(F().length)) go(Math.min(+store.get("replayFrame") || 0, F().length - 1));
 }
 // lưu mỗi khi đổi ván hoặc khung hình
 { const r = render; render = function () { r.apply(this, arguments); saveView(); }; }
