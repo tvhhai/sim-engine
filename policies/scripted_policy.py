@@ -78,6 +78,7 @@ class ScriptedPolicy(BasePolicy):
     # đường chéo hộp (42 mm) để hộp rơi xéo vẫn lọt, nhưng nhỏ hơn mở hết (82 mm, rộng hơn lòng bát 84 mm).
     RELEASE_OPEN_CMD = 0.55
     RELEASE_CLEAR_RAD = 0.8   # phase 8 kết thúc khi hộp đã rời tay (hai hàm hết cùng chạm) VÀ hàm di động mở tới góc này (rad)
+    SETTLE_STILL_STEPS = 3    # số bước liền hộp phải chậm hơn SETTLED_SPEED mới coi là đã nằm yên
     SETTLE_WAIT_MAX = 15      # sau khi rút lên (phase 9), chờ tối đa chừng này bước cho hộp nằm yên rồi mới kiểm tra hộp có trong bát không
     REGRASP_R_MIN = 0.08      # hộp rơi ra ngoài bát: chỉ gắp lại khi cách trục khớp 1 trong khoảng này (m), ngoài tầm thì về home
     REGRASP_R_MAX = 0.31
@@ -113,6 +114,7 @@ class ScriptedPolicy(BasePolicy):
         self._smoothed_action = None    # action đã làm mượt (để chuyển động không giật)
         self._prev_grip = -1.0          # lệnh kẹp ở bước trước (để giới hạn tốc độ mở); ván bắt đầu với kẹp khép
         self._regrasps = 0              # đã kẹp lại bao nhiêu lần vì hộp tuột khi đang mang
+        self._still = 0                 # số bước liền hộp đang nằm yên (sau khi rút lên)
         self._settle_wait = 0           # số bước đã chờ hộp nằm yên sau khi rút lên (phase 9)
         self._lost_steps = 0            # số bước liên tiếp hộp nằm xa ee khi đang mang
         self._roll_hold = None          # góc wrist_roll đã chọn để trục kẹp song song mặt hộp (None = chưa chọn)
@@ -155,6 +157,7 @@ class ScriptedPolicy(BasePolicy):
         self._lost_steps = 0
         self._prev_grip = -1.0
         self._settle_wait = 0
+        self._still = 0
 
     def select_action(self, observation: dict) -> np.ndarray:
         """Hàm chính: nhìn tình hình hiện tại, trả về action (7 số trong [-1, 1]).
@@ -250,6 +253,7 @@ class ScriptedPolicy(BasePolicy):
             jaw = self.data.qpos[self.model.jnt_qposadr[self.env._gripper_jnt]]
             if (not self.env._grasped and jaw >= self.RELEASE_CLEAR_RAD) or self._phase_step > 20:
                 self._settle_wait = 0
+                self._still = 0
                 self._advance_phase()
 
         elif self._phase == 9:
@@ -284,12 +288,14 @@ class ScriptedPolicy(BasePolicy):
         Đang chờ thì giữ ở phase 9 (tay vẫn ở trên bát), tối đa SETTLE_WAIT_MAX bước.
         """
         speed = float(np.linalg.norm(self.data.qvel[self.env._box_dof_adr:self.env._box_dof_adr + 3]))
-        if speed >= config.SETTLED_SPEED and self._settle_wait < self.SETTLE_WAIT_MAX:
+        self._still = self._still + 1 if speed < config.SETTLED_SPEED else 0
+        if self._still < self.SETTLE_STILL_STEPS and self._settle_wait < self.SETTLE_WAIT_MAX:   # hộp phải yên vài bước liền, không chỉ một khoảnh khắc
             self._settle_wait += 1
             self._phase = 9
             return
-        in_bowl = (np.linalg.norm(box_pos[:2] - bowl_pos[:2]) < config.BOWL_INNER_RADIUS
-                   and bowl_pos[2] < box_pos[2] < bowl_pos[2] + config.BOWL_HEIGHT - config.BOX_HALF)
+        # "trong bát" chỉ xét theo chiều ngang: hộp nằm trong lòng bát nhưng còn hơi nghiêng/gác lên thành (z cao hơn vài mm)
+        # sẽ tự nằm xuống, KHÔNG được coi là rơi ra ngoài (đo thấy gây gắp lại sai ở một số seed)
+        in_bowl = np.linalg.norm(box_pos[:2] - bowl_pos[:2]) < config.BOWL_INNER_RADIUS
         pan = self.data.xpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "shoulder")]
         r = float(np.linalg.norm(box_pos[:2] - pan[:2]))
         on_table = box_pos[2] < config.BOX_DEFAULT_POS[2] + 0.015      # nằm trên bàn, không gác trên miệng bát
