@@ -58,6 +58,10 @@ class ScriptedPolicy(BasePolicy):
     # True: phase 0 đi thẳng tới phía trên hộp rồi sang phase 2 (bỏ điểm dừng giữa của phase 0 và phase 1).
     # Đã đo 200 seed: nhanh hơn ~9 bước/ván (163 -> 154) nhưng thành công 195/200 (hỏng 15, 93, 150, 180, 187), nên để TẮT.
     MERGE_LIFT_AND_MOVE = False
+    # True: phase 0 giải IK MỘT LẦN cho điểm phía trên hộp rồi mở cả 5 khớp cùng lúc tới góc đó (như phase 10), xong sang phase 2.
+    # Đã đo 200 seed (dung sai 0.05): 198/200 (hỏng 64, 83), trung vị 163 -> 156 bước, phase 0+1 từ 18 -> 9 bước. Dung sai 0.03/0.02 không tốt hơn (197, 196). Để TẮT.
+    JOINT_SPACE_LIFT = False
+    JOINT_LIFT_TOL = 0.05         # rad: sai lệch khớp lớn nhất coi là đã tới góc đích của phase 0 (chế độ JOINT_SPACE_LIFT)
     TOOL_DOWN_PHASES = (2, 3, 4, 5, 6, 7, 8, 9)   # từ lúc hạ xuống hộp tới lúc thả (phase 0, 1 đi ở độ cao cao, tay không thẳng đứng được)
     TOOL_DOWN_WEIGHT = 0.02   # trọng số hướng so với vị trí. 0.03 kém hơn (vẫn chạm bát), >= 0.1 làm đầu tay không tới đích.
     PLACE_Z = 0.475   # độ cao đầu tay lúc thả (miệng bát ở z 0.46). Đo trên 100 seed:
@@ -177,7 +181,15 @@ class ScriptedPolicy(BasePolicy):
         if self._phase == 0:
             # Nhấc thẳng lên từ home (giữ nguyên x, y; chỉ đổi z)
             self._gripper_target = 1.0
-            if self.MERGE_LIFT_AND_MOVE:
+            if self.JOINT_SPACE_LIFT:
+                if self._phase_step == 0:                  # giải IK một lần từ tư thế nghỉ, rồi giữ nguyên góc đích
+                    self._lift_q = self._solve_ik(np.array([box_pos[0], box_pos[1], self._safe_z]))
+                self._current_joint_targets = self._lift_q.copy()
+                self._phase_step += 1
+                err = np.max(np.abs(self.data.qpos[self._qpos_adr] - self._lift_q))
+                if err < self.JOINT_LIFT_TOL or self._phase_step > self.PHASE_TIMEOUT_STEPS:
+                    self._phase, self._phase_step = 2, 0
+            elif self.MERGE_LIFT_AND_MOVE:
                 target = np.array([box_pos[0], box_pos[1], self._safe_z])
                 self._move_toward(target, ee_pos, threshold=0.025)
                 if self._phase == 1:                       # đã tới phía trên hộp: bỏ qua phase 1
