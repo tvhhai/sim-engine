@@ -18,6 +18,7 @@ import importlib
 import io
 import json
 import os
+import time
 
 import mujoco
 import numpy as np
@@ -109,6 +110,49 @@ def arm_model_export(env):
             meshes[n] = {"v": [round(float(x), 4) for x in np.concatenate(V).ravel()],
                          "f": np.concatenate(T).ravel().astype(int).tolist(), "colors": colors}
     return kin, meshes
+
+
+_W = {}   # trạng thái của tiến trình con: {"rec": Recorder}
+
+
+def _init_worker(policy_spec, box_range, bowl_range):
+    module_name, class_name = policy_spec.split(":")
+    policy_cls = getattr(importlib.import_module(module_name), class_name)
+    env = SO101PickPlaceEnv(render_images=False, end_on_success=False, box_range=box_range, bowl_range=bowl_range)
+    _W["rec"] = Recorder(env, policy_cls(env))
+
+
+def _record_task(task):
+    seed, options = task
+    with contextlib.redirect_stdout(io.StringIO()):
+        return _W["rec"].run(seed, options=options)
+
+
+def parallel_map(fn, tasks, policy_spec, box_range=None, bowl_range=None, workers=1, progress=None):
+    """Chạy fn(task) cho từng task, mỗi tiến trình con có Recorder riêng (môi trường độc lập). Giữ nguyên thứ tự kết quả.
+
+    Mỗi ván tách biệt hoàn toàn (env.reset xoá mọi trạng thái) nên chạy song song cho CÙNG kết quả như chạy tuần tự.
+    workers <= 1: chạy ngay trong tiến trình này (dễ gỡ lỗi)."""
+    if workers <= 1 or len(tasks) <= 1:
+        _init_worker(policy_spec, box_range, bowl_range)
+        out = []
+        for k, t in enumerate(tasks):
+            out.append(fn(t))
+            if progress:
+                progress(k + 1, len(tasks))
+        return out
+    import multiprocessing as mp
+    out = []
+    with mp.get_context("spawn").Pool(min(workers, len(tasks)), initializer=_init_worker, initargs=(policy_spec, box_range, bowl_range)) as pool:
+        for k, r in enumerate(pool.imap(fn, tasks, chunksize=1)):
+            out.append(r)
+            if progress:
+                progress(k + 1, len(tasks))
+    return out
+
+
+def default_workers():
+    return max(1, (os.cpu_count() or 2) - 1)
 
 
 def parse_seeds(text):
@@ -290,6 +334,7 @@ def main():
     parser.add_argument("--box-range", type=float, default=None, help="hộp ngẫu nhiên trong ± giá trị này (mét), mặc định theo config")
     parser.add_argument("--bowl-range", type=float, default=None, help="bát ngẫu nhiên trong ± giá trị này (mét), mặc định theo config")
     parser.add_argument("--out", default=None, help="mặc định docs/replay.html")
+    parser.add_argument("--workers", type=int, default=default_workers(), help="số tiến trình chạy song song (mặc định: số lõi - 1; 1 = tuần tự)")
     args = parser.parse_args()
     if args.out is None:
         args.out = os.path.join(here, "docs", "replay.html")
@@ -331,11 +376,18 @@ def main():
         d = steps - p["steps"]
         return f"({d:+d}{tag})" if d or tag else f"(=){tag}"
 
-    episodes = []
+    tasks = []
     for key in seed_list:
+        m0 = meta.get(key)
+        tasks.append((m0["seed"] if key in meta else key, (m0 or {}).get("options")))
+    t_start = time.time()
+    results = parallel_map(_record_task, tasks, args.policy, args.box_range, args.bowl_range, args.workers)
+    print(f"  chạy {len(tasks)} ván bằng {min(args.workers, len(tasks))} tiến trình trong {time.time() - t_start:.1f} s", flush=True)
+
+    episodes = []
+    for key, ep in zip(seed_list, results):
         seed = meta[key]["seed"] if key in meta else key
         m = meta.get(key)
-        ep = rec.run(seed, options=(m or {}).get("options"))
         if m:
             ep["group"] = m["group"]
             ep["tags"] = m["tags"]

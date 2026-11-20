@@ -35,7 +35,7 @@ def grid(r_min, r_max, r_step, a_min, a_max, a_step):
                 continue                                                  # sát mép bàn
             if np.linalg.norm(xy - bowl) < config.BOX_BOWL_CLEARANCE:
                 continue                                                  # sát bát
-            pts.append((round(float(r), 3), a, xy))
+            pts.append((round(float(r), 3), a, np.round(xy, 4)))      # làm tròn 4 số lẻ NGAY ở đây: seed cố định dùng đúng toạ độ này nên tái hiện được từng điểm hỏng
     return pts
 
 

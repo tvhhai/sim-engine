@@ -46,6 +46,8 @@ class ScriptedPolicy(BasePolicy):
     PHASE_TIMEOUT_STEPS = 200  # trần mặc định cho một phase di chuyển (bước), dùng khi phase không có hạn riêng ở PHASE_TIMEOUTS
     # Hạn riêng cho phase di chuyển (bước). Phase 1 chạy tốt xong trong ≤ 30 bước (p99 = 15) nên 60 là dư; quá hạn nghĩa là đích sai, không đứng đợi 200 bước (6.7 s).
     PHASE_TIMEOUTS = {1: 60}
+    PLACE_RECOVERY_LIMIT = 1
+    PLACE_RETRACT_TIMEOUT = 45
     STALL_PHASES = (1,)        # chỉ phase 1 dùng phát hiện kẹt; các phase kẹp/mang hộp dựa vào hạn mặc định (đã đo: rút ngắn chúng làm hỏng kẹp)
     IK_LIMIT_PHASES = (5, 6, 7)  # phase nào IK kẹp góc khớp trong giới hạn thật. Đo 200 seed: (5, 6, 7) -> 198/200; cả mọi phase -> 195/200; không phase nào -> 197/200
     IK_RESPECT_LIMITS = False  # True: mọi lời giải IK bị kẹp trong giới hạn khớp. Đo 200 seed: bật cho mọi phase làm 3-4 seed mất kẹp (91, 149...)
@@ -134,6 +136,9 @@ class ScriptedPolicy(BasePolicy):
         self.last_exit = None           # lý do thoát phase ở bước này: arrived / stall / timeout (None = vẫn trong phase)
         self._p1_z = None               # độ cao đích của phase 1 (hạ thấp nếu độ cao an toàn nằm ngoài tầm với)
         self._lift_z = None             # độ cao đích của phase 5 (nhấc hộp), cũng hạ thấp khi hộp sát đế
+        self._place_retries = 0
+        self._place_retract_target = None
+        self._place_hold_action = None
         self._lost_steps = 0            # số bước liên tiếp hộp nằm xa ee khi đang mang
         self._roll_hold = None          # góc wrist_roll đã chọn để trục kẹp song song mặt hộp (None = chưa chọn)
         self._clamp_dir = np.array([1.0, 0.0, 0.0])   # hướng trục kẹp trong mặt phẳng ngang (từ hàm cố định sang hàm di động)
@@ -172,6 +177,9 @@ class ScriptedPolicy(BasePolicy):
         self._home_ee = self.env.get_ee_pos()
         self._roll_hold = None
         self._regrasps = 0
+        self._place_retries = 0
+        self._place_retract_target = None
+        self._place_hold_action = None
         self._lost_steps = 0
         self._prev_grip = -1.0
         self._settle_wait = 0
@@ -186,6 +194,9 @@ class ScriptedPolicy(BasePolicy):
         """
         self.motion_target = None
         self.last_exit = None                                  # đặt lại mỗi bước; _move_toward ghi lý do nếu phase kết thúc ở bước này
+        if self._place_hold_action is not None:
+            return self._place_hold_action.copy()
+
         box_pos = self.env.get_box_pos()
         bowl_pos = self.env.get_bowl_pos()
         ee_pos = self.env.get_ee_pos()
@@ -195,113 +206,163 @@ class ScriptedPolicy(BasePolicy):
             self._lost_steps = self._lost_steps + 1 if np.linalg.norm(box_pos - ee_pos) > 0.05 else 0
             if self._lost_steps > 3 and self._regrasps < 2:
                 self._regrasps += 1
+                self._place_retract_target = None
                 self._lost_steps = 0
                 self._phase, self._phase_step = 1, 0
                 self._roll_hold = None
                 self._last_finger = None
 
-        if self._phase == 0:
-            # Nhấc thẳng lên từ home (giữ nguyên x, y; chỉ đổi z)
-            self._gripper_target = 1.0
-            target = np.array([self._home_ee[0], self._home_ee[1], self._safe_z])
-            self._move_toward(target, ee_pos, threshold=0.02)
-
-        elif self._phase == 1:
-            # Di chuyển ngang tới phía trên hộp ở độ cao an toàn
-            if self._phase_step == 0 or self._p1_z is None:
-                self._p1_z = self._reachable_z(box_pos[:2]) if self.PHASE1_ADAPTIVE_Z else self._safe_z
-            target = np.array([box_pos[0], box_pos[1], self._p1_z])
-            self._gripper_target = 1.0
-            self._move_toward(target, ee_pos, threshold=0.025)
-
-        elif self._phase == 2:
-            # Hạ xuống pre-grasp
-            target = self._grasp_target(self._pre_grasp_z)
-            self._gripper_target = 1.0
-            self._move_toward(target, ee_pos, threshold=0.025)
-
-        elif self._phase == 3:
-            # Hạ xuống vị trí kẹp
-            target = self._grasp_target(self._grasp_z)
-            self._gripper_target = 1.0
-            self._move_toward(target, ee_pos, threshold=0.025)
-
-        elif self._phase == 4:
-            # Đóng kẹp. Kết thúc SỚM khi env báo hộp đã được kẹp VÀ ngón đã ngừng khép.
-            # Quá 30 bước (~1 giây) mà chưa kẹp được thì quay lại phase 2 để căn lại và hạ xuống lần nữa
-            # (đích tính lại từ vị trí hộp hiện tại), tối đa self._max_retries lần.
-            self._gripper_target = -1.0
-            self._phase_step += 1
-            fo = self.data.qpos[self.model.jnt_qposadr[self.env._gripper_jnt]]
-            settled = self._last_finger is not None and abs(fo - self._last_finger) < 0.004
-            self._last_finger = fo
-            if self.env._grasped and settled:
-                self._last_finger = None
-                self._advance_phase()
-            elif self._phase_step > 30:
-                self._last_finger = None
-                if self._retries < self._max_retries:
-                    self._retries += 1
-                    self._phase, self._phase_step = 2, 0     # thử lại từ phase 2
-                    self._roll_hold = None                   # hộp có thể đã xoay: chọn lại roll
-                else:
-                    self._advance_phase()                    # hết lượt thử: đi tiếp như cũ
-
-        elif self._phase == 5:
-            # Nhấc thẳng lên (giữ nguyên x, y của tay). Sát đế thì độ cao an toàn nằm ngoài tầm với: nhấc tới độ cao tới được
-            if self._phase_step == 0 or self._lift_z is None:
-                self._lift_z = self._reachable_z(ee_pos[:2], z_lo=self._grasp_z + 0.04) if self.PHASE5_ADAPTIVE_Z else self._safe_z
-            target = np.array([ee_pos[0], ee_pos[1], self._lift_z])
-            self._gripper_target = -1.0
-            self._move_toward(target, ee_pos, threshold=0.02)
-
-        elif self._phase == 6:
-            # Di chuyển tới phía trên bát ở độ cao an toàn
-            target = np.array([bowl_pos[0], bowl_pos[1], self._safe_z])
-            target[:2] -= np.clip((box_pos - ee_pos)[:2], -0.04, 0.04)   # hộp nằm lệch khỏi ee (kẹp lệch bên): đưa HỘP, không phải ee, tới tâm bát
-            self._gripper_target = -1.0
-            self._move_toward(target, ee_pos, threshold=0.02)
-
-        elif self._phase == 7:
-            # Hạ hộp xuống trong bát
-            target = np.array([bowl_pos[0], bowl_pos[1], self._place_z])
-            target[:2] -= np.clip((box_pos - ee_pos)[:2], -0.04, 0.04)
-            self._gripper_target = -1.0
-            self._move_toward(target, ee_pos, threshold=self.PLACE_ARRIVE_THRESHOLD)
-
-        elif self._phase == 8:
-            # Mở kẹp vừa phải. Xong khi hộp đã rời tay và hàm đã mở đủ rộng để rút lên không kéo theo hộp
-            # (không chờ hộp nằm yên ở đây: việc đó làm sau khi rút lên, ở cuối phase 9). Tối đa 20 bước.
-            self._gripper_target = self.RELEASE_OPEN_CMD
-            self._phase_step += 1
-            jaw = self.data.qpos[self.model.jnt_qposadr[self.env._gripper_jnt]]
-            if (not self.env._grasped and jaw >= self.RELEASE_CLEAR_RAD) or self._phase_step > 20:
-                self._settle_wait = 0
-                self._still = 0
-                self._advance_phase()
-
-        elif self._phase == 9:
-            # Rút tay lên khỏi bát (vẫn mở vừa, để ngón không quét vào thành bát khi rút)
-            target = np.array([bowl_pos[0], bowl_pos[1], self._safe_z])
-            self._gripper_target = self.RELEASE_OPEN_CMD
-            self._move_toward(target, ee_pos, threshold=0.025)
-            if self._phase == 10:                       # đã rút lên tới nơi: xem hộp đang ở đâu rồi mới đi tiếp
-                self._after_retract(box_pos, bowl_pos)
-
-        elif self._phase == 10:
-            # Về tư thế GẤP GỌN ban đầu: đi thẳng trong không gian khớp tới HOME_QPOS_RAD (không qua IK để chắc chắn gập đúng kiểu)
-            self._gripper_target = -1.0     # cất tay thì khép kẹp lại, giống tư thế ban đầu
-            self._current_joint_targets = np.array(config.HOME_QPOS_RAD[:5], dtype=float)
-            self._phase_step += 1
-            err = np.max(np.abs(self.data.qpos[self._qpos_adr] - self._current_joint_targets))
-            if err < 0.05 or self._phase_step > self.PHASE_TIMEOUT_STEPS:
-                self._advance_phase()
-
-        else:
-            # Xong: giữ nguyên tư thế hiện tại
-            return self._build_action_from_current()
+        match self._phase:
+            case 0:
+                self._lift_from_home(ee_pos)
+            case 1:
+                self._approach_box(box_pos, ee_pos)
+            case 2:
+                self._lower_to_box(ee_pos, self._pre_grasp_z)
+            case 3:
+                self._lower_to_box(ee_pos, self._grasp_z)
+            case 4:
+                self._close_gripper()
+            case 5:
+                self._lift_box(ee_pos)
+            case 6:
+                self._move_box_to_bowl(box_pos, bowl_pos, ee_pos, self._safe_z, 0.02)
+            case 7:
+                self._lower_into_bowl(box_pos, bowl_pos, ee_pos)
+                if self._place_hold_action is not None:
+                    return self._place_hold_action.copy()
+            case 8:
+                self._release_box()
+            case 9:
+                self._retract_from_bowl(box_pos, bowl_pos, ee_pos)
+            case 10:
+                self._return_home()
+            case _:
+                return self._build_action_from_current()
 
         return self._build_action()
+
+    def _lift_from_home(self, ee_pos):
+        # Nhấc thẳng lên từ home (giữ nguyên x, y; chỉ đổi z)
+        self._gripper_target = 1.0
+        target = np.array([self._home_ee[0], self._home_ee[1], self._safe_z])
+        self._move_toward(target, ee_pos, threshold=0.02)
+
+    def _approach_box(self, box_pos, ee_pos):
+        # Di chuyển ngang tới phía trên hộp ở độ cao an toàn
+        if self._phase_step == 0 or self._p1_z is None:
+            self._p1_z = self._reachable_z(box_pos[:2]) if self.PHASE1_ADAPTIVE_Z else self._safe_z
+        target = np.array([box_pos[0], box_pos[1], self._p1_z])
+        self._gripper_target = 1.0
+        self._move_toward(target, ee_pos, threshold=0.025)
+
+    def _lower_to_box(self, ee_pos, height):
+        target = self._grasp_target(height)
+        self._gripper_target = 1.0
+        self._move_toward(target, ee_pos, threshold=0.025)
+
+    def _close_gripper(self):
+        # Đóng kẹp. Kết thúc SỚM khi env báo hộp đã được kẹp VÀ ngón đã ngừng khép.
+        # Quá 30 bước (~1 giây) mà chưa kẹp được thì quay lại phase 2 để căn lại và hạ xuống lần nữa
+        # (đích tính lại từ vị trí hộp hiện tại), tối đa self._max_retries lần.
+        self._gripper_target = -1.0
+        self._phase_step += 1
+        fo = self.data.qpos[self.model.jnt_qposadr[self.env._gripper_jnt]]
+        settled = self._last_finger is not None and abs(fo - self._last_finger) < 0.004
+        self._last_finger = fo
+        if self.env._grasped and settled:
+            self._last_finger = None
+            self._advance_phase()
+        elif self._phase_step > 30:
+            self._last_finger = None
+            if self._retries < self._max_retries:
+                self._retries += 1
+                self._phase, self._phase_step = 2, 0     # thử lại từ phase 2
+                self._roll_hold = None                   # hộp có thể đã xoay: chọn lại roll
+            else:
+                self._advance_phase()                    # hết lượt thử: đi tiếp như cũ
+
+    def _lift_box(self, ee_pos):
+        # Nhấc thẳng lên (giữ nguyên x, y của tay). Sát đế thì độ cao an toàn nằm ngoài tầm với: nhấc tới độ cao tới được
+        if self._phase_step == 0 or self._lift_z is None:
+            self._lift_z = self._reachable_z(ee_pos[:2], z_lo=self._grasp_z + 0.04) if self.PHASE5_ADAPTIVE_Z else self._safe_z
+        target = np.array([ee_pos[0], ee_pos[1], self._lift_z])
+        self._gripper_target = -1.0
+        self._move_toward(target, ee_pos, threshold=0.02)
+
+    def _move_box_to_bowl(self, box_pos, bowl_pos, ee_pos, height, threshold, *, advance_on_failure=True):
+        target = np.array([bowl_pos[0], bowl_pos[1], height])
+        # Căn tâm hộp với tâm bát khi hộp nằm lệch khỏi đầu kẹp.
+        target[:2] -= np.clip((box_pos - ee_pos)[:2], -0.04, 0.04)
+        self._gripper_target = -1.0
+        self._move_toward(target, ee_pos, threshold=threshold, advance_on_failure=advance_on_failure)
+
+    def _lower_into_bowl(self, box_pos, bowl_pos, ee_pos):
+        """Phase 7 chỉ cho phép mở kẹp khi đã tới đích thả."""
+        if self._place_retract_target is not None:
+            self._move_toward(
+                self._place_retract_target, ee_pos, threshold=0.02,
+                advance_on_failure=False, timeout_steps=self.PLACE_RETRACT_TIMEOUT,
+            )
+            if self.last_exit == "arrived":
+                # _move_toward resets the counters. Retry from above the bowl.
+                self._phase = 6
+                self._place_retract_target = None
+                self.last_exit = "place_retry"
+            elif self.last_exit:
+                self._place_hold_action = self._build_action_from_current()
+                self.last_exit = "place_hold"
+            return
+
+        self._move_box_to_bowl(
+            box_pos, bowl_pos, ee_pos, self._place_z, self.PLACE_ARRIVE_THRESHOLD,
+            advance_on_failure=False,
+        )
+        if self.last_exit != "timeout":
+            return
+
+        if not self.env._grasped or self._place_retries >= self.PLACE_RECOVERY_LIMIT:
+            self._place_hold_action = self._build_action_from_current()
+            self.last_exit = "place_hold"
+            return
+
+        self._place_retries += 1
+        self._place_retract_target = np.array([ee_pos[0], ee_pos[1], self._safe_z])
+        self._phase_step, self._best_dist, self._stall = 0, 0.0, 0
+        self.last_exit = "place_retract"
+        # Stop issuing the lowering goal as soon as we start the retry.
+        self.motion_target = (self._place_retract_target.copy(), 0.02)
+        self._current_joint_targets = self._solve_ik(self._place_retract_target)
+        if self._roll_hold is not None:
+            self._current_joint_targets[4] = self._roll_hold
+
+    def _release_box(self):
+        # Mở kẹp vừa phải. Xong khi hộp đã rời tay và hàm đã mở đủ rộng để rút lên không kéo theo hộp
+        # (không chờ hộp nằm yên ở đây: việc đó làm sau khi rút lên, ở cuối phase 9). Tối đa 20 bước.
+        self._gripper_target = self.RELEASE_OPEN_CMD
+        self._phase_step += 1
+        jaw = self.data.qpos[self.model.jnt_qposadr[self.env._gripper_jnt]]
+        if (not self.env._grasped and jaw >= self.RELEASE_CLEAR_RAD) or self._phase_step > 20:
+            self._settle_wait = 0
+            self._still = 0
+            self._advance_phase()
+
+    def _retract_from_bowl(self, box_pos, bowl_pos, ee_pos):
+        # Rút tay lên khỏi bát (vẫn mở vừa, để ngón không quét vào thành bát khi rút)
+        target = np.array([bowl_pos[0], bowl_pos[1], self._safe_z])
+        self._gripper_target = self.RELEASE_OPEN_CMD
+        self._move_toward(target, ee_pos, threshold=0.025)
+        if self._phase == 10:                       # đã rút lên tới nơi: xem hộp đang ở đâu rồi mới đi tiếp
+            self._after_retract(box_pos, bowl_pos)
+
+    def _return_home(self):
+        # Về tư thế GẤP GỌN ban đầu: đi thẳng trong không gian khớp tới HOME_QPOS_RAD (không qua IK để chắc chắn gập đúng kiểu)
+        self._gripper_target = -1.0     # cất tay thì khép kẹp lại, giống tư thế ban đầu
+        self._current_joint_targets = np.array(config.HOME_QPOS_RAD[:5], dtype=float)
+        self._phase_step += 1
+        err = np.max(np.abs(self.data.qpos[self._qpos_adr] - self._current_joint_targets))
+        if err < 0.05 or self._phase_step > self.PHASE_TIMEOUT_STEPS:
+            self._advance_phase()
 
     def _after_retract(self, box_pos, bowl_pos):
         """Cuối phase 9 (tay đã rút lên trên bát): chờ hộp nằm yên, rồi quyết định.
@@ -420,7 +481,7 @@ class ScriptedPolicy(BasePolicy):
         if roll is not None:                                       # khoá wrist_roll ở góc `roll`: IK chỉ dùng 4 khớp còn lại
             ik.qpos[self._qpos_adr[4]] = roll
             free[4] = 0.0
-        mujoco.mj_forward(self.model, ik)
+        self._fk(ik)
 
         jacp = np.zeros((3, self.model.nv))
         tool_down = self._phase in self.TOOL_DOWN_PHASES
@@ -464,16 +525,22 @@ class ScriptedPolicy(BasePolicy):
             ik.qpos[self._qpos_adr] += self.IK_STEP_GAIN * dq
             if (self.IK_RESPECT_LIMITS or self._phase in self.IK_LIMIT_PHASES) if limits is None else limits:
                 ik.qpos[self._qpos_adr] = np.clip(ik.qpos[self._qpos_adr], self._jnt_lo, self._jnt_hi)   # IK phải tôn trọng giới hạn khớp thật
-            mujoco.mj_forward(self.model, ik)
+            self._fk(ik)
 
         return ik.qpos[self._qpos_adr].copy()
+
+    def _fk(self, data):
+        """Động học thuận cho IK: chỉ tính vị trí các link và jacobian (mj_kinematics + mj_comPos), không chạy va chạm và động lực học như
+        mj_forward. IK gọi hàm này ~40 lần mỗi bước nên đây là chỗ tốn thời gian nhất của cả mô phỏng; kết quả IK không đổi."""
+        mujoco.mj_kinematics(self.model, data)
+        mujoco.mj_comPos(self.model, data)
 
     @staticmethod
     def _skew(a):
         """Ma trận phản đối xứng [a]× sao cho [a]× @ v = a × v."""
         return np.array([[0.0, -a[2], a[1]], [a[2], 0.0, -a[0]], [-a[1], a[0], 0.0]])
 
-    def _move_toward(self, target_pos, ee_pos, threshold=0.02):
+    def _move_toward(self, target_pos, ee_pos, threshold=0.02, *, advance_on_failure=True, timeout_steps=None):
         """Hướng đầu tay về target_pos trong bước này, và quyết định có sang phase kế không.
 
         Tham số:
@@ -499,14 +566,14 @@ class ScriptedPolicy(BasePolicy):
             self._best_dist, self._stall = dist, 0
         else:
             self._stall += 1
-        cap = self.PHASE_TIMEOUTS.get(self._phase, self.PHASE_TIMEOUT_STEPS)
+        cap = timeout_steps if timeout_steps is not None else self.PHASE_TIMEOUTS.get(self._phase, self.PHASE_TIMEOUT_STEPS)
         if dist < threshold:
             self.last_exit = "arrived"
         elif self._phase_step > cap:
             self.last_exit = "timeout"
         elif self._stall >= self.STALL_STEPS and self._phase in self.STALL_PHASES:
             self.last_exit = "stall"
-        if self.last_exit:
+        if self.last_exit == "arrived" or (advance_on_failure and self.last_exit):
             self._advance_phase()
 
     def _to_action(self, angles):

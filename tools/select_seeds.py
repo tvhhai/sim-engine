@@ -25,6 +25,7 @@ import io
 import json
 import math
 import os
+import time
 
 import numpy as np
 
@@ -32,7 +33,8 @@ from .. import config
 from ..box_sampling import fixed_seed_name
 from ..env import SO101PickPlaceEnv
 from ..policies.scripted_policy import ScriptedPolicy
-from .make_replay import Recorder, parse_seeds
+from . import make_replay as _mr
+from .make_replay import Recorder, parse_seeds, parallel_map, default_workers
 
 
 # Hai trường hợp cực biên luôn đứng đầu danh sách replay: hộp XA nhất và GẦN nhất mà cánh tay phải xử lý.
@@ -70,6 +72,12 @@ def evaluate_seed(rec, seed):
         "drops": drops, "regrasps": regrasps,
         "kind": kind, "box0": frames[0]["box"][:2], "bowl": ep["bowl"][:2],
     }
+
+
+def _eval_task(task):
+    """Chạy trong tiến trình con: chấm một seed bằng Recorder của tiến trình đó."""
+    seed, _ = task
+    return evaluate_seed(_mr._W["rec"], seed)
 
 
 def features(rows, box_range, bowl_range, box_center=(0.15, 0.0)):
@@ -171,24 +179,19 @@ def main():
     ap.add_argument("--bowl-range", type=float, default=None)
     ap.add_argument("--slow-factor", type=float, default=1.5, help="chậm = số bước >= hệ số này x số bước trung vị")
     ap.add_argument("--slow-min", type=int, default=100, help="và tối thiểu bằng số bước này")
+    ap.add_argument("--workers", type=int, default=default_workers(), help="số tiến trình chạy song song (mặc định: số lõi - 1; 1 = tuần tự)")
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ap.add_argument("--out", default=os.path.join(here, "docs", "replay_seeds.json"))
     args = ap.parse_args()
 
-    module_name, class_name = args.policy.split(":")
-    policy_cls = getattr(importlib.import_module(module_name), class_name)
-    env = SO101PickPlaceEnv(render_images=False, end_on_success=False,
-                            box_range=args.box_range, bowl_range=args.bowl_range)
-    rec = Recorder(env, policy_cls(env))
-
     seeds = parse_seeds(args.pool)
-    rows = []
-    for k, s in enumerate(seeds):
-        rows.append(evaluate_seed(rec, s))
-        if (k + 1) % 25 == 0:
-            print(f"  đã chấm {k + 1}/{len(seeds)} seed...", flush=True)
-    box_r, bowl_r = env.box_range, env.bowl_range
-    env.close()
+    t_start = time.time()
+    rows = parallel_map(_eval_task, [(s, None) for s in seeds], args.policy, args.box_range, args.bowl_range, args.workers,
+                        progress=lambda k, n: print(f"  đã chấm {k}/{n} seed...", flush=True) if k % 25 == 0 else None)
+    print(f"  chấm xong trong {time.time() - t_start:.1f} s ({min(args.workers, len(seeds))} tiến trình)")
+    probe = SO101PickPlaceEnv(render_images=False, box_range=args.box_range, bowl_range=args.bowl_range)
+    box_r, bowl_r = probe.box_range, probe.bowl_range
+    probe.close()
 
     steps = np.array([r["steps"] for r in rows])
     median = float(np.median(steps))
