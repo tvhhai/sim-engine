@@ -19,7 +19,8 @@ const f3 = v => v ? "(" + v.map(x => (x >= 0 ? "+" : "") + x.toFixed(3)).join(",
 const dist = (a, b) => Math.hypot(a[0]-b[0], a[1]-b[1], a[2]-b[2]);
 const cm = v => (v * 100).toFixed(1);
 
-let ep = 0, i = 0, timer = null, speed = 120;
+let ep = 0, i = 0, timer = null, speed = 1;   // speed = hệ số so với thời gian thực (1 = đúng tốc độ robot chạy thật)
+const STEP_DT = S.step_dt || 1 / 30;           // giây mô phỏng mỗi bước (policy ra 1 action mỗi STEP_DT)
 const OPT = { past:true, future:true, path:true, hz:"1", every:1 };
 
 /* ---------- khung trang ---------- */
@@ -60,7 +61,7 @@ app.innerHTML = `
           <button id="bNext" title="→">tiến 1 ▶</button>
           <button id="bPhase" title="↓">phase kế ⏩</button>
           <button id="bPlay" class="primary" title="Space">▶ phát</button>
-          <label>Tốc độ <select id="spd"><option value="400">chậm</option><option value="120" selected>vừa</option><option value="40">nhanh</option></select></label>
+          <label>Tốc độ <select id="spd"><option value="0.5">chậm 0,5×</option><option value="1" selected>bình thường (thực tế)</option><option value="1.5">nhanh 1,5×</option><option value="2">nhanh 2×</option></select></label>
         </div>
         <label for="rng">Bước mô phỏng <output id="stepCount" for="rng"></output></label>
         <input type="range" id="rng" min="0" value="0">
@@ -760,7 +761,7 @@ function render() {
   const fs = F(), fr = fs[i];
   drawTop(fr, fs); drawSide(fr, fs); draw3d(fr, fs); drawCams(fr); drawInfo(fr, fs); drawChk(fr);
   $("rng").value = i;
-  $("stepCount").value = `${i} / ${fs.length - 1}`;
+  $("stepCount").value = `${i} / ${fs.length - 1} · ${(i * STEP_DT).toFixed(2)} / ${((fs.length - 1) * STEP_DT).toFixed(2)} s thực tế`;
   $("tlc").firstElementChild.style.left = tlPos(i) + "%";
   const cur = $("logw").querySelector("tr.cur"); if (cur) cur.classList.remove("cur");
   const row = $("logw").querySelector(`tr[data-k="${i}"]`);
@@ -782,7 +783,13 @@ function play() {
   if (timer) return stop();
   if (i >= F().length - 1) i = 0;
   $("bPlay").textContent = "⏸ dừng";
-  timer = setInterval(() => { if (i >= F().length - 1) return stop(); go(i + 1); }, speed);
+  // Phát theo ĐỒNG HỒ thật: khung hình = thời gian đã trôi × tốc độ / STEP_DT, nên không bị chậm đi khi máy vẽ không kịp
+  let t0 = performance.now(), i0 = i;
+  timer = setInterval(() => {
+    const k = Math.min(F().length - 1, i0 + Math.floor((performance.now() - t0) / 1000 * speed / STEP_DT));
+    if (k !== i) go(k);
+    if (i >= F().length - 1) stop();
+  }, 16);
 }
 function loadEp(k) {
   stop(); ep = k; i = 0;
@@ -798,7 +805,7 @@ $("showReach").onchange = () => render();
 $("sel").onchange = () => loadEp(+$("sel").value);
 $("sPrev").onclick = () => loadEp((ep - 1 + EPS.length) % EPS.length);
 $("sNext").onclick = () => loadEp((ep + 1) % EPS.length);
-$("spd").onchange = () => { speed = +$("spd").value; if (timer) { stop(); play(); } };
+$("spd").onchange = () => { speed = +$("spd").value; if (timer) { stop(); play(); } };   // play() lấy lại mốc thời gian từ khung đang xem
 $("rng").oninput = () => go(+$("rng").value);
 $("bFirst").onclick = () => go(0);
 $("bPrev").onclick = () => go(i - 1);

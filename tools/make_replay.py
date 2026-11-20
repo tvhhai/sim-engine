@@ -363,6 +363,7 @@ def main():
         "box_half": config.BOX_HALF,
         "table": list(config.TABLE_HALF),            # nửa kích thước bàn (x, y)
         "max_steps": config.MAX_EPISODE_STEPS,
+        "step_dt": config.PHYSICS_SUBSTEPS * config.PHYSICS_TIMESTEP,   # giây mô phỏng thật mỗi bước điều khiển (để phát replay đúng thời gian thực)
         "joints": config.JOINT_NAMES[:5],
         # Hình học THẬT của bát (đọc từ model): đáy hình trụ + 8 tấm tường hình hộp. Toạ độ tâm tính theo thế giới.
         "bowl_geoms": bowl_geom_list(env),
