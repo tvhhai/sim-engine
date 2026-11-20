@@ -63,6 +63,7 @@ def main():
     ap.add_argument("--r", type=float, nargs=3, default=[0.08, 0.42, 0.02], metavar=("MIN", "MAX", "STEP"))
     ap.add_argument("--angle", type=int, nargs=3, default=[-130, 120, 10], metavar=("MIN", "MAX", "STEP"))
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1))
+    ap.add_argument("--update-seeds", action="store_true", help="ghi lại khối SCAN-SEEDS trong config.py: các điểm quét hỏng trong vùng gắp thành seed cố định 7..")
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ap.add_argument("--out", default=os.path.join(here, "docs", "pick_scan.json"))
     args = ap.parse_args()
@@ -76,6 +77,36 @@ def main():
         json.dump({"pan_xy": PAN.tolist(), "angle_from": "+y về phía +x", "points": rows}, f, ensure_ascii=False)
     ok = sum(r["ok"] for r in rows)
     print(f"thành công {ok}/{len(rows)} điểm. Đã ghi {args.out}")
+    if args.update_seeds:
+        update_seeds(rows)
+
+
+def update_seeds(rows):
+    """Viết lại khối SCAN-SEEDS trong config.py: seed 7.. = điểm quét hỏng nằm trong PICK_REGION; sau đó là seed pan ±100/±110 (r 15, 25 cm)."""
+    R = config.PICK_REGION
+    fails = sorted((p for p in rows if not p["ok"] and R["r_min"] - 1e-9 <= p["r"] <= R["r_max"] + 1e-9
+                    and R["angle_min_deg"] <= p["a"] <= R["angle_max_deg"]), key=lambda p: (p["r"], p["a"]))
+    lines, seed = [], 7
+    for p in fails:
+        lines.append(f'    {seed}: ("quét hỏng: r = {p["r"] * 100:.0f} cm, góc {p["a"]:+d}°", ({p["xy"][0]:.4f}, {p["xy"][1]:.4f})),')
+        seed += 1
+    first_pan = seed
+    for a in (100, 110, -100, -110):
+        for r in (0.15, 0.25):
+            th = math.radians(a)
+            x, y = PAN[0] + r * math.sin(th), PAN[1] + r * math.cos(th)
+            lines.append(f'    {seed}: ("pan {a:+d}°, r = {r * 100:.0f} cm (kiểm tra vùng gắp đối xứng)", ({x:.4f}, {y:.4f})),')
+            seed += 1
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.py")
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    a0 = text.index("    # >>> SCAN-SEEDS")
+    a1 = text.index("    # <<< SCAN-SEEDS")
+    nl = chr(10)
+    head = text[a0:text.index(nl, a0) + 1]
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text[:a0] + head + nl.join(lines) + nl + text[a1:])
+    print(f"đã ghi {len(fails)} seed quét hỏng (7-{first_pan - 1}) và 8 seed pan ({first_pan}-{seed - 1}) vào config.py")
 
 
 if __name__ == "__main__":

@@ -88,21 +88,20 @@ BOX_FIXED_SEEDS = {
     4: ("hộp XA bát + tay vươn gần", (0.118, -0.129)),
     5: ("hộp SÁT bát + tay vươn xa", (-0.260, 0.000)),
     6: ("hộp SÁT bát + tay vươn gần", (-0.118, -0.129)),
-    # 7-11: các điểm quét hỏng nằm TRONG vùng gắp (toạ độ đúng như docs/pick_scan.json, tái hiện được từng điểm)
-    # 12-19: pan 100-110° hai phía, để kiểm tra vùng gắp đối xứng
+    # >>> SCAN-SEEDS (tools/scan_pick_region.py --update-seeds ghi lại khối này: seed 7.. = điểm quét hỏng TRONG vùng gắp, tiếp theo là seed pan ±100/±110)
     7: ("quét hỏng: r = 12 cm, góc -60°", (-0.1039, -0.0900)),
     8: ("quét hỏng: r = 12 cm, góc +50°", (0.0919, -0.0729)),
-    9: ("quét hỏng: r = 16 cm, góc +50°", (0.1226, -0.0472)),
-    10: ("quét hỏng: r = 34 cm, góc -80°", (-0.3348, -0.0910)),
-    11: ("quét hỏng: r = 34 cm, góc +80°", (0.3348, -0.0910)),
-    12: ("pan +100°, r = 15 cm (trước đây hỏng: IK không giới hạn khớp ở phase 5-7 lật nhánh)", (0.1477, -0.1760)),
-    13: ("pan +100°, r = 25 cm (trước đây hỏng: IK không giới hạn khớp ở phase 5-7 lật nhánh)", (0.2462, -0.1934)),
-    14: ("pan +110°, r = 15 cm (trước đây hỏng: IK không giới hạn khớp ở phase 5-7 lật nhánh)", (0.1410, -0.2013)),
-    15: ("pan +110°, r = 25 cm (trước đây hỏng: IK không giới hạn khớp ở phase 5-7 lật nhánh)", (0.2349, -0.2355)),
-    16: ("pan -100°, r = 15 cm (trước đây hỏng: IK không giới hạn khớp ở phase 5-7 lật nhánh)", (-0.1477, -0.1760)),
-    17: ("pan -100°, r = 25 cm (trước đây hỏng: IK không giới hạn khớp ở phase 5-7 lật nhánh)", (-0.2462, -0.1934)),
-    18: ("pan -110°, r = 15 cm (trước đây hỏng: IK không giới hạn khớp ở phase 5-7 lật nhánh)", (-0.1410, -0.2013)),
-    19: ("pan -110°, r = 25 cm (trước đây hỏng: IK không giới hạn khớp ở phase 5-7 lật nhánh)", (-0.2349, -0.2355)),
+    9: ("quét hỏng: r = 34 cm, góc -80°", (-0.3348, -0.0910)),
+    10: ("quét hỏng: r = 34 cm, góc +80°", (0.3348, -0.0910)),
+    11: ("pan +100°, r = 15 cm (kiểm tra vùng gắp đối xứng)", (0.1477, -0.1760)),
+    12: ("pan +100°, r = 25 cm (kiểm tra vùng gắp đối xứng)", (0.2462, -0.1934)),
+    13: ("pan +110°, r = 15 cm (kiểm tra vùng gắp đối xứng)", (0.1410, -0.2013)),
+    14: ("pan +110°, r = 25 cm (kiểm tra vùng gắp đối xứng)", (0.2349, -0.2355)),
+    15: ("pan -100°, r = 15 cm (kiểm tra vùng gắp đối xứng)", (-0.1477, -0.1760)),
+    16: ("pan -100°, r = 25 cm (kiểm tra vùng gắp đối xứng)", (-0.2462, -0.1934)),
+    17: ("pan -110°, r = 15 cm (kiểm tra vùng gắp đối xứng)", (-0.1410, -0.2013)),
+    18: ("pan -110°, r = 25 cm (kiểm tra vùng gắp đối xứng)", (-0.2349, -0.2355)),
+    # <<< SCAN-SEEDS
 }
 SETTLED_SPEED = 0.05        # hộp chuyển động chậm hơn mức này (m/s) mới coi là "đã nằm yên"
 
