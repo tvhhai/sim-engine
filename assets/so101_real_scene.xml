@@ -44,6 +44,27 @@
     <mesh file="motor_holder_so101_base_v1.stl"/>
     <mesh file="wrist_roll_follower_so101_v1.stl"/>
     <mesh file="moving_jaw_so101_v1.stl"/>
+    <!-- hai hàm kẹp chia thành các khối nhỏ để bao lồi va chạm bám sát hình thật (xem tools/split_jaw_mesh.py) -->
+    <mesh name="fixed_jaw_part00" file="split/fixed_jaw_part00.stl"/>
+    <mesh name="fixed_jaw_part01" file="split/fixed_jaw_part01.stl"/>
+    <mesh name="fixed_jaw_part02" file="split/fixed_jaw_part02.stl"/>
+    <mesh name="fixed_jaw_part03" file="split/fixed_jaw_part03.stl"/>
+    <mesh name="fixed_jaw_part04" file="split/fixed_jaw_part04.stl"/>
+    <mesh name="fixed_jaw_part05" file="split/fixed_jaw_part05.stl"/>
+    <mesh name="fixed_jaw_part06" file="split/fixed_jaw_part06.stl"/>
+    <mesh name="fixed_jaw_part07" file="split/fixed_jaw_part07.stl"/>
+    <mesh name="fixed_jaw_part08" file="split/fixed_jaw_part08.stl"/>
+    <mesh name="fixed_jaw_part09" file="split/fixed_jaw_part09.stl"/>
+    <mesh name="fixed_jaw_part10" file="split/fixed_jaw_part10.stl"/>
+    <mesh name="fixed_jaw_part11" file="split/fixed_jaw_part11.stl"/>
+    <mesh name="moving_jaw_part00" file="split/moving_jaw_part00.stl"/>
+    <mesh name="moving_jaw_part01" file="split/moving_jaw_part01.stl"/>
+    <mesh name="moving_jaw_part02" file="split/moving_jaw_part02.stl"/>
+    <mesh name="moving_jaw_part03" file="split/moving_jaw_part03.stl"/>
+    <mesh name="moving_jaw_part04" file="split/moving_jaw_part04.stl"/>
+    <mesh name="moving_jaw_part05" file="split/moving_jaw_part05.stl"/>
+    <mesh name="moving_jaw_part06" file="split/moving_jaw_part06.stl"/>
+    <mesh name="moving_jaw_part07" file="split/moving_jaw_part07.stl"/>
     <mesh file="base_motor_holder_so101_v1.stl"/>
     <mesh file="upper_arm_so101_v1.stl"/>
     <mesh file="wrist_roll_pitch_so101_v2.stl"/>
@@ -128,14 +149,32 @@
                 <geom type="mesh" class="visual" pos="0.0077 0.0001 -0.0234" quat="0.707107 -0.707107 1.66015e-15 6.45094e-15" mesh="sts3215_03a_v1" material="sts3215_03a_v1_material"/>
                 <geom type="mesh" class="collision" pos="0.0077 0.0001 -0.0234" quat="0.707107 -0.707107 1.66015e-15 6.45094e-15" mesh="sts3215_03a_v1" material="sts3215_03a_v1_material"/>
                 <geom type="mesh" class="visual" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="wrist_roll_follower_so101_v1" material="wrist_roll_follower_so101_v1_material"/>
-                <geom name="fixed_jaw_col" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="wrist_roll_follower_so101_v1" material="wrist_roll_follower_so101_v1_material"/>
+                <geom name="fixed_jaw_col_00" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="fixed_jaw_part00"/>
+                <geom name="fixed_jaw_col_01" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="fixed_jaw_part01"/>
+                <geom name="fixed_jaw_col_02" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="fixed_jaw_part02"/>
+                <geom name="fixed_jaw_col_03" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="fixed_jaw_part03"/>
+                <geom name="fixed_jaw_col_04" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="fixed_jaw_part04"/>
+                <geom name="fixed_jaw_col_05" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="fixed_jaw_part05"/>
+                <geom name="fixed_jaw_col_06" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="fixed_jaw_part06"/>
+                <geom name="fixed_jaw_col_07" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="fixed_jaw_part07"/>
+                <geom name="fixed_jaw_col_08" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="fixed_jaw_part08"/>
+                <geom name="fixed_jaw_col_09" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="fixed_jaw_part09"/>
+                <geom name="fixed_jaw_col_10" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="fixed_jaw_part10"/>
+                <geom name="fixed_jaw_col_11" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="fixed_jaw_part11"/>
                 <camera name="arm_cam" pos="0.07 0 0.02" xyaxes="1 0 0 0 1 0" fovy="90"/>
                 <site group="3" name="ee_site" pos="-0.0079 -0.000218121 -0.0981274" quat="0.707107 -0 0.707107 -2.37788e-17"/>
                 <body name="moving_jaw_so101_v1" pos="0.0202 0.0188 -0.0234" quat="0.707107 0.707107 -1.85362e-08 1.85362e-08">
                   <joint axis="0 0 1" name="gripper" type="hinge" range="-0.17453297762778586 1.7453291995659765" class="sts3215"/>
                   <inertial pos="-0.00157495 -0.0300244 0.0192755" mass="0.012" fullinertia="6.61427e-06 1.89032e-06 5.28738e-06 -3.19807e-07 -5.90717e-09 -1.09945e-07"/>
                   <geom type="mesh" class="visual" pos="-5.55112e-17 -5.55112e-17 0.0189" quat="1 -0 3.00524e-16 -2.00834e-17" mesh="moving_jaw_so101_v1" material="moving_jaw_so101_v1_material"/>
-                  <geom name="moving_jaw_col" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="-5.55112e-17 -5.55112e-17 0.0189" quat="1 -0 3.00524e-16 -2.00834e-17" mesh="moving_jaw_so101_v1" material="moving_jaw_so101_v1_material"/>
+                  <geom name="moving_jaw_col_00" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="-5.55112e-17 -5.55112e-17 0.0189" quat="1 -0 3.00524e-16 -2.00834e-17" mesh="moving_jaw_part00"/>
+                  <geom name="moving_jaw_col_01" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="-5.55112e-17 -5.55112e-17 0.0189" quat="1 -0 3.00524e-16 -2.00834e-17" mesh="moving_jaw_part01"/>
+                  <geom name="moving_jaw_col_02" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="-5.55112e-17 -5.55112e-17 0.0189" quat="1 -0 3.00524e-16 -2.00834e-17" mesh="moving_jaw_part02"/>
+                  <geom name="moving_jaw_col_03" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="-5.55112e-17 -5.55112e-17 0.0189" quat="1 -0 3.00524e-16 -2.00834e-17" mesh="moving_jaw_part03"/>
+                  <geom name="moving_jaw_col_04" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="-5.55112e-17 -5.55112e-17 0.0189" quat="1 -0 3.00524e-16 -2.00834e-17" mesh="moving_jaw_part04"/>
+                  <geom name="moving_jaw_col_05" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="-5.55112e-17 -5.55112e-17 0.0189" quat="1 -0 3.00524e-16 -2.00834e-17" mesh="moving_jaw_part05"/>
+                  <geom name="moving_jaw_col_06" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="-5.55112e-17 -5.55112e-17 0.0189" quat="1 -0 3.00524e-16 -2.00834e-17" mesh="moving_jaw_part06"/>
+                  <geom name="moving_jaw_col_07" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="-5.55112e-17 -5.55112e-17 0.0189" quat="1 -0 3.00524e-16 -2.00834e-17" mesh="moving_jaw_part07"/>
                 </body>
               </body>
             </body>

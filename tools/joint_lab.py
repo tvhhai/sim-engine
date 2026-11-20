@@ -83,7 +83,9 @@ class Lab:
         self.all_ids = [body(n) for n in ARM_ALL]
         self.wr = body("gripper")
         geom = lambda n: mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, n)
-        self.jaw_fixed, self.jaw_moving = geom("fixed_jaw_col"), geom("moving_jaw_col")
+        names = lambda g: mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_GEOM, g) or ""
+        self.jaw_fixed = [g for g in range(m.ngeom) if names(g).startswith("fixed_jaw_col")]      # mỗi hàm gồm nhiều khối va chạm
+        self.jaw_moving = [g for g in range(m.ngeom) if names(g).startswith("moving_jaw_col")]
         self.kin, self.mesh = arm_model_export(self.env)
         self.bname = lambda b: mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_BODY, int(b))
         self.ik = mujoco.MjData(m)
@@ -142,7 +144,7 @@ class Lab:
     def jaw_dev(self):
         """Độ lệch (độ) giữa trục hai má kẹp và các mặt của hộp: 0 = ôm 2 mặt đối diện, 45 = kẹp vào góc."""
         d = self.d
-        jaw = d.geom_xpos[self.jaw_moving] - d.geom_xpos[self.jaw_fixed]
+        jaw = d.geom_xpos[self.jaw_moving].mean(axis=0) - d.geom_xpos[self.jaw_fixed].mean(axis=0)
         jaw_yaw = math.degrees(math.atan2(jaw[1], jaw[0])) % 180
         q = d.qpos[self.box_adr + 3:self.box_adr + 7]
         box_yaw = math.degrees(math.atan2(2 * (q[0] * q[3] + q[1] * q[2]), 1 - 2 * (q[2] ** 2 + q[3] ** 2))) % 90
@@ -201,7 +203,7 @@ class Lab:
         axis = ee - d.xpos[self.wr]
         axis /= np.linalg.norm(axis)
         tilt = math.degrees(math.acos(max(-1, min(1, -axis[2]))))
-        jaw = d.geom_xpos[self.jaw_moving] - d.geom_xpos[self.jaw_fixed]
+        jaw = d.geom_xpos[self.jaw_moving].mean(axis=0) - d.geom_xpos[self.jaw_fixed].mean(axis=0)
         jaw_yaw = math.degrees(math.atan2(jaw[1], jaw[0])) % 180
         box = d.xpos[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, "box")].copy()
         q = d.qpos[self.box_adr + 3:self.box_adr + 7]

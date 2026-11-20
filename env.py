@@ -87,10 +87,14 @@ class SO101PickPlaceEnv(gym.Env):
 
         self._grasped = False                 # THÔNG TIN: cả hai hàm kẹp đang cùng chạm hộp (không điều khiển gì cả)
         # Hai má kẹp, dùng để biết "hộp đang bị kẹp thật" (cả hai má cùng chạm hộp) 
-        self._pad_geoms = {
-            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "fixed_jaw_col"),
-            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "moving_jaw_col"),
-        }
+        # Mỗi hàm gồm nhiều khối va chạm nhỏ (fixed_jaw_col_00..., moving_jaw_col_00...): {id geom: "fixed" | "moving"}
+        self._pad_geoms = {}
+        for g in range(self.model.ngeom):
+            gname = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, g) or ""
+            if gname.startswith("fixed_jaw_col"):
+                self._pad_geoms[g] = "fixed"
+            elif gname.startswith("moving_jaw_col"):
+                self._pad_geoms[g] = "moving"
         box_joint = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "box_joint")
         self._box_qpos_adr = self.model.jnt_qposadr[box_joint]
         self._box_dof_adr = self.model.jnt_dofadr[box_joint]
@@ -245,8 +249,8 @@ class SO101PickPlaceEnv(gym.Env):
             c = self.data.contact[i]
             for pad, other in ((c.geom1, c.geom2), (c.geom2, c.geom1)):
                 if pad in self._pad_geoms and self.model.geom_bodyid[other] == self._box_body:
-                    touching.add(pad)
-        return len(touching) == len(self._pad_geoms)
+                    touching.add(self._pad_geoms[pad])
+        return len(touching) == 2
 
     def _get_obs(self):
         """Lấy quan sát hiện tại: state (7 số) và ảnh camera (nếu bật render_images)."""
