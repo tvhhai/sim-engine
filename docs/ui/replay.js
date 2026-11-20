@@ -39,15 +39,15 @@ app.innerHTML = `
     <span class="badge" style="background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)" title="Hộp chỉ được giữ bằng ma sát và va chạm thật">KẸP THẬT</span>
     <span class="sub">Policy <code>${S.policy}</code> · hình 2D vẽ lại từ số liệu thật, không phải vật lý</span>
     <span style="flex:1"></span>
-    <details><summary>Chú giải các góc nhìn</summary>
-    <div class="legend">
+    <button type="button" popovertarget="legendPop" class="legend-btn">Chú giải các góc nhìn</button>
+    <div id="legendPop" popover class="legend-pop">
       <span><i style="background:var(--box)"></i>hộp</span><span><i style="background:var(--bowl)"></i>bát (nét đứt = ngưỡng vào bát)</span>
       <span><i style="background:var(--hand)"></i>tay (giữa 2 ngón)</span><span><i style="background:var(--goal)"></i>đích</span>
       <span><i style="background:var(--arm)"></i>Nét giữa = xương tay · vùng nhạt = bề rộng khâu · khung hộp = bộ kẹp. Đỏ = khâu chạm hộp, cam = chạm bàn hoặc sàn, <b style="color:#a855f7">tím = chạm bát</b>.</span>
       <span><i style="background:var(--past)"></i>cánh tay mờ xanh lục = QUÁ KHỨ</span><span><i style="background:var(--future)"></i>cánh tay mờ cam = TƯƠNG LAI</span>
       <span>5 khớp: ${JMEAN}. Đoạn <b>base</b> (đế) đứng yên; hàm kẹp (1 hàm cố định + 1 hàm di động) không có trong IK.</span>
       <span>số nhỏ cạnh cánh tay = lệch bao nhiêu bước so với hiện tại · chấm trên đường đứt = 1 bước</span>
-    </div></details>
+    </div>
   </header>
   <main class="main">
     <div class="card c-small"><h2>NHÌN TỪ TRÊN XUỐNG (x ngang, y dọc, mét) · số 1-5 = khớp<label style="float:right;font-weight:400"><input type="checkbox" id="showReach" checked> vùng gắp được</label></h2><svg id="top" viewBox="0 0 520 340"></svg>
@@ -81,11 +81,6 @@ app.innerHTML = `
       <div class="card"><h2>KẸP VÀ VÀO BÁT: điều kiện env kiểm tra</h2><div id="chk"></div></div>
     </div>
   </main>
-  <details><summary>Tự điều tra một phase chạy lâu</summary>
-<p><b>Mức 1.</b> Chọn một seed hoàn thành và một seed hết bước. Trong cùng một phase, hộp bắt đầu dịch chuyển ở bước nào trên hình nhìn từ trên? Lúc đó tay còn cao hơn hộp bao nhiêu trên hình nhìn từ cạnh?</p>
-<details><summary>Mức 2 · Đọc log</summary><p>Dừng ở hai bước liên tiếp. Khoảng cách tay đến đích thay đổi vì tay di chuyển hay vì chính đích đã đổi? Dòng log nào giúp bạn phân biệt?</p></details>
-<details><summary>Mức 3 · Nối với code</summary><p>Trong <code>scripted_policy.py</code>, tìm <code>select_action</code> và nhánh của phase vừa xem. Điều kiện nào cho phép sang phase kế? Nếu sửa một chỗ, bạn dự đoán đại lượng nào trong log sẽ đổi trước?</p></details>
-<p>Để so tốc độ, hãy ghi bước vào và bước ra của cùng một phase ở cùng một seed trước và sau khi sửa. Cuối lần chạy, hộp có thực sự vào bát không?</p></details>
 <div class="card logcard"><h2>LOG TỪNG BƯỚC (bấm một dòng để nhảy tới)</h2><div class="logwrap" id="logw"></div></div>
 `;
 const $ = id => document.getElementById(id);

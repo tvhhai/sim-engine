@@ -80,7 +80,8 @@
   tr.chg td { border-top:2px solid var(--goal); }
   tr[data-k] { cursor:pointer; }
   .legend { display:flex; flex-wrap:wrap; gap:2px 12px; font-size:12px; color:var(--muted); }
-  .legend i { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:4px; vertical-align:-1px; }
+  .legend-pop { font-size:12px; }
+  .legend i, .legend-pop i { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:4px; vertical-align:-1px; }
   .note { font-size:12.5px; color:var(--muted); }
   .sec { display:flex; align-items:center; gap:8px; margin:9px 0 4px; padding-top:6px; border-top:1px solid var(--line); font-size:11px; font-weight:700; letter-spacing:.07em; color:var(--muted); }
   .sec:first-child { margin-top:0; padding-top:0; border-top:0; }
@@ -108,7 +109,9 @@
   button, select { min-height:30px; }
   .ctl label[for="rng"] { display:block; margin-top:6px; }
   .hd details { flex-basis:100%; }
-  .hd details[open] .legend { padding-top:6px; }
+  .legend-pop { position:fixed; inset:auto; top:56px; right:16px; margin:0; width:min(560px, calc(100vw - 32px)); max-height:calc(100vh - 80px); overflow:auto;
+    flex-direction:column; flex-wrap:nowrap; gap:6px; padding:12px 14px; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:10px; box-shadow:0 8px 28px #0004; }
+  .legend-pop:popover-open { display:flex; }
   .skip { position:absolute; top:0; left:12px; transform:translateY(-130%); }
   .skip:focus { transform:none; z-index:4; background:var(--card); padding:8px; }
   @media (900px <= width < 1150px), (900px <= width) and (height < 760px) {
