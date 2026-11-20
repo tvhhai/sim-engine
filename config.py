@@ -31,6 +31,7 @@ JOINT_LIMITS_RAD = {
 HOME_QPOS_RAD = np.array([0.0, -1.6, 1.55, 0.9, 0.0, 1.2])
 GRIPPER_OPEN_RAD = 1.2      # lệnh mở hết cỡ (hàm di động), action[5] = +1
 GRIPPER_CLOSED_RAD = -0.1   # lệnh đóng/bóp chặt, action[5] = -1
+GRIPPER_REST_RAD = GRIPPER_CLOSED_RAD   # tư thế nghỉ/gấp gọn: kẹp KHÉP (như robot thật khi cất), bắt đầu và kết thúc ván đều thế
 
 # Cấu hình camera (2 camera: webcam nhìn toàn cảnh và arm_cam gắn ở cổ tay)
 CAMERA_WIDTH = 640

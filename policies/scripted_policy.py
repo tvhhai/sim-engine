@@ -107,7 +107,7 @@ class ScriptedPolicy(BasePolicy):
         self._gripper_target = 1.0      # lệnh kẹp: +1 mở, -1 đóng
         self._current_joint_targets = None   # góc khớp đích mà IK vừa tính (radian)
         self._smoothed_action = None    # action đã làm mượt (để chuyển động không giật)
-        self._prev_grip = 1.0           # lệnh kẹp ở bước trước (để giới hạn tốc độ mở)
+        self._prev_grip = -1.0          # lệnh kẹp ở bước trước (để giới hạn tốc độ mở); ván bắt đầu với kẹp khép
         self._regrasps = 0              # đã kẹp lại bao nhiêu lần vì hộp tuột khi đang mang
         self._lost_steps = 0            # số bước liên tiếp hộp nằm xa ee khi đang mang
         self._roll_hold = None          # góc wrist_roll đã chọn để trục kẹp song song mặt hộp (None = chưa chọn)
@@ -147,7 +147,7 @@ class ScriptedPolicy(BasePolicy):
         self._roll_hold = None
         self._regrasps = 0
         self._lost_steps = 0
-        self._prev_grip = 1.0
+        self._prev_grip = -1.0
 
     def select_action(self, observation: dict) -> np.ndarray:
         """Hàm chính: nhìn tình hình hiện tại, trả về action (7 số trong [-1, 1]).
@@ -250,7 +250,7 @@ class ScriptedPolicy(BasePolicy):
 
         elif self._phase == 10:
             # Về tư thế GẤP GỌN ban đầu: đi thẳng trong không gian khớp tới HOME_QPOS_RAD (không qua IK để chắc chắn gập đúng kiểu)
-            self._gripper_target = 1.0
+            self._gripper_target = -1.0     # cất tay thì khép kẹp lại, giống tư thế ban đầu
             self._current_joint_targets = np.array(config.HOME_QPOS_RAD[:5], dtype=float)
             self._phase_step += 1
             err = np.max(np.abs(self.data.qpos[self._qpos_adr] - self._current_joint_targets))

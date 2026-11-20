@@ -91,12 +91,9 @@ class SO101PickPlaceEnv(gym.Env):
             mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "fixed_jaw_col"),
             mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "moving_jaw_col"),
         }
-        self._box_qpos_adr = self.model.jnt_qposadr[
-            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "box_joint")
-        ]
-        self._box_dof_adr = self.model.jnt_dofadr[
-            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "box_joint")
-        ]
+        box_joint = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "box_joint")
+        self._box_qpos_adr = self.model.jnt_qposadr[box_joint]
+        self._box_dof_adr = self.model.jnt_dofadr[box_joint]
 
         # Nhớ trạng thái ban đầu để reset() khôi phục
         mujoco.mj_forward(self.model, self.data)
@@ -141,14 +138,12 @@ class SO101PickPlaceEnv(gym.Env):
             qadr = self.model.jnt_qposadr[jid]
             self.data.qpos[qadr] = config.HOME_QPOS_RAD[i]
 
-        # Mở hết cỡ gripper
+        # Kẹp khép ở tư thế nghỉ (policy sẽ mở ra khi tiếp cận)
         fl_qadr = self.model.jnt_qposadr[self._gripper_jnt]
-        self.data.qpos[fl_qadr] = config.GRIPPER_OPEN_RAD
+        self.data.qpos[fl_qadr] = config.GRIPPER_REST_RAD
 
         # Dịch vị trí hộp ngẫu nhiên trong ±box_range theo x và y (z giữ nguyên)
-        box_qpos_adr = self.model.jnt_qposadr[
-            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "box_joint")
-        ]
+        box_qpos_adr = self._box_qpos_adr
         self.data.qpos[box_qpos_adr:box_qpos_adr + 3] = config.BOX_DEFAULT_POS + self.np_random.uniform(
             low=[-self.box_range, -self.box_range, 0.0], high=[self.box_range, self.box_range, 0.0]
         )
@@ -165,9 +160,7 @@ class SO101PickPlaceEnv(gym.Env):
         # Đặt hướng hộp về mặc định (quaternion đơn vị = không xoay)
         self.data.qpos[box_qpos_adr + 3:box_qpos_adr + 7] = [1, 0, 0, 0]
         # Hộp đứng yên (vận tốc = 0)
-        box_dof_adr = self.model.jnt_dofadr[
-            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "box_joint")
-        ]
+        box_dof_adr = self._box_dof_adr
         self.data.qvel[box_dof_adr:box_dof_adr + 6] = 0.0
 
         # Xóa trạng thái kẹp
@@ -178,7 +171,7 @@ class SO101PickPlaceEnv(gym.Env):
             jid = self._arm_joint_ids[i]
             qadr = self.model.jnt_qposadr[jid]
             self.data.ctrl[i] = self.data.qpos[qadr]
-        self.data.ctrl[5] = config.GRIPPER_OPEN_RAD  # hàm di động mở
+        self.data.ctrl[5] = config.GRIPPER_REST_RAD  # hàm di động khép
 
         # Cho vật lý "lắng xuống" 50 bước (hộp chạm bàn, tay ổn định)
         for _ in range(50):
