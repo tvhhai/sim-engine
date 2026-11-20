@@ -378,6 +378,12 @@ def main():
     scene["kin"], scene["arm_mesh"] = arm_model_export(env)
     scene["cams"] = cameras_export(env)           # camera trong model, để HTML dựng lại góc nhìn của chúng     # cánh tay THẬT: cây khung + lưới tam giác để HTML tự vẽ
     # Vùng với tới của cánh tay (do joint_lab tính và lưu); nếu chưa có thì bỏ qua và nhắc cách tạo
+    # Vùng GẮP ĐƯỢC THẬT: hình quạt trong config.PICK_REGION và các điểm đã quét (tools/scan_pick_region.py -> docs/pick_scan.json)
+    scene["pick_region"] = dict(config.PICK_REGION, pan=list(config.PICK_PAN_XY), bowl_clearance=config.BOX_BOWL_CLEARANCE)
+    scan_path = os.path.join(here, "docs", "pick_scan.json")
+    if os.path.exists(scan_path):
+        with open(scan_path, encoding="utf-8") as f:
+            scene["pick_scan"] = [[p["xy"][0], p["xy"][1], 1 if p["ok"] else 0] for p in json.load(f)["points"]]
     reach_path = os.path.join(here, "docs", "reach_envelope.json")
     if os.path.exists(reach_path):
         with open(reach_path, encoding="utf-8") as f:

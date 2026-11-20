@@ -325,10 +325,25 @@ function hull2(pts) {                                  // bao lồi (monotone ch
 const boxPoly = (fr, fx, fy, a, b) => hull2(boxV(fr.box, bq(fr), S.box_half).map(v => [fx(v[a]), fy(v[b])])).map(p => p.join(",")).join(" ");
 /* ---------- vùng vươn tới của cánh tay (hình vành khuyên quanh trục khớp 1) ---------- */
 const BANDC = ["#0e9aa7", "#d97706", "#8b8f98"];
-const reachOn = () => S.reach && $("showReach") && $("showReach").checked;
+const reachOn = () => (S.pick_region || S.reach) && $("showReach") && $("showReach").checked;
+// Vùng gắp được THẬT = hình quạt quanh trục khớp 1 (S.pick_region): r từ r_min tới r_max, góc đo từ hướng tay (+y) về phía +x.
+const sectorPts = (n = 48) => { const P0 = S.pick_region, pan = P0.pan, pts = [];
+  for (let q = 0; q <= n; q++) { const a = (P0.angle_min_deg + (P0.angle_max_deg - P0.angle_min_deg) * q / n) * Math.PI / 180; pts.push([pan[0] + P0.r_max * Math.sin(a), pan[1] + P0.r_max * Math.cos(a)]); }
+  for (let q = n; q >= 0; q--) { const a = (P0.angle_min_deg + (P0.angle_max_deg - P0.angle_min_deg) * q / n) * Math.PI / 180; pts.push([pan[0] + P0.r_min * Math.sin(a), pan[1] + P0.r_min * Math.cos(a)]); }
+  return pts; };
 const cpath = (cx, cy, r) => `M${cx + r},${cy}a${r},${r} 0 1 0 ${-2*r},0a${r},${r} 0 1 0 ${2*r},0`;
-function reachTop(k) {                         // MỘT vùng màu nhạt: nơi cánh tay gắp được hộp (cắt theo mặt bàn)
+function reachTop(k) {                         // vùng gắp được: hình quạt đo thật + các điểm quét (chấm = gắp được, dấu x = hỏng)
   if (!reachOn()) return "";
+  if (S.pick_region) {
+    const poly = sectorPts().map(([x, y]) => topX(x) + "," + topY(y)).join(" ");
+    let s = `<polygon points="${poly}" fill="#0e9aa7" fill-opacity=".17" stroke="#0e9aa7" stroke-opacity=".7" stroke-width="1.2" stroke-dasharray="5 3"/>`;
+    (S.pick_scan || []).forEach(([x, y, ok]) => {
+      const X = topX(x), Y = topY(y);
+      s += ok ? `<circle cx="${X}" cy="${Y}" r="1.6" fill="#0e9aa7" opacity=".55"/>`
+              : `<path d="M${X - 2.2},${Y - 2.2}l4.4,4.4m0,-4.4l-4.4,4.4" stroke="var(--bad)" stroke-width="1.1" opacity=".65"/>`;
+    });
+    return s;
+  }
   const R = S.reach, cx = topX(R.base[0]), cy = topY(R.base[1]), h = R.r_step / 2;
   const tx0 = topX(-S.table[0]), tx1 = topX(S.table[0]), ty0 = topY(S.table[1]), ty1 = topY(-S.table[1]);
   let s = `<clipPath id="tblclip"><rect x="${tx0}" y="${ty0}" width="${tx1 - tx0}" height="${ty1 - ty0}"/></clipPath><g clip-path="url(#tblclip)">`;
@@ -336,6 +351,15 @@ function reachTop(k) {                         // MỘT vùng màu nhạt: nơi 
   return s + `</g>`;
 }
 function reachInfo(fs) {
+  if (S.pick_region) {
+    const P0 = S.pick_region, b = fs[0].box, dx = b[0] - P0.pan[0], dy = b[1] - P0.pan[1];
+    const rb = Math.hypot(dx, dy), ang = Math.atan2(dx, dy) * 180 / Math.PI;
+    const inR = rb >= P0.r_min && rb <= P0.r_max, inA = ang >= P0.angle_min_deg && ang <= P0.angle_max_deg;
+    const mk = ok => `<span class="${ok ? "y" : "n"}">${ok ? "✓" : "✗"}</span>`;
+    return `<div class="note" style="margin:8px 0 3px"><b>Vùng gắp được</b> (hình quạt đo thật quanh trục khớp 1; dấu chấm/x = điểm đã quét)</div>` +
+      `<div class="chk"><span>${mk(inR)}</span><span>hộp cách trục <b>${cm(rb)}</b> cm; vùng ${(P0.r_min * 100).toFixed(0)}–${(P0.r_max * 100).toFixed(0)} cm</span></div>` +
+      `<div class="chk"><span>${mk(inA)}</span><span>hộp lệch <b>${ang.toFixed(0)}°</b> so với hướng tay; vùng ${P0.angle_min_deg}° … +${P0.angle_max_deg}°</span></div>`;
+  }
   if (!S.reach) return "";
   const R = S.reach, b = fs[0].box, w = S.bowl, bx = R.base[0], by = R.base[1];
   const rb = Math.hypot(b[0] - bx, b[1] - by), rw = Math.hypot(w[0] - bx, w[1] - by);
@@ -619,17 +643,22 @@ function draw3d(fr, fs) {
     EDGES3.forEach(([p, q]) => line(V[p], V[q], K.bowl, 1, .7));
   });
   poly(ring(b, S.bowl_radius, bz1), null, K.bowl, 1, .8, [4, 3]);
-  if (reachOn()) {                                      // một vùng màu nhạt, cắt theo mặt bàn
-    const R = S.reach, bc = [R.base[0], R.base[1], TZ + 0.001], hh = R.r_step / 2;
+  if (reachOn()) {                                      // vùng gắp được: hình quạt màu nhạt trên mặt bàn
     const path = pts => pts.forEach((v, n) => { const q = P(v); n ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); });
-    g.save();
-    g.beginPath(); path([[-TX, -TY, TZ], [TX, -TY, TZ], [TX, TY, TZ], [-TX, TY, TZ]]); g.closePath(); g.clip();
-    R.bands[0].free.forEach(([lo, hi]) => {
-      g.beginPath(); path(ring(bc, hi + hh, TZ + 0.001, 72)); g.closePath();
-      if (lo > 0.03) { path(ring(bc, lo - hh, TZ + 0.001, 72)); g.closePath(); }
-      g.fillStyle = "#0e9aa7"; g.globalAlpha = .17; g.fill("evenodd"); g.globalAlpha = 1;
-    });
-    g.restore();
+    if (S.pick_region) {
+      g.beginPath(); path(sectorPts().map(([x, y]) => [x, y, TZ + 0.001])); g.closePath();
+      g.fillStyle = "#0e9aa7"; g.globalAlpha = .17; g.fill(); g.globalAlpha = .7; g.strokeStyle = "#0e9aa7"; g.lineWidth = 1.2; g.setLineDash([5, 3]); g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
+    } else {
+      const R = S.reach, bc = [R.base[0], R.base[1], TZ + 0.001], hh = R.r_step / 2;
+      g.save();
+      g.beginPath(); path([[-TX, -TY, TZ], [TX, -TY, TZ], [TX, TY, TZ], [-TX, TY, TZ]]); g.closePath(); g.clip();
+      R.bands[0].free.forEach(([lo, hi]) => {
+        g.beginPath(); path(ring(bc, hi + hh, TZ + 0.001, 72)); g.closePath();
+        if (lo > 0.03) { path(ring(bc, lo - hh, TZ + 0.001, 72)); g.closePath(); }
+        g.fillStyle = "#0e9aa7"; g.globalAlpha = .17; g.fill("evenodd"); g.globalAlpha = 1;
+      });
+      g.restore();
+    }
   }
 
   // hộp ban đầu (nét đứt) và mũi tên lệch
