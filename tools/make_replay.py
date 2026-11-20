@@ -121,7 +121,7 @@ def parse_seeds(text):
 
 
 def bowl_geom_list(env):
-    """Hình học thật của bát ở vị trí HIỆN TẠI (đáy trụ + 8 tấm tường), toạ độ thế giới."""
+    """Hình học thật của bát ở vị trí HIỆN TẠI (đáy trụ + 24 tấm tường hẹp xếp vòng tròn), toạ độ thế giới."""
     body = mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_BODY, "bowl")
     return [
         {

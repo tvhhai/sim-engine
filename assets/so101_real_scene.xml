@@ -156,14 +156,31 @@
 
     <body name="bowl" pos="-0.15 0.0 0.42">
       <geom name="bowl_base" type="cylinder" size="0.045 0.003" pos="0 0 0" material="bowl_mat" contype="1" conaffinity="1"/>
-      <geom name="bowl_wall_front" type="box" size="0.003 0.045 0.02" pos="0.045 0 0.02" material="bowl_mat" contype="1" conaffinity="1"/>
-      <geom name="bowl_wall_back" type="box" size="0.003 0.045 0.02" pos="-0.045 0 0.02" material="bowl_mat" contype="1" conaffinity="1"/>
-      <geom name="bowl_wall_left" type="box" size="0.045 0.003 0.02" pos="0 0.045 0.02" material="bowl_mat" contype="1" conaffinity="1"/>
-      <geom name="bowl_wall_right" type="box" size="0.045 0.003 0.02" pos="0 -0.045 0.02" material="bowl_mat" contype="1" conaffinity="1"/>
-      <geom name="bowl_wall_fl" type="box" size="0.003 0.045 0.02" pos="0.032 0.032 0.02" euler="0 0 0.785" material="bowl_mat" contype="1" conaffinity="1"/>
-      <geom name="bowl_wall_fr" type="box" size="0.003 0.045 0.02" pos="0.032 -0.032 0.02" euler="0 0 -0.785" material="bowl_mat" contype="1" conaffinity="1"/>
-      <geom name="bowl_wall_bl" type="box" size="0.003 0.045 0.02" pos="-0.032 0.032 0.02" euler="0 0 -0.785" material="bowl_mat" contype="1" conaffinity="1"/>
-      <geom name="bowl_wall_br" type="box" size="0.003 0.045 0.02" pos="-0.032 -0.032 0.02" euler="0 0 0.785" material="bowl_mat" contype="1" conaffinity="1"/>
+      <!-- Thành bát: 24 tấm hẹp xếp quanh vòng tròn bán kính 0.045 (mặt trong 0.042), nên gần đúng hình trụ rỗng, không còn hình sao 8 cạnh -->
+      <geom name="bowl_wall_00" type="box" size="0.0030 0.0079 0.0200" pos="0.04500 0.00000 0.020" euler="0 0 0.00000" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_01" type="box" size="0.0030 0.0079 0.0200" pos="0.04347 0.01165 0.020" euler="0 0 0.26180" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_02" type="box" size="0.0030 0.0079 0.0200" pos="0.03897 0.02250 0.020" euler="0 0 0.52360" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_03" type="box" size="0.0030 0.0079 0.0200" pos="0.03182 0.03182 0.020" euler="0 0 0.78540" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_04" type="box" size="0.0030 0.0079 0.0200" pos="0.02250 0.03897 0.020" euler="0 0 1.04720" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_05" type="box" size="0.0030 0.0079 0.0200" pos="0.01165 0.04347 0.020" euler="0 0 1.30900" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_06" type="box" size="0.0030 0.0079 0.0200" pos="0.00000 0.04500 0.020" euler="0 0 1.57080" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_07" type="box" size="0.0030 0.0079 0.0200" pos="-0.01165 0.04347 0.020" euler="0 0 1.83260" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_08" type="box" size="0.0030 0.0079 0.0200" pos="-0.02250 0.03897 0.020" euler="0 0 2.09440" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_09" type="box" size="0.0030 0.0079 0.0200" pos="-0.03182 0.03182 0.020" euler="0 0 2.35619" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_10" type="box" size="0.0030 0.0079 0.0200" pos="-0.03897 0.02250 0.020" euler="0 0 2.61799" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_11" type="box" size="0.0030 0.0079 0.0200" pos="-0.04347 0.01165 0.020" euler="0 0 2.87979" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_12" type="box" size="0.0030 0.0079 0.0200" pos="-0.04500 0.00000 0.020" euler="0 0 3.14159" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_13" type="box" size="0.0030 0.0079 0.0200" pos="-0.04347 -0.01165 0.020" euler="0 0 3.40339" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_14" type="box" size="0.0030 0.0079 0.0200" pos="-0.03897 -0.02250 0.020" euler="0 0 3.66519" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_15" type="box" size="0.0030 0.0079 0.0200" pos="-0.03182 -0.03182 0.020" euler="0 0 3.92699" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_16" type="box" size="0.0030 0.0079 0.0200" pos="-0.02250 -0.03897 0.020" euler="0 0 4.18879" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_17" type="box" size="0.0030 0.0079 0.0200" pos="-0.01165 -0.04347 0.020" euler="0 0 4.45059" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_18" type="box" size="0.0030 0.0079 0.0200" pos="-0.00000 -0.04500 0.020" euler="0 0 4.71239" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_19" type="box" size="0.0030 0.0079 0.0200" pos="0.01165 -0.04347 0.020" euler="0 0 4.97419" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_20" type="box" size="0.0030 0.0079 0.0200" pos="0.02250 -0.03897 0.020" euler="0 0 5.23599" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_21" type="box" size="0.0030 0.0079 0.0200" pos="0.03182 -0.03182 0.020" euler="0 0 5.49779" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_22" type="box" size="0.0030 0.0079 0.0200" pos="0.03897 -0.02250 0.020" euler="0 0 5.75959" material="bowl_mat" contype="1" conaffinity="1"/>
+      <geom name="bowl_wall_23" type="box" size="0.0030 0.0079 0.0200" pos="0.04347 -0.01165 0.020" euler="0 0 6.02139" material="bowl_mat" contype="1" conaffinity="1"/>
     </body>
   </worldbody>
 

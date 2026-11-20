@@ -321,7 +321,7 @@ function drawTop(fr, fs) {
   s += reachTop(k);
   s += `<text x="${topX(b[0])}" y="${topY(b[1]) - 0.06*k}" font-size="10" text-anchor="middle" fill="var(--bowl)" font-weight="700">bát</text>`;
   s += `<text x="${topX(fr.arm[0][0]) + 9}" y="${topY(fr.arm[0][1]) + 4}" font-size="10" fill="var(--ink)">đế robot</text>`;
-  S.bowl_geoms.forEach(g => {                           // bát thật: đáy tròn + 8 tấm tường (chồng lên nhau thành hình sao 8 cạnh)
+  S.bowl_geoms.forEach(g => {                           // bát thật: đáy tròn + 24 tấm tường hẹp xếp thành vòng tròn (gần đúng hình trụ rỗng)
     if (g.type === "cylinder") s += `<circle cx="${topX(g.pos[0])}" cy="${topY(g.pos[1])}" r="${g.size[0]*k}" fill="var(--bowl)" opacity=".2"/>`;
     else s += `<polygon points="${wallCorners(g).map(p => topX(p[0]) + "," + topY(p[1])).join(" ")}" fill="var(--bowl)" fill-opacity=".4" stroke="var(--bowl)" stroke-width="1"/>`;
   });
@@ -568,7 +568,7 @@ function draw3d(fr, fs) {
   for (let v = -0.4; v <= 0.401; v += 0.1) { line([-TX,v,TZ],[TX,v,TZ], K.muted, .5, .3); }
   // bát: đáy, miệng, thành, vòng ngưỡng
   const b = S.bowl, bz1 = b[2] + S.bowl_height;
-  S.bowl_geoms.forEach(g => {                           // đáy (đĩa) + 8 tấm tường, vẽ khung dây theo đúng kích thước model
+  S.bowl_geoms.forEach(g => {                           // đáy (đĩa) + các tấm tường hẹp của thành bát, vẽ khung dây theo đúng kích thước model
     if (g.type === "cylinder") { poly(ring(g.pos, g.size[0], g.pos[2] + g.size[1]), K.bowl, K.bowl, 1, .3); return; }
     const V = wallCorners3(g);
     poly([V[4], V[5], V[7], V[6]], K.bowl, null, 0, .12);                          // mặt trên của tấm tường
