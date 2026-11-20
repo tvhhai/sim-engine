@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hiểu SimEngine trong 15 phút</title>
+<style>
+  :root {
+    --bg: #fbfaf7; --surface: #ffffff; --text: #1d2330; --muted: #5d6677; --line: #dfe3ea;
+    --accent: #2f5fd0; --code-bg: #f1f3f7; --code-text: #1d2330; --warn-bg: #fff6e0; --warn-line: #e0b24a;
+    --k-default-f: #eef1f6; --k-default-s: #9aa5b8;
+    --k-sim-f: #dbe7ff; --k-sim-s: #4d78d6;
+    --k-data-f: #ffe9cf; --k-data-s: #d98b2b;
+    --k-cloud-f: #ebe0ff; --k-cloud-s: #8460d6;
+    --k-ok-f: #d9f3e2; --k-ok-s: #3b9a63;
+    --k-real-f: #e8e8ec; --k-real-s: #7a7f8c;
+    --k-tool-f: #fde0ea; --k-tool-s: #d1517e;
+    --hl: #d6322b; --edge: #6b7487;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12151c; --surface: #1a1e28; --text: #e6e9f0; --muted: #98a1b3; --line: #2c3342;
+      --accent: #7ea2ff; --code-bg: #1f2431; --code-text: #e6e9f0; --warn-bg: #2d2615; --warn-line: #8a6d20;
+      --k-default-f: #242a38; --k-default-s: #5b6579;
+      --k-sim-f: #1f3566; --k-sim-s: #6c93ee;
+      --k-data-f: #4a3416; --k-data-s: #e3a04a;
+      --k-cloud-f: #382a5f; --k-cloud-s: #a688ee;
+      --k-ok-f: #1c4a31; --k-ok-s: #5fc08a;
+      --k-real-f: #2c2f38; --k-real-s: #8c92a1;
+      --k-tool-f: #55213a; --k-tool-s: #ee7aa3;
+      --hl: #ff6b62; --edge: #8993a8;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 40px 16px 8px; max-width: 980px; margin: 0 auto; }
+  header h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.25; }
+  header p { margin: 0; color: var(--muted); }
+  nav { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+  nav .in { max-width: 980px; margin: 0 auto; padding: 8px 16px; display: flex; gap: 6px 14px; flex-wrap: wrap; font-size: 14px; }
+  nav a { color: var(--muted); text-decoration: none; padding: 2px 0; }
+  nav a:hover { color: var(--accent); }
+  main { max-width: 980px; margin: 0 auto; padding: 8px 16px 80px; }
+  section { padding-top: 36px; }
+  h2 { font-size: 24px; margin: 0 0 6px; line-height: 1.3; }
+  h3 { font-size: 18px; margin: 26px 0 6px; }
+  p, li { max-width: 74ch; }
+  .lead { color: var(--muted); margin-top: 0; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin: 14px 0; }
+  .chart { width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; margin: 14px 0 4px; }
+  .cap { font-size: 14px; color: var(--muted); margin: 0 0 14px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); margin: 4px 0 12px; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 1.5px solid; }
+  code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 0.92em; background: var(--code-bg);
+    padding: 1px 6px; border-radius: 5px; }
+  pre { background: var(--code-bg); color: var(--code-text); border-radius: 10px; padding: 12px 14px; overflow-x: auto;
+    font: 13px/1.55 ui-monospace, "Cascadia Mono", Consolas, monospace; margin: 8px 0; border: 1px solid var(--line); }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; margin: 10px 0; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; }
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } header h1 { font-size: 25px; } }
+  .note { background: var(--warn-bg); border-left: 4px solid var(--warn-line); padding: 10px 14px; border-radius: 6px; margin: 12px 0; }
+  .step { display: grid; grid-template-columns: 36px 1fr; gap: 12px; margin: 22px 0; }
+  .step .n { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700;
+    display: grid; place-items: center; font-size: 15px; }
+  .step h3 { margin-top: 2px; }
+  .step > div { min-width: 0; }
+  .tag { font-size: 12px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); margin-left: 6px; vertical-align: 2px; }
+  .nograph { display: none; padding: 16px; color: var(--muted); }
+</style>
+<link rel="stylesheet" href="ui/accessibility.css">
+</head>
+<body>
+
+<header>
+  <h1>Hiểu SimEngine trong 15 phút</h1>
+  <p>Luồng hoạt động, file nào mở trước, và cách in log để tự quan sát — đi từ đơn giản đến phức tạp. Dành cho người mới với robot learning.</p>
+</header>
+
+<nav><div class="in">
+  <a href="#easy">0. Hiểu bằng ví dụ</a>
+  <a href="#big">1. Bức tranh lớn</a>
+  <a href="#loop">2. Vòng lặp cốt lõi</a>
+  <a href="#step">3. Bên trong step()</a>
+  <a href="#policy">4. Policy viết tay</a>
+  <a href="#target">4b. Đích đến của tay</a>
+  <a href="#files">5. File nào mở trước</a>
+  <a href="#logs">6. Xem log</a>
+  <a href="#practice">7. Bài tập</a>
+  <a href="#quirks">8. Điểm lạ</a>
+  <a href="#cam">9. Camera cổ tay</a>
+  <a href="#seed">10. Chạy một seed</a>
+</div></nav>
+
+<main>
+
+<!-- ============ 0 ============ -->
+<section id="easy">
+  <h2>0. Hiểu bằng ví dụ: một trò chơi có 1 người chơi</h2>
+  <p class="lead">Đọc phần này trước. Nếu phần này rõ rồi thì mọi phần sau chỉ là chi tiết.</p>
+
+  <div class="card">
+    <p style="margin-top:0">Hãy tưởng tượng một <b>trò chơi điện tử</b>: màn hình có một cánh tay robot, một hộp đỏ và một cái bát xanh. Mục tiêu: <b>đưa hộp đỏ vào bát</b>.</p>
+    <table>
+      <tr><th>Trong trò chơi</th><th>Trong code</th><th>Nghĩa đơn giản</th></tr>
+      <tr><td>Trò chơi (cả màn hình và luật chơi)</td><td><b>env</b> (<code>env.py</code>)</td><td>Thế giới ảo: robot, hộp, bát, vật lý</td></tr>
+      <tr><td>Người chơi</td><td><b>policy</b> (<code>scripted_policy.py</code>)</td><td>Bộ não quyết định bấm gì</td></tr>
+      <tr><td>Màn hình mà người chơi nhìn</td><td><b>obs</b> (quan sát)</td><td>Góc các khớp robot + ảnh camera</td></tr>
+      <tr><td>Các nút bấm</td><td><b>action</b> (hành động)</td><td>7 con số: "xoay các khớp tới góc này, kẹp hay nhả"</td></tr>
+      <tr><td>Một lần nhìn rồi bấm</td><td><b>step</b> (1 bước)</td><td>Khoảng 1/30 giây</td></tr>
+      <tr><td>Một ván chơi</td><td><b>episode</b></td><td>Tối đa 500 bước (~16 giây). Hộp vào bát = thắng</td></tr>
+      <tr><td>Số may rủi của ván</td><td><b>seed</b></td><td>Quyết định hộp nằm lệch chỗ nào. Cùng seed thì ván chơi lặp lại y hệt</td></tr>
+    </table>
+  </div>
+
+  <h3>Một ván chơi diễn ra thế này</h3>
+  <ol>
+    <li>Trò chơi đặt robot ở tư thế nghỉ, hộp nằm lệch một chút (tùy seed).</li>
+    <li><b>Lặp lại 500 lần:</b> người chơi nhìn màn hình, bấm nút, trò chơi cập nhật.</li>
+    <li>Khi hộp vào bát, ván kết thúc: <b>thắng</b>. Hết 500 bước mà chưa xong: <b>thua</b>.</li>
+  </ol>
+
+  <h3>Người chơi ở đây không phải AI</h3>
+  <p>Hiện tại "người chơi" là một <b>kịch bản viết sẵn gồm 12 bước</b> (gọi là 12 <b>phase</b>): "đưa tay lên cao, đi tới trên hộp, hạ xuống, kẹp lại, nhấc lên, đi tới bát, thả ra, về chỗ cũ". Nó giống một <b>bot</b> chơi theo kịch bản. Bot này thắng 8 trên 10 ván thử.</p>
+
+  <h3>Vậy để làm gì?</h3>
+  <p>Vì <b>bot ghi lại được các ván chơi thắng</b>. Hàng trăm ván ghi lại (gọi là <b>demo</b>) trở thành <b>sách giáo khoa</b> cho một model AI. AI xem sách đó rồi tự học cách chơi. Cuối khóa, AI thay thế bot, nhìn camera và nghe câu lệnh để điều khiển robot thật.</p>
+  <div class="note"><b>Tóm lại một câu:</b> bot viết tay tạo dữ liệu, AI học từ dữ liệu đó. Bạn đang ở bước làm quen với bot và trò chơi.</div>
+
+  <h3>Hai từ khó, nói bằng lời thường</h3>
+  <table>
+    <tr><th>Từ</th><th>Nghĩa thường</th></tr>
+    <tr><td><b>IK</b> (inverse kinematics)</td><td>"Muốn đầu tay tới điểm này thì mỗi khớp phải xoay bao nhiêu?" Giống như tính cách duỗi tay để chạm vào một cái cốc.</td></tr>
+    <tr><td><b>Phase</b></td><td>Một bước trong kịch bản của bot (ví dụ "hạ xuống kẹp"). Bot đi lần lượt từ phase 0 đến phase 11.</td></tr>
+  </table>
+</section>
+
+<!-- ============ 1 ============ -->
+<section id="big">
+  <h2>1. Bức tranh lớn: cả khóa học là một chuỗi</h2>
+  <p class="lead">Mục tiêu cuối: robot SO-101 làm theo câu lệnh. Con đường đi qua giả lập trước, robot thật sau. Viền đỏ là chỗ bạn đang đứng (tuần 1 đến 3).</p>
+  <div class="legend">
+    <span><i style="background:var(--k-sim-f);border-color:var(--k-sim-s)"></i>Giả lập / code</span>
+    <span><i style="background:var(--k-data-f);border-color:var(--k-data-s)"></i>Dữ liệu</span>
+    <span><i style="background:var(--k-cloud-f);border-color:var(--k-cloud-s)"></i>Train trên Colab</span>
+    <span><i style="background:var(--k-ok-f);border-color:var(--k-ok-s)"></i>Mốc kiểm tra</span>
+    <span><i style="background:var(--k-real-f);border-color:var(--k-real-s)"></i>Robot thật</span>
+  </div>
+  <div id="g-big" class="chart" style="height:330px"></div>
+  <p class="cap">Theo Gantt của team (Sheet). Tuần 1 đến 3: sim + policy viết tay. Tuần 4: thu demo. Tuần 5 đến 6: train. Tuần 7 đến 12: robot thật.</p>
+  <p>Điểm cốt lõi: <b>policy viết tay</b> chỉ là cách tạo demo tự động. Sau này nó được thay bằng một <b>model AI</b> học từ chính những demo đó. Phần còn lại (env, camera, dataset) giữ nguyên.</p>
+</section>
+
+<!-- ============ 2 ============ -->
+<section id="loop">
+  <h2>2. Vòng lặp cốt lõi: chỉ có 3 thứ</h2>
+  <p class="lead">Mọi thứ trong robot learning đều xoay quanh vòng này. Hiểu nó là hiểu 80% repo.</p>
+  <div class="legend">
+    <span><i style="background:var(--k-sim-f);border-color:var(--k-sim-s)"></i>Policy (bộ não)</span>
+    <span><i style="background:var(--k-ok-f);border-color:var(--k-ok-s)"></i>Env (sân tập, MuJoCo)</span>
+    <span><i style="background:var(--k-data-f);border-color:var(--k-data-s)"></i>Dữ liệu đi qua</span>
+  </div>
+  <div id="g-loop" class="chart" style="height:250px"></div>
+  <p class="cap">Mỗi vòng = 1 bước ≈ 1/30 giây. Một episode tối đa 500 bước (~16 giây).</p>
+  <div class="card">
+<pre><code>obs, info = env.reset(seed=0)              # đặt sân tập về trạng thái đầu
+for step in range(500):
+    action = policy.select_action(obs)     # policy nhìn quan sát, quyết định hành động
+    obs, reward, terminated, truncated, info = env.step(action)   # env thực hiện
+    if terminated or truncated: break      # terminated = thành công, truncated = hết giờ</code></pre>
+  </div>
+  <table>
+    <tr><th>Thứ</th><th>Là gì</th><th>Trong code</th></tr>
+    <tr><td><b>obs</b> (quan sát)</td><td>7 số trạng thái + ảnh 2 camera</td><td><code>env._get_obs()</code></td></tr>
+    <tr><td><b>action</b> (hành động)</td><td>7 số trong [-1, 1]: góc đích 5 khớp + lệnh kẹp</td><td><code>policy.select_action()</code></td></tr>
+    <tr><td><b>info</b></td><td>Thông tin phụ cho bạn xem: vị trí hộp, bát, cờ thành công. <u>Policy AI không được dùng</u></td><td><code>env._get_info()</code></td></tr>
+  </table>
+</section>
+
+<!-- ============ 3 ============ -->
+<section id="step">
+  <h2>3. Bên trong một lần <code>env.step(action)</code></h2>
+  <p class="lead"><b>Phần nâng cao, lần đầu có thể bỏ qua.</b> Đây là file <code>env.py</code>, nơi "chấm điểm" và "kẹp giả" nằm. Khi nào bạn muốn đọc code của <code>step</code> thì quay lại đây.</p>
+  <div class="cols">
+    <div>
+      <div class="legend">
+        <span><i style="background:var(--k-sim-f);border-color:var(--k-sim-s)"></i>Xử lý</span>
+        <span><i style="background:var(--k-data-f);border-color:var(--k-data-s)"></i>Kẹp giả</span>
+        <span><i style="background:var(--k-ok-f);border-color:var(--k-ok-s)"></i>Kết quả trả về</span>
+      </div>
+      <div id="g-step" class="chart" style="height:540px"></div>
+    </div>
+    <div>
+      <ol>
+        <li><b>Đổi thang:</b> action [-1,1] đổi thành góc đích thật của từng khớp (theo khoảng trong XML).</li>
+        <li><b>Kẹp:</b> action[5] đổi thành độ mở mỗi ngón (0,005 đến 0,04 m).</li>
+        <li><b><code>_update_grasp</code>:</b> nếu lệnh đóng + ngón khép + tay cách hộp dưới 6 cm thì hộp bị <b>dính</b> vào tay bằng cách gán vị trí. Không phải ma sát thật.</li>
+        <li><b>Vật lý:</b> chạy 16 bước nhỏ 0,002 s (tổng 0,032 s, tức 31,25 Hz chứ không đúng 30).</li>
+        <li><b>Quan sát mới</b> (<code>_get_obs</code>) và thông tin (<code>_get_info</code>).</li>
+        <li><b>Chấm điểm:</b> thành công khi hộp trong bán kính 5 cm của bát và đúng độ cao. Hết 500 bước thì truncated.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section id="policy">
+  <h2>4. Policy viết tay: 12 phase đi từ trái sang phải</h2>
+  <p class="lead">File <code>policies/scripted_policy.py</code>. Mỗi phase có một điểm đích (x, y, z). IK tính góc khớp để tay tới điểm đó.</p>
+  <div class="legend">
+    <span><i style="background:var(--k-sim-f);border-color:var(--k-sim-s)"></i>Di chuyển tay (dùng IK)</span>
+    <span><i style="background:var(--k-data-f);border-color:var(--k-data-s)"></i>Đóng / mở kẹp (chờ số bước cố định)</span>
+    <span><i style="background:var(--k-default-f);border-color:var(--k-default-s)"></i>Kết thúc</span>
+  </div>
+  <div id="g-policy" class="chart" style="height:330px"></div>
+  <p class="cap">Đường đi rắn: hàng 1 từ trái sang phải, hàng 2 từ phải sang trái, hàng 3 từ trái sang phải.</p>
+  <h3>Khi nào policy chuyển phase?</h3>
+  <p>Trong <code>_move_toward</code>: chuyển khi tay cách đích dưới <code>threshold</code> (2 đến 2,5 cm) <b>hoặc</b> đã ở phase này quá 200 bước (timeout). Nếu thấy một phase kéo dài đúng 200 bước, tay không tới được đích.</p>
+  <details>
+    <summary><b>Nâng cao: IK trong 4 dòng code (bấm để mở)</b></summary>
+<pre><code>error = target_pos - shadow_ee               # tay còn cách đích bao xa (vector 3D)
+J = jacobian                                 # xoay mỗi khớp 1 chút thì tay dịch chuyển thế nào
+dq = J.T @ solve(J @ J.T + lam**2 * I, error)  # giải: cần xoay mỗi khớp bao nhiêu
+qpos += dq * 0.4                             # nhích 40%, lặp tối đa 40 lần</code></pre>
+    <div class="note"><b>Lưu ý:</b> IK này chỉ điều khiển <u>vị trí</u> 3D của đầu tay, không điều khiển <u>hướng</u> của tay (ví dụ góc xoay cổ tay).</div>
+  </details>
+</section>
+
+<!-- ============ 4b ============ -->
+<section id="target">
+  <h2>4b. Đích đến của tay đến từ đâu?</h2>
+  <p class="lead">Ba câu hỏi: vị trí hộp và bát lấy ở đâu, tay đi tới đó bằng cách nào, và ai quyết định "gắp được rồi".</p>
+
+  <h3>1. Vị trí hộp và bát: policy chỉ việc hỏi env</h3>
+  <ul>
+    <li>Bát cố định ở <code>(-0.15, 0, 0.41)</code>, hộp mặc định ở <code>(0.15, 0, 0.44)</code> (file <code>config.py</code>, đơn vị mét).</li>
+    <li>Mỗi lần <code>reset(seed)</code>, env cộng thêm độ lệch ngẫu nhiên ±3 cm vào x, y của hộp. Cùng seed thì cùng vị trí.</li>
+    <li>Policy gọi <code>env.get_box_pos()</code> và <code>env.get_bowl_pos()</code>: đọc thẳng từ bộ mô phỏng, không cần camera.</li>
+  </ul>
+  <div class="note"><b>Đây là "gian lận" có chủ ý.</b> Trong thực tế robot không được cho sẵn tọa độ hộp. Mục 4b.5 bên dưới giải thích vì sao vẫn làm vậy trong mô phỏng.</div>
+
+  <h3>2. Mỗi phase chọn một điểm đích (x, y, z)</h3>
+  <p>x, y lấy từ vị trí hộp hoặc bát. z là các hằng số do tác giả đặt tay trong <code>scripted_policy.py</code>. Hình dưới là nhìn ngang (trục x nằm ngang, z là chiều cao):</p>
+  <svg viewBox="0 0 720 310" style="width:100%;max-width:720px;height:auto;display:block;margin:12px auto" role="img" aria-label="Các điểm đích của tay nhìn ngang">
+    <line x1="20" y1="256" x2="700" y2="256" stroke="currentColor" stroke-opacity=".4" stroke-width="2"/>
+    <text x="24" y="274" font-size="12" fill="currentColor" opacity=".7">mặt bàn</text>
+    <rect x="552" y="226" width="36" height="30" rx="2" fill="#e24b4a" fill-opacity=".85"/>
+    <text x="570" y="296" font-size="13" text-anchor="middle" fill="currentColor">hộp (x=0.15)</text>
+    <path d="M122 232 L130 256 L170 256 L178 232 Z" fill="none" stroke="currentColor" stroke-width="2"/>
+    <text x="150" y="296" font-size="13" text-anchor="middle" fill="currentColor">bát (x=-0.15)</text>
+    <g font-size="12" fill="currentColor">
+      <circle cx="570" cy="60" r="6" fill="#378add"/><text x="570" y="46" text-anchor="end">phase 1: z=0.62 (safe_z)</text>
+      <circle cx="570" cy="220" r="6" fill="#378add"/><text x="558" y="212" text-anchor="end">phase 2: z=0.46 (pre_grasp)</text>
+      <circle cx="570" cy="246" r="6" fill="#ef9f27"/><text x="542" y="250" text-anchor="end">phase 3: z=0.434 (gắp)</text>
+      <circle cx="150" cy="60" r="6" fill="#378add"/><text x="150" y="46">phase 6: trên bát (safe_z)</text>
+      <circle cx="150" cy="200" r="6" fill="#378add"/><text x="162" y="196">phase 7: z=0.48 (place_z)</text>
+    </g>
+    <line x1="570" y1="66" x2="570" y2="214" stroke="currentColor" stroke-opacity=".35" stroke-dasharray="4 4"/>
+    <line x1="156" y1="60" x2="564" y2="60" stroke="currentColor" stroke-opacity=".35" stroke-dasharray="4 4"/>
+  </svg>
+  <p class="cap">Đường đi: nâng lên cao, đi ngang tới trên hộp, hạ xuống từng nấc, gắp, nhấc lên, đi ngang tới trên bát, hạ xuống thả. Vị trí các điểm là minh họa theo tỷ lệ gần đúng.</p>
+
+  <h3>3. Tay "tới rồi" thế nào</h3>
+  <p>Trong <code>_move_toward</code>: đo khoảng cách giữa tay và điểm đích. Dưới 2 đến 2,5 cm thì sang phase kế. Quá 200 bước thì cũng sang phase kế (timeout). Policy <b>không</b> kiểm tra gì thêm, ví dụ "hộp còn nằm đúng chỗ không".</p>
+
+  <h3>4. Ai quyết định "gắp được rồi"?</h3>
+  <p>Hàm <code>_update_grasp</code> trong <code>env.py</code>. Hộp được dính vào tay khi đủ ba điều kiện: lệnh đang đóng kẹp, ngón đã khép, tay gần hộp (dưới ngưỡng). Đây là kẹp giả bằng code, không phải lực ma sát thật. Độ cao gắp <code>_grasp_z = 0.434</code> là con số do tác giả thử cho ngang tâm hộp (hộp ở z=0.44, cao 3 cm).</p>
+
+  <h3>5. Ngoài đời thật thì sao?</h3>
+  <table>
+    <tr><th></th><th>Trong sim (policy viết tay)</th><th>Robot thật / policy AI</th></tr>
+    <tr><td>Biết vị trí hộp?</td><td>Có, đọc thẳng từ sim</td><td><b>Không.</b> Phải suy ra từ ảnh camera</td></tr>
+    <tr><td>Biết vị trí tay?</td><td>Có, tính từ góc khớp (forward kinematics)</td><td>Có, tương tự: encoder đo góc khớp</td></tr>
+    <tr><td>Đầu vào</td><td>Tọa độ chính xác</td><td>Ảnh + góc khớp + câu lệnh ("gắp hộp bỏ vào bát")</td></tr>
+    <tr><td>Đầu ra</td><td>Góc khớp đích (qua IK)</td><td>Action trực tiếp, mô hình tự học cách đi tới</td></tr>
+  </table>
+  <div class="note"><b>Vì sao vẫn dùng policy "gian lận"?</b> Nó chỉ là <u>máy tạo dữ liệu mẫu</u>. Chạy nó nhiều lần để ghi lại (ảnh, góc khớp, action) của các ván thắng. Sau đó AI (ACT, SmolVLA) học từ dữ liệu đó, mà AI <u>chỉ được nhìn ảnh</u>. Việc "nhìn ảnh để biết hộp ở đâu" là phần AI tự học, không phải phần bạn viết. Vì vậy phần này của policy viết tay <b>không cần viết lại</b>: nó đúng vai trò của nó trong sim.</div>
+</section>
+
+<!-- ============ 5 ============ -->
+<section id="files">
+  <h2>5. File nào mở trước</h2>
+  <p class="lead">Đọc theo thứ tự này, mỗi file khoảng 5 đến 10 phút. Bốn file có viền đỏ trong sơ đồ (và in đậm trong bảng) là file chính.</p>
+  <div class="legend">
+    <span><i style="background:var(--k-sim-f);border-color:var(--k-sim-s)"></i>Code lõi</span>
+    <span><i style="background:var(--k-ok-f);border-color:var(--k-ok-s)"></i>Cấu hình / mô hình</span>
+    <span><i style="background:var(--k-default-f);border-color:var(--k-default-s)"></i>Giao diện / thu demo</span>
+    <span><i style="background:var(--k-tool-f);border-color:var(--k-tool-s)"></i>Công cụ mới (bạn có thêm)</span>
+  </div>
+  <div id="g-files" class="chart" style="height:440px"></div>
+  <p class="cap">Mũi tên = "dùng / gọi tới". Bắt đầu từ cột phải (nền móng) rồi đọc ngược sang trái.</p>
+  <table>
+    <tr><th>#</th><th>File</th><th>Đọc gì trong đó</th></tr>
+    <tr><td>1</td><td><b><code>config.py</code></b></td><td>Hằng số: tên khớp, vị trí hộp và bát, tần số, số bước tối đa. Ngắn, đọc 2 phút.</td></tr>
+    <tr><td>2</td><td><b><code>env.py</code></b></td><td><code>reset</code>, <code>step</code>, <code>_update_grasp</code>, <code>_get_info</code> (chỗ chấm thành công).</td></tr>
+    <tr><td>3</td><td><b><code>policies/scripted_policy.py</code></b></td><td><code>select_action</code> (12 phase) và <code>_move_toward</code> (IK). <u>Đây là file bạn sẽ sửa nhiều nhất.</u></td></tr>
+    <tr><td>4</td><td><b><code>assets/so101_scene.xml</code></b></td><td>Robot, bàn, hộp, bát, camera. Xem phần ngón kẹp và khối hộp (dòng 99 đến 150).</td></tr>
+    <tr><td>5</td><td><code>record.py</code></td><td>Vòng lặp thu demo: chạy policy rồi lưu từng bước.</td></tr>
+    <tr><td>6</td><td><code>app.py</code>, <code>viewer.py</code></td><td>Giao diện menu 1 đến 5. Đọc sau cùng, ít quan trọng.</td></tr>
+  </table>
+</section>
+
+<!-- ============ 6 ============ -->
+<section id="logs">
+  <h2>6. Xem log: từ đơn giản đến phức tạp</h2>
+  <p class="lead">Làm lần lượt từ bước 1. Mỗi bước thêm một chút chi tiết. Chạy các lệnh ở thư mục <code>VLA</code>, sau khi kích hoạt môi trường: <code>.venv\Scripts\Activate.ps1</code></p>
+
+  <div class="step"><div class="n">1</div><div>
+    <h3>Xem policy chạy bằng mắt</h3>
+    <pre><code>python -m sim_engine          # rồi bấm phím 5</code></pre>
+    <p>Mục đích: có hình ảnh trong đầu trước khi đọc số. Thoát bằng <code>q</code>.</p>
+  </div></div>
+
+  <div class="step"><div class="n">2</div><div>
+    <h3>Chấm điểm nhiều seed <span class="tag">1 dòng mỗi seed</span></h3>
+    <pre><code>python -m sim_engine.check_scripted --seeds 0-9</code></pre>
+    <p>Mỗi seed là một vị trí hộp khác nhau. Kết quả hiện tại là <b>8/10</b>, thất bại ở seed 2 và 3. Con số này không nằm sẵn trong repo, nó do script này đếm.</p>
+  </div></div>
+
+  <div class="step"><div class="n">3</div><div>
+    <h3>Mức 1: chỉ thấy lúc đổi phase <span class="tag">ít dòng nhất</span></h3>
+    <pre><code>python -m sim_engine.trace_episode --seed 0 --level 1</code></pre>
+<pre><code>bước   0: bắt đầu phase 0
+bước   2: bắt đầu phase 1
+bước   5: bắt đầu phase 2
+bước  29: bắt đầu phase 3
+bước 230: bắt đầu phase 4
+bước 261: bắt đầu phase 5
+...
+Kết thúc ở bước 274: THÀNH CÔNG | hộp cách bát 0.009 m</code></pre>
+    <p>Cách đọc: mỗi dòng là lúc policy sang phase mới. Phase 3 kéo dài từ bước 29 tới bước 230, tức khoảng 200 bước. Câu hỏi để tự trả lời: vì sao?</p>
+  </div></div>
+
+  <div class="step"><div class="n">4</div><div>
+    <h3>Mức 2: thêm bảng vị trí <span class="tag">mỗi N bước</span></h3>
+    <pre><code>python -m sim_engine.trace_episode --seed 0 --level 2 --every 60</code></pre>
+<pre><code>bước | phase | tay (x, y, z)            | hộp (x, y, z)             | kẹp mở | đang kẹp
+---------------------------------------------------------------------------------------
+   0*|     0 | (+0.259, -0.150, +0.583) | (+0.158, -0.014, +0.435) |  100.0 |    False
+   5*|     2 | (+0.151, -0.002, +0.614) | (+0.158, -0.014, +0.435) |   98.4 |    False
+  29*|     3 | (+0.161, -0.004, +0.484) | (+0.159, -0.009, +0.435) |  100.0 |    False
+ 230*|     4 | (+0.161, -0.001, +0.470) | (+0.159, -0.009, +0.435) |   99.8 |    False
+ 240 |     4 | (+0.161, -0.002, +0.470) | (+0.159, -0.009, +0.435) |   16.6 |     True
+ 265*|     6 | (+0.173, +0.007, +0.613) | (+0.171, -0.000, +0.562) |   13.0 |     True</code></pre>
+    <p>Cách đọc: dấu <code>*</code> là vừa đổi phase. Cột "kẹp mở" từ 100 (mở) xuống khoảng 13 (đóng). Cột "đang kẹp" chuyển True ở bước 240: hộp bắt đầu dính vào tay. Ở bước 265, hộp có z = 0,562, tức đã được nhấc lên theo tay.</p>
+  </div></div>
+
+  <div class="step"><div class="n">5</div><div>
+    <h3>Mức 3: thêm action và góc khớp, từng bước <span class="tag">nhiều nhất</span></h3>
+    <pre><code>python -m sim_engine.trace_episode --seed 0 --level 3 --every 1</code></pre>
+<pre><code>  ... | action[0..6]                                  | góc khớp 5 khớp (độ)
+  ... | [-0.00 -0.01  0.63 -0.41 -0.00  1.00  1.00] | [ -0.0   1.2 -29.2 -29.9  -0.0]
+  ... | [ 0.16  0.21  0.30 -0.73  0.10  1.00  1.00] | [ 19.7  15.1 -56.8 -55.6   8.2]</code></pre>
+    <p>Cách đọc: <code>action[0..4]</code> là góc đích 5 khớp, <code>action[5]</code> và <code>[6]</code> là lệnh kẹp (+1 mở, -1 đóng). Cột bên phải là góc thật của 5 khớp, đo bằng độ. Thử so sánh hai cột để thấy khớp "bám theo" lệnh chậm hơn lệnh một chút.</p>
+  </div></div>
+
+  <div class="step"><div class="n">6</div><div>
+    <h3>Tự đặt <code>print</code> vào code</h3>
+    <p>Mở <code>policies/scripted_policy.py</code>, tìm hàm <code>select_action</code>, thêm ngay sau ba dòng đầu (<code>box_pos</code>, <code>bowl_pos</code>, <code>ee_pos</code>):</p>
+<pre><code># Cách A: in mọi bước (nhiều dòng, dùng để làm quen)
+print(f"phase={self._phase} bước_trong_phase={self._phase_step} tay={ee_pos.round(3)}")
+
+# Cách B: chỉ in khi cần, ví dụ phase 3 và mỗi 20 bước
+if self._phase == 3 and self._phase_step % 20 == 0:
+    print(f"[phase 3] tay={ee_pos.round(3)} hộp={box_pos.round(3)}")</code></pre>
+    <p>Muốn biết vì sao một phase kéo dài, thêm vào <code>_move_toward</code>, ngay sau dòng tính <code>dist</code>:</p>
+<pre><code>print(f"phase={self._phase} dist={dist:.3f} threshold={threshold} bước_trong_phase={self._phase_step}")</code></pre>
+    <p>Chạy lại bằng <code>check_scripted --seeds 0 -v</code> để thấy dòng in. <b>Nhớ xóa các dòng print sau khi xong.</b></p>
+    <div class="note"><b>Mẹo:</b> in quá nhiều thì không đọc nổi. Luôn thêm một điều kiện <code>if</code> để chỉ in đúng chỗ bạn quan tâm.</div>
+  </div></div>
+
+  <div class="step"><div class="n">7</div><div>
+    <h3>Xem trực tiếp, lưu là tự nạp lại <span class="tag">hot reload</span></h3>
+    <pre><code>python -m sim_engine.watch_policy --seed 2</code></pre>
+    <p>Cửa sổ chạy lặp lại seed 2. Bạn sửa <code>scripted_policy.py</code> rồi <b>lưu</b>, script tự nạp lại và chạy lại episode, không cần đóng cửa sổ. Phím: <code>SPACE</code> tạm dừng, <code>R</code> chạy lại, <code>N</code>/<code>B</code> đổi seed, <code>Q</code> thoát. Nếu file có lỗi cú pháp, cửa sổ báo lỗi và chờ bạn sửa.</p>
+  </div></div>
+
+  <div class="step"><div class="n">8</div><div>
+    <h3>Debugger của PyCharm <span class="tag">phức tạp nhất, hiểu sâu nhất</span></h3>
+    <ol>
+      <li>Cài interpreter của project là <code>VLA\.venv\Scripts\python.exe</code>.</li>
+      <li>Mở <code>scripted_policy.py</code>, bấm vào lề trái của dòng đầu hàm <code>select_action</code> để đặt breakpoint (chấm đỏ).</li>
+      <li>Tạo run configuration kiểu <b>Module name</b>: <code>sim_engine.check_scripted</code>, tham số <code>--seeds 2</code>. Chạy bằng nút Debug.</li>
+      <li>Khi dừng: xem các biến ở khung Variables, bước qua từng dòng bằng F8, vào trong hàm bằng F7.</li>
+    </ol>
+    <p>Lợi ích: thấy mọi biến đổi giá trị từng bước mà không phải viết print.</p>
+  </div></div>
+</section>
+
+<!-- ============ 7 ============ -->
+<section id="practice">
+  <h2>7. Bài tập nhỏ để làm quen</h2>
+  <ol>
+    <li>Chạy bước 2 và ghi lại: kết quả bao nhiêu trên 10 seed. Rồi chạy <code>--seeds 0-49</code> để có con số đáng tin hơn.</li>
+    <li>Ở log mức 1 của seed 0, phase 3 kéo dài khoảng 200 bước. Dùng bước 6 để tìm ra: tay có tới được độ cao đích không? <code>threshold</code> của phase này là bao nhiêu?</li>
+    <li>Chạy mức 1 và mức 2 cho <b>seed 2</b> (một seed thất bại). So sánh cột "hộp" với seed 0: hộp có đứng yên trước khi được kẹp không? Hộp đổi vị trí ở bước nào?</li>
+    <li>Mở <code>watch_policy --seed 2</code>, thử đổi <code>_safe_z</code> hoặc <code>threshold</code> của một phase, lưu, quan sát. Rồi kiểm tra lại bằng <code>check_scripted --seeds 0-49</code>.</li>
+  </ol>
+  <p>Mục tiêu là hiểu vì sao từng seed thất bại, không phải đoán số cho đúng. Mỗi lần sửa hãy chấm lại nhiều seed để chắc không làm hỏng các seed đang tốt.</p>
+</section>
+
+<!-- ============ 8 ============ -->
+<section id="quirks">
+  <h2>8. Những điểm lạ của repo (đừng bị bất ngờ)</h2>
+  <table>
+    <tr><th>Điểm lạ</th><th>Chi tiết</th></tr>
+    <tr><td><b>Kẹp giả</b></td><td>Hộp được dính vào tay bằng cách gán vị trí (<code>_update_grasp</code>), không phải ma sát thật. Ngón kẹp có thể khép sâu hơn bề rộng hộp. Robot thật sẽ khó hơn nhiều.</td></tr>
+    <tr><td><b><code>state[5]</code> luôn bằng 0</b></td><td><code>state</code> có 7 số nhưng chỉ có 5 khớp tay được điền. <code>state[5]</code> là ô trống, độ mở kẹp nằm ở <code>state[6]</code>.</td></tr>
+    <tr><td><b>31,25 Hz, không phải 30</b></td><td><code>int(1/30/0.002)</code> = 16 bước vật lý, 16 × 0,002 = 0,032 giây.</td></tr>
+    <tr><td><b>Policy "gian lận"</b></td><td>Policy viết tay hỏi thẳng env vị trí hộp. Policy AI chỉ được nhìn ảnh camera và góc khớp.</td></tr>
+    <tr><td><b>MuJoCo 4</b></td><td>Đã sửa lỗi va chạm vai và đế khóa khớp xoay (thêm <code>&lt;contact&gt;&lt;exclude&gt;</code> trong XML), nên chạy được trên MuJoCo 4.0.1.</td></tr>
+    <tr><td><b>Phím 3 (Train) trên Windows</b></td><td><code>config.PYTHON</code> là đường dẫn kiểu Linux, có thể lỗi trên Windows. Chưa kiểm tra.</td></tr>
+  </table>
+</section>
+
+<!-- ============ 9 ============ -->
+<section id="cam">
+  <h2>9. Camera cổ tay: vì sao không thấy ngón kẹp?</h2>
+  <p class="lead">Ô nhỏ ở góc dưới bên phải của cửa sổ demo là <b>camera cổ tay</b> (<code>arm_cam</code>). Bạn không thấy ngón kẹp kẹp vào hộp, và đó <b>không phải do policy sai</b>.</p>
+  <img src="wrist_cam_demo.png" alt="Ba thời điểm: hạ xuống, đóng kẹp, nhấc hộp. Hàng trên là camera cổ tay, hàng dưới là camera toàn cảnh" style="width:100%;border-radius:10px;border:1px solid var(--line);margin:10px 0">
+  <p class="cap">Seed 0. Cột trái: đang hạ xuống. Cột giữa: vừa đóng kẹp. Cột phải: đã nhấc hộp. Hàng trên: camera cổ tay. Hàng dưới: camera toàn cảnh.</p>
+  <h3>Nhìn ảnh thấy gì</h3>
+  <ul>
+    <li>Camera cổ tay nhìn <b>từ trên xuống</b> và hộp đỏ hiện rõ. Cục đen ở đầu ảnh là thân cổ tay che bớt tầm nhìn.</li>
+    <li><b>Ngón kẹp không nằm trong ảnh.</b> Cái bạn thấy là <b>cái bóng</b> của hai ngón trên mặt bàn (hai hình chữ T màu nâu hai bên hộp). Ở cột giữa, hai bóng đã áp sát hộp. Đó chính là lúc kẹp.</li>
+    <li>Ở cột phải, hộp vẫn nằm trong ảnh nhưng nền bàn đã xa dần (thấy cả sàn ca-rô trắng ở góc): hộp đang được nhấc lên theo tay.</li>
+    <li>Có một đường ngang đen cắt ngang ảnh. Mình đoán là mép của tấm gắn kẹp (camera đặt sát tấm này), nhưng chưa kiểm chứng.</li>
+  </ul>
+  <h3>Vì sao thế</h3>
+  <p>Camera được đặt ở cổ tay, cao hơn và lệch so với hai ngón (trong file XML, camera ở <code>z = -0.025</code> còn ngón ở <code>z = -0.046</code> trở xuống). Tác giả repo có để lại nhiều dòng ghi chú mâu thuẫn về hướng nhìn của camera này, nên vị trí có vẻ đã được thử nhiều lần.</p>
+  <div class="note"><b>Liên quan "kẹp giả":</b> ngay cả khi nhìn thấy ngón, hộp không được kẹp bằng ma sát thật mà được dính vào tay bằng code (<code>_update_grasp</code>). Nên đây là hạn chế của mô phỏng, không phải lỗi của bạn.</div>
+  <p>Nếu muốn nhìn thấy ngón kẹp rõ hơn, có thể dời hoặc nghiêng camera trong <code>so101_scene.xml</code> (dòng <code>&lt;camera name="arm_cam" ...&gt;</code>). Lưu ý: ảnh camera này sau này là <b>dữ liệu đưa vào AI</b>, nên đổi vị trí camera sẽ đổi dữ liệu. Với robot thật, vị trí camera phải khớp với chỗ gắn camera thật.</p>
+</section>
+
+
+<!-- ============ 10 ============ -->
+<section id="seed">
+  <h2>10. Chạy một seed: đọc code từng bước, rồi biết sửa chỗ nào</h2>
+  <p class="lead">Dùng ván thất bại <b>seed 2</b> làm ví dụ. Mục này trả lời ba câu: một ván chạy thế nào, nó hỏng ở đâu, và mình sửa gì để thử.</p>
+
+  <h3>10.1 Một ván là vòng lặp 4 dòng</h3>
+<pre><code>obs, info = env.reset(seed=2)                 # đặt hộp ở vị trí của seed 2
+for step in range(500):
+    action = policy.select_action(obs)        # policy nghĩ: ra 7 số
+    obs, ..., info = env.step(action)         # env làm theo, trả kết quả</code></pre>
+  <p>Mỗi vòng là 1/30 giây. Việc "sửa policy" chỉ là sửa bên trong <code>select_action</code>.</p>
+
+  <h3>10.2 Bên trong <code>select_action</code> mỗi bước</h3>
+  <ol>
+    <li>Đọc vị trí hộp, bát, tay (<code>scripted_policy.py</code> dòng 98 đến 100).</li>
+    <li>Xem đang ở phase nào (dòng 104 đến 170). Mỗi phase đặt <code>target = (x, y, z)</code>.</li>
+    <li><code>_move_toward(target)</code> (dòng 181) chạy IK: muốn tay tới <code>target</code> thì 5 khớp phải xoay thành góc nào.</li>
+    <li><code>_build_action</code> (dòng 227) đổi góc đó thành 7 số trong [-1, 1] và làm mượt.</li>
+    <li>Tay cách đích dưới <code>threshold</code> thì <code>_advance_phase()</code> sang phase kế.</li>
+  </ol>
+
+  <h3>10.2b Tọa độ trong log là gì</h3>
+  <p><code>tay [0.126 0.079 0.438]</code> là <code>(x, y, z)</code> tính bằng mét: x sang trái/phải, y tiến/lùi, z là chiều cao. Giống <code>left</code>, <code>top</code> của một phần tử trên trang, thêm một chiều. Hộp ban đầu ở y quanh 0. So hai bộ số tay và hộp: càng giống nhau thì tay càng nằm đúng chỗ hộp.</p>
+
+  <details><summary>Tự điều tra một phase chạy lâu</summary>
+<p><b>Mức 1.</b> Chọn một seed hoàn thành và một seed hết bước. Trong cùng một phase, hộp bắt đầu dịch chuyển ở bước nào trên hình nhìn từ trên? Lúc đó tay còn cao hơn hộp bao nhiêu trên hình nhìn từ cạnh?</p>
+<details><summary>Mức 2 · Đọc log</summary><p>Dừng ở hai bước liên tiếp. Khoảng cách tay đến đích thay đổi vì tay di chuyển hay vì chính đích đã đổi? Dòng log nào giúp bạn phân biệt?</p></details>
+<details><summary>Mức 3 · Nối với code</summary><p>Trong <code>scripted_policy.py</code>, tìm <code>select_action</code> và nhánh của phase vừa xem. Điều kiện nào cho phép sang phase kế? Nếu sửa một chỗ, bạn dự đoán đại lượng nào trong log sẽ đổi trước?</p></details>
+<p>Để so tốc độ, hãy ghi bước vào và bước ra của cùng một phase ở cùng một seed trước và sau khi sửa. Cuối lần chạy, hộp có thực sự vào bát không?</p></details>
+<details><summary>Mở phân tích có sẵn về seed 2 sau khi tự thử</summary>
+<h3>10.3 Seed 2 hỏng ở đâu</h3>
+  <p>Số liệu lấy từ log thật. Hình nhìn từ cạnh bên (y ngang, z là chiều cao) cho phase 2, lúc tay hạ xuống:</p>
+  <svg viewBox="0 0 720 372" style="width:100%;max-width:720px;height:auto;display:block;margin:12px auto" role="img" aria-label="Đường đi của tay ở phase 2 seed 2">
+    <line x1="20" y1="332" x2="700" y2="332" stroke="currentColor" stroke-opacity=".4" stroke-width="2"/>
+    <text x="24" y="348" font-size="12" fill="currentColor" opacity=".7">mặt bàn</text>
+    <line x1="176" y1="30" x2="176" y2="332" stroke="#639922" stroke-width="2" stroke-dasharray="5 4"/>
+    <text x="168" y="24" font-size="12" text-anchor="end" fill="currentColor">tâm hộp lúc đầu: y = -0.012</text>
+    <rect x="146" y="287" width="60" height="45" fill="#e24b4a" fill-opacity=".35" stroke="#e24b4a"/>
+    <text x="142" y="314" font-size="12" text-anchor="end" fill="currentColor">hộp lúc đầu</text>
+    <rect x="370" y="287" width="60" height="45" fill="#e24b4a" fill-opacity=".85"/>
+    <text x="434" y="314" font-size="12" fill="currentColor">hộp bị gạt (y = 0.10)</text>
+    <polyline points="198,49 198,149 190,210 192,200 202,212 218,242 250,257 312,277 350,286" fill="none" stroke="#378add" stroke-width="2.5"/>
+    <circle cx="198" cy="49" r="3.5" fill="#378add"/><circle cx="198" cy="149" r="3.5" fill="#378add"/><circle cx="190" cy="210" r="3.5" fill="#378add"/><circle cx="192" cy="200" r="3.5" fill="#378add"/><circle cx="202" cy="212" r="3.5" fill="#378add"/><circle cx="218" cy="242" r="3.5" fill="#378add"/><circle cx="250" cy="257" r="3.5" fill="#378add"/><circle cx="312" cy="277" r="3.5" fill="#378add"/><circle cx="350" cy="286" r="3.5" fill="#378add"/>
+    <text x="208" y="53" font-size="12" fill="currentColor">bắt đầu phase 2: y = -0.001, z = 0.614</text>
+    <text x="362" y="278" font-size="12" fill="currentColor">tay đuổi theo hộp tới y = 0.075</text>
+    <text x="360" y="366" font-size="12" text-anchor="middle" fill="currentColor" opacity=".7">trục ngang: y (mét). Mỗi chấm là một bước. Đường cong, không thẳng đứng.</text>
+  </svg>
+  <table>
+    <tr><th>Bước</th><th>Phase</th><th>Điều quan sát</th></tr>
+    <tr><td>6</td><td>1 sang 2</td><td>Tay đã đúng chỗ ở trên hộp (y = -0.001)</td></tr>
+    <tr><td>7 đến 14</td><td>2</td><td>Bước 8: <b>forearm_link (cẳng tay) chạm hộp</b>, hộp bị nâng và đẩy sang y dương. Sau đó hộp liên tục bị đẩy, tay <b>đuổi theo hộp</b> (đích phase 2 luôn lấy vị trí hộp hiện tại) nên y của tay cũng tăng tới 0.075</td></tr>
+    <tr><td>14</td><td>3</td><td>Hộp bị gạt, y = 0.087</td></tr>
+    <tr><td>47</td><td>4 sang 5</td><td>Tay ở y = 0.078, hộp ở y = 0.099: đóng kẹp vào khoảng trống</td></tr>
+  </table>
+
+  <h3>10.4 Điều kiểm tra được, và điều còn chưa biết</h3>
+  <p><b>Đã kiểm tra (đo trực tiếp từ MuJoCo):</b></p>
+  <ul>
+    <li>Ở seed 2, hộp bắt đầu dịch ở <b>bước 8</b>, lúc tay (<code>ee_site</code>) còn cách hộp 6 cm theo chiều cao. Vật chạm hộp lúc đó là <code>forearm_link</code>, tức <b>cẳng tay</b>, không phải ngón kẹp.</li>
+    <li>Đích của phase 2 là <code>(hộp x, hộp y, pre_grasp_z)</code>, tính lại mỗi bước. Hộp bị đẩy thì đích cũng dời theo, nên tay cứ đuổi theo hộp. Vì vậy y của tay tăng dần.</li>
+    <li>Ngay trước đó, tay lố sang x dương khoảng 1,3 cm so với hộp (x tay 0.149, hộp 0.136). Seed 0 (thành công) cũng lố khoảng 1 cm và cũng có cẳng tay chạm hộp, nhưng hộp chỉ dịch khoảng 0,9 cm.</li>
+    <li>Đóng kẹp ở seed 2 không thành vì ngón không khép được (độ mở ngón 0.034, cần dưới 0.018). Mình chưa biết vì sao ngón không khép.</li>
+  </ul>
+  <p><b>Chưa biết, đây là câu hỏi để bạn điều tra:</b> vì sao cẳng tay hạ xuống chạm hộp ở seed 2 mà seed 0 gần như không? Có thể liên quan tới việc IK chỉ điều khiển <u>vị trí</u> đầu tay chứ không điều khiển <u>tư thế</u> cánh tay. Có thể liên quan tới việc tay lố x ở phase 1. Cả hai đều chỉ là giả thuyết, chưa kiểm chứng.</p>
+  <div class="note"><b>Ghi chú sửa lại:</b> bản trước của mục này giả thuyết rằng "đích cách tay 15 cm một phát nên đường đi cong". Kiểm tra cho thấy điều đó không phải là nguyên nhân chính: đích không đứng yên mà đuổi theo hộp, và có một vật chạm hộp (cẳng tay).</div>
+
+  <h3>10.5 Chỗ để sửa, từ dễ đến khó</h3>
+  <table>
+    <tr><th>Việc thử</th><th>Sửa ở đâu</th><th>Chờ thấy gì</th></tr>
+    <tr><td>Đổi <code>_pre_grasp_z</code> (0.46 sang 0.50 hoặc 0.55)</td><td><code>scripted_policy.py</code> dòng 79</td><td>Cẳng tay còn chạm hộp ở seed 2 không</td></tr>
+    <tr><td>Làm phase 2 chậm lại: hệ số của phase 2 trong <code>_phase_smoothing</code> (0.7 sang 0.3)</td><td>dòng 63</td><td>Tay đi chậm hơn, đường có thẳng hơn không</td></tr>
+    <tr><td>Làm phase 1 chậm lại để tay đỡ lố x (hệ số của phase 1 trong <code>_phase_smoothing</code>: 0.8 sang 0.4)</td><td>dòng 63</td><td>x của tay lúc bắt đầu phase 2 có sát x hộp hơn không</td></tr>
+    <tr><td>Chia phase 2 thành 2 đến 3 nấc z (0.55, rồi 0.50, rồi 0.46), hoặc chốt x, y của đích bằng vị trí hộp lúc <u>bắt đầu</u> phase</td><td><code>select_action</code></td><td>Cẳng tay có còn chạm hộp không, đích còn đuổi theo hộp không</td></tr>
+    <tr><td>Đổi <code>lam</code> hoặc hệ số <code>* 0.4</code> trong IK</td><td>dòng 211 và 216</td><td>Chưa chắc có tác dụng, để sau cùng</td></tr>
+  </table>
+
+  <h3>10.6 Vòng thử mỗi lần sửa</h3>
+  <p><b>Xem lại trên trình duyệt:</b> chạy <code>python -m sim_engine.make_replay</code> rồi mở <code>docs/replay.html</code>. Trang có hai hình 2D (nhìn từ trên và nhìn từ cạnh), thanh trượt từng bước, nút "tới phase kế", và log đồng bộ. Phần "chạm hộp" cho thấy ngay <code>forearm_link</code> ở seed 2. Mỗi lần sửa policy thì chạy lại lệnh để cập nhật.</p>
+  <p><b>Muốn xem chậm từng bước:</b> chạy <code>python -m sim_engine.step_policy --seed 2</code>. SPACE chạy đúng 1 bước, P chạy tới khi đổi phase, A tự chạy chậm. Trên ảnh có chấm xanh lá là đích, dấu + xanh dương là đầu tay, chấm đỏ là tâm hộp. Log ở terminal cho biết khoảng cách tới đích, ngưỡng, và lý do sang phase kế.</p>
+  <ol>
+    <li>Sửa một thứ, lưu file. <code>watch_policy --seed 2</code> tự chạy lại. Nhìn dòng <code>tay</code> trên màn hình ở phase 2.</li>
+    <li>Seed 2 ổn thì chạy <code>check_scripted --seeds 0-29</code>. Điểm phải lớn hơn <b>24/30</b>, không được giảm. Cứu seed 2 mà làm hỏng seed khác là chưa xong.</li>
+  </ol>
+  <div class="note"><b>Việc nhỏ nhất để bắt đầu:</b> đổi <code>_pre_grasp_z</code> lên 0.55, lưu, xem <code>watch_policy</code>. Bạn sẽ thấy trực tiếp "sửa số nào thì tay chạy thế nào" mà chưa cần hiểu IK.</div>
+</details>
+</section>
+
+<section>
+  <h2>File nào phụ trách ghi demo và xem lại?</h2>
+  <ul>
+    <li><code>ui/recording.py</code> xử lý màn hình ghi demo. <code>workflows/record.py</code> là luồng ghi qua dòng lệnh. Cả hai dùng <code>dataset.py</code> để lưu HDF5.</li>
+    <li><code>tools/make_replay.py</code> lấy đích và ngưỡng đến đích từ <code>motion_target</code> của policy. Khi phase chỉ chờ, replay có thể không hiển thị đích.</li>
+    <li>Demo chỉ xuất hiện dưới tên <code>.hdf5</code> khi đã ghi xong. Khi train với ảnh, loader đọc hai khung hình của mẫu đang dùng.</li>
+  </ul>
+  <p>Lệnh <code>python -m sim_engine.make_replay</code> vẫn tạo lại trang replay trong thư mục <code>docs/</code>.</p>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@antv/g6@5.0.51/dist/g6.min.js"></script>
+<script>
+(function () {
+  // ---------- Màu theo theme (đọc từ biến CSS để đồng bộ sáng/tối) ----------
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function theme() {
+    var kinds = ["default", "sim", "data", "cloud", "ok", "real", "tool"], fill = {}, stroke = {};
+    kinds.forEach(function (k) { fill[k] = css("--k-" + k + "-f"); stroke[k] = css("--k-" + k + "-s"); });
+    return { fill: fill, stroke: stroke, text: css("--text"), muted: css("--muted"), edge: css("--edge"),
+             hl: css("--hl"), bg: css("--surface") };
+  }
+
+  var graphs = [], builders = [];
+
+  // ---------- Hàm dựng sơ đồ chung ----------
+  // nodes: {id, x, y, label, kind, w, h, hl}  |  edges: [from, to, nhãn?]
+  function flow(id, nodes, edges, opts) {
+    opts = opts || {};
+    builders.push(function () {
+      var el = document.getElementById(id), t = theme();
+      var g = new G6.Graph({
+        container: el,
+        autoFit: "view",
+        padding: 18,
+        data: {
+          nodes: nodes.map(function (n) {
+            return { id: n.id, style: { x: n.x, y: n.y, size: [n.w || 150, n.h || 46] },
+                     data: { label: n.label, kind: n.kind || "default", hl: !!n.hl } };
+          }),
+          edges: edges.map(function (e, i) {
+            return { id: "e" + i, source: e[0], target: e[1], data: { label: e[2] || "" } };
+          })
+        },
+        node: {
+          type: "rect",
+          style: {
+            radius: 8,
+            fill: function (d) { return t.fill[d.data.kind]; },
+            stroke: function (d) { return d.data.hl ? t.hl : t.stroke[d.data.kind]; },
+            lineWidth: function (d) { return d.data.hl ? 3 : 1.5; },
+            labelText: function (d) { return d.data.label; },
+            labelFill: t.text, labelFontSize: 13, labelPlacement: "center",
+            labelFontFamily: "system-ui, Segoe UI, sans-serif"
+          }
+        },
+        edge: {
+          type: opts.edge || "polyline",
+          style: {
+            stroke: t.edge, lineWidth: 1.6, endArrow: true,
+            router: opts.edge === "line" ? undefined : { type: "orth" },
+            labelText: function (d) { return d.data.label; },
+            labelFill: t.muted, labelFontSize: 12, labelBackground: true, labelBackgroundFill: t.bg
+          }
+        },
+        behaviors: []
+      });
+      g.render();
+      graphs.push(g);
+      // Khi khung đổi kích thước (hoặc từ ẩn sang hiện), vẽ lại cho vừa khung.
+      if (window.ResizeObserver) {
+        var first = true;
+        new ResizeObserver(function () {
+          if (first) { first = false; }
+          if (el.clientWidth > 0) {
+            try { g.resize(el.clientWidth, el.clientHeight); g.fitView(); } catch (e) {}
+          }
+        }).observe(el);
+      }
+    });
+  }
+
+  // ---------- Sơ đồ 1: cả khóa học (rắn 2 hàng) ----------
+  flow("g-big", [
+    { id: "a", x: 110, y: 70,  label: "Sim MuJoCo\n(tuần 1-2)",            kind: "sim",   hl: true, w: 170, h: 56 },
+    { id: "b", x: 330, y: 70,  label: "Policy viết tay\n(tuần 3)",          kind: "sim",   hl: true, w: 170, h: 56 },
+    { id: "c", x: 550, y: 70,  label: "Thu 50 demo\n(tuần 4)",              kind: "data",  w: 170, h: 56 },
+    { id: "d", x: 770, y: 70,  label: "Đẩy dataset lên\nHugging Face (tuần 4)", kind: "data", w: 180, h: 56 },
+    { id: "e", x: 770, y: 230, label: "Train ACT / SmolVLA\ntrên Colab (tuần 5-6)", kind: "cloud", w: 190, h: 56 },
+    { id: "f", x: 550, y: 230, label: "Checkpoint\n(model đã học)",         kind: "cloud", w: 170, h: 56 },
+    { id: "g", x: 330, y: 230, label: "Chạy thử 50 lần\nGate tuần 6",       kind: "ok",    w: 170, h: 56 },
+    { id: "h", x: 110, y: 230, label: "Robot thật\n(tuần 7-12)",            kind: "real",  w: 170, h: 56 }
+  ], [["a","b"],["b","c"],["c","d"],["d","e"],["e","f"],["f","g"],["g","h"]]);
+
+  // ---------- Sơ đồ 2: vòng lặp policy - env ----------
+  flow("g-loop", [
+    { id: "p", x: 120, y: 125, label: "Policy\nselect_action()",   kind: "sim", w: 170, h: 64 },
+    { id: "ac", x: 380, y: 50,  label: "action: 7 số trong [-1, 1]", kind: "data", w: 230, h: 40 },
+    { id: "v", x: 640, y: 125, label: "Env (MuJoCo)\nstep()",       kind: "ok",  w: 170, h: 64 },
+    { id: "ob", x: 380, y: 200, label: "obs: 7 số trạng thái + ảnh", kind: "data", w: 230, h: 40 }
+  ], [["p","ac"],["ac","v"],["v","ob"],["ob","p"]], { edge: "line" });
+
+  // ---------- Sơ đồ 3: bên trong step() (dọc) ----------
+  flow("g-step", [
+    { id: "s1", x: 200, y: 40,  label: "Nhận action\n(7 số trong [-1, 1])",        kind: "data", w: 250, h: 52 },
+    { id: "s2", x: 200, y: 130, label: "Đổi thang → lệnh thật\ncho các actuator",   kind: "sim",  w: 250, h: 52 },
+    { id: "s3", x: 200, y: 220, label: "_update_grasp()\ndính / nhả hộp",           kind: "data", w: 250, h: 52 },
+    { id: "s4", x: 200, y: 310, label: "16 × mj_step()\n(vật lý, 2 ms mỗi bước)",   kind: "sim",  w: 250, h: 52 },
+    { id: "s5", x: 200, y: 400, label: "_get_obs() + _get_info()",                  kind: "sim",  w: 250, h: 46 },
+    { id: "s6", x: 200, y: 490, label: "Trả về: obs, reward,\nterminated, truncated, info", kind: "ok", w: 250, h: 56 }
+  ], [["s1","s2"],["s2","s3"],["s3","s4"],["s4","s5"],["s5","s6"]]);
+
+  // ---------- Sơ đồ 4: 12 phase (rắn 3 hàng) ----------
+  var X = [110, 330, 550, 770];
+  flow("g-policy", [
+    { id: "p0",  x: X[0], y: 50,  label: "0  Nhấc lên",           kind: "sim", w: 150, h: 44 },
+    { id: "p1",  x: X[1], y: 50,  label: "1  Tới trên hộp",       kind: "sim", w: 150, h: 44 },
+    { id: "p2",  x: X[2], y: 50,  label: "2  Hạ pre-grasp",       kind: "sim", w: 150, h: 44 },
+    { id: "p3",  x: X[3], y: 50,  label: "3  Hạ xuống kẹp",       kind: "sim", w: 150, h: 44 },
+    { id: "p4",  x: X[3], y: 160, label: "4  ĐÓNG kẹp\n(chờ 30 bước)", kind: "data", w: 150, h: 52 },
+    { id: "p5",  x: X[2], y: 160, label: "5  Nhấc hộp",           kind: "sim", w: 150, h: 44 },
+    { id: "p6",  x: X[1], y: 160, label: "6  Tới trên bát",       kind: "sim", w: 150, h: 44 },
+    { id: "p7",  x: X[0], y: 160, label: "7  Hạ vào bát",         kind: "sim", w: 150, h: 44 },
+    { id: "p8",  x: X[0], y: 270, label: "8  MỞ kẹp\n(chờ 20 bước)",  kind: "data", w: 150, h: 52 },
+    { id: "p9",  x: X[1], y: 270, label: "9  Rút lên",            kind: "sim", w: 150, h: 44 },
+    { id: "p10", x: X[2], y: 270, label: "10  Về home",           kind: "sim", w: 150, h: 44 },
+    { id: "p11", x: X[3], y: 270, label: "11  Xong (giữ nguyên)", kind: "default", w: 150, h: 44 }
+  ], [["p0","p1"],["p1","p2"],["p2","p3"],["p3","p4"],["p4","p5"],["p5","p6"],["p6","p7"],["p7","p8"],["p8","p9"],["p9","p10"],["p10","p11"]]);
+
+  // ---------- Sơ đồ 5: phụ thuộc giữa các file ----------
+  flow("g-files", [
+    { id: "main", x: 90,  y: 205, label: "__main__.py\n(cổng vào)",  kind: "default", w: 130, h: 52 },
+    { id: "app",  x: 300, y: 60,  label: "app.py\n(menu 1-5)",       kind: "default", w: 130, h: 48 },
+    { id: "rec",  x: 300, y: 150, label: "record.py\n(thu demo)",    kind: "default", w: 130, h: 48 },
+    { id: "view", x: 300, y: 240, label: "viewer.py",                kind: "default", w: 130, h: 40 },
+    { id: "tool", x: 300, y: 345, label: "check_scripted · trace_episode\nwatch_policy (công cụ mới)", kind: "tool", w: 250, h: 56 },
+    { id: "env",  x: 560, y: 105, label: "env.py",                   kind: "sim",     w: 120, h: 46, hl: true },
+    { id: "pol",  x: 560, y: 255, label: "scripted_policy.py",       kind: "sim",     w: 170, h: 46, hl: true },
+    { id: "cfg",  x: 820, y: 40,  label: "config.py",                kind: "ok",      w: 130, h: 42, hl: true },
+    { id: "ren",  x: 820, y: 110, label: "renderer.py",              kind: "ok",      w: 130, h: 42 },
+    { id: "xml",  x: 820, y: 180, label: "so101_scene.xml",          kind: "ok",      w: 150, h: 42, hl: true },
+    { id: "base", x: 820, y: 255, label: "policies/base.py",         kind: "ok",      w: 140, h: 42 }
+  ], [["main","app"],["main","rec"],["main","view"],
+      ["app","env"],["rec","env"],["rec","pol"],["view","env"],["view","pol"],
+      ["tool","env"],["tool","pol"],
+      ["env","cfg"],["env","ren"],["env","xml"],["pol","base"]]);
+
+  // ---------- Dựng tất cả, và dựng lại khi đổi sáng/tối ----------
+  function buildAll() {
+    graphs.forEach(function (g) { try { g.destroy(); } catch (e) {} });
+    graphs = [];
+    builders.forEach(function (b) { try { b(); } catch (e) { console.error(e); } });
+  }
+  if (typeof G6 === "undefined") {
+    document.querySelectorAll(".chart").forEach(function (c) {
+      c.innerHTML = '<div style="padding:16px;color:var(--muted)">Không tải được thư viện G6 (có thể mạng công ty chặn CDN). Các phần chữ và bảng vẫn đọc được bình thường.</div>';
+    });
+  } else {
+    buildAll();
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    if (mq.addEventListener) mq.addEventListener("change", buildAll);
+  }
+})();
+</script>
+</body>
+</html>

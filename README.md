@@ -357,19 +357,37 @@ The training pipeline automatically:
 
 ### File Structure
 
+- `tools/` contains replay generation, seed selection, diagnostics, and viewers.
+- `workflows/` contains demonstration recording, training, and evaluation.
+- Top-level command modules forward to these packages so existing `python -m sim_engine.<command>` examples still work.
+
 ```
 sim_engine/
     __main__.py                # Entry point
-    app.py                     # Full UI application
+    app.py                     # OpenCV main menu and screen routing
+    ui/recording.py            # Interactive demonstration recording
     config.py                  # Constants (joint names, camera settings, paths)
     env.py                     # SO101PickPlaceEnv (Gymnasium environment)
     renderer.py                # MuJoCo offscreen camera rendering
     dataset.py                 # HDF5 recorder + PyTorch Dataset loader
     ik_controller.py           # Jacobian-based inverse kinematics
-    viewer.py                  # Simple demo viewer (alternative to app.py)
-    record.py                  # CLI: record episodes
-    train.py                   # CLI: train policies
-    evaluate.py                # CLI: evaluate policies
+    tools/                     # Debugging, replay, and viewers
+        viewer.py
+        joint_lab.py
+        check_scripted.py
+        make_replay.py
+        select_seeds.py
+        step_policy.py
+        trace_episode.py
+        watch_policy.py
+
+    workflows/                 # CLI workflows
+        record.py
+        train.py
+        evaluate.py
+
+    docs/                      # Guide, generated replay, and replay inputs
+        ui/                    # Shared focus styles and replay-specific CSS/JS
 
     assets/
         so101_real_scene.xml   # MuJoCo scene (REAL SO-101 meshes + table + objects), meshes in assets/so101/
