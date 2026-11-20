@@ -339,8 +339,8 @@ function reachTop(k) {                         // vùng gắp được: hình qu
     let s = `<polygon points="${poly}" fill="#0e9aa7" fill-opacity=".17" stroke="#0e9aa7" stroke-opacity=".7" stroke-width="1.2" stroke-dasharray="5 3"/>`;
     (S.pick_scan || []).forEach(([x, y, ok]) => {
       const X = topX(x), Y = topY(y);
-      s += ok ? `<circle cx="${X}" cy="${Y}" r="1.6" fill="#0e9aa7" opacity=".55"/>`
-              : `<path d="M${X - 2.2},${Y - 2.2}l4.4,4.4m0,-4.4l-4.4,4.4" stroke="var(--bad)" stroke-width="1.1" opacity=".65"/>`;
+      s += ok ? `<circle cx="${X}" cy="${Y}" r="1.8" fill="#0e9aa7" opacity=".55"/>`
+              : `<path d="M${X - 3.4},${Y - 3.4}l6.8,6.8m0,-6.8l-6.8,6.8" stroke="var(--bad)" stroke-width="1.9" stroke-linecap="round" opacity=".95"/>`;
     });
     return s;
   }
@@ -356,7 +356,11 @@ function reachInfo(fs) {
     const rb = Math.hypot(dx, dy), ang = Math.atan2(dx, dy) * 180 / Math.PI;
     const inR = rb >= P0.r_min && rb <= P0.r_max, inA = ang >= P0.angle_min_deg && ang <= P0.angle_max_deg;
     const mk = ok => `<span class="${ok ? "y" : "n"}">${ok ? "✓" : "✗"}</span>`;
-    return `<div class="note" style="margin:8px 0 3px"><b>Vùng gắp được</b> (hình quạt đo thật quanh trục khớp 1; dấu chấm/x = điểm đã quét)</div>` +
+    const sc = S.pick_scan || [], inQ = sc.filter(([x, y]) => { const r = Math.hypot(x - P0.pan[0], y - P0.pan[1]), a = Math.atan2(x - P0.pan[0], y - P0.pan[1]) * 180 / Math.PI;
+      return r >= P0.r_min - 1e-6 && r <= P0.r_max + 1e-6 && a >= P0.angle_min_deg - 1e-6 && a <= P0.angle_max_deg + 1e-6; });
+    const failQ = inQ.filter(q => !q[2]).length;
+    return `<div class="note" style="margin:8px 0 3px"><b>Vùng gắp được</b> (hình quạt đo thật quanh trục khớp 1; chấm = quét gắp được, <span style="color:var(--bad)">✕ đỏ</span> = quét hỏng)</div>` +
+      `<div class="chk"><span></span><span>quét <b>${sc.length}</b> điểm; trong quạt <b>${inQ.length}</b>, <span style="color:var(--bad)"><b>${failQ}</b> hỏng</span> (do kẹp sát ngưỡng, xem seed lân cận)</span></div>` +
       `<div class="chk"><span>${mk(inR)}</span><span>hộp cách trục <b>${cm(rb)}</b> cm; vùng ${(P0.r_min * 100).toFixed(0)}–${(P0.r_max * 100).toFixed(0)} cm</span></div>` +
       `<div class="chk"><span>${mk(inA)}</span><span>hộp lệch <b>${ang.toFixed(0)}°</b> so với hướng tay; vùng ${P0.angle_min_deg}° … +${P0.angle_max_deg}°</span></div>`;
   }
