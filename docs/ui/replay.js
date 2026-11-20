@@ -172,6 +172,15 @@ function linkColor(fr, nm, main) {                       // đỏ = chạm hộp
   if (!main) return ARMCOL;
   return (fr.ct || []).includes(nm) ? "#e5484d" : (fr.tb || []).includes(nm) ? "#f59e0b" : touchBowl(fr, nm) ? BOWLC : ARMCOL;
 }
+// Thứ tự vẽ theo tâm tam giác (painter) không phân biệt được ống kính nhỏ nhô ra khỏi mặt hộp camera với các tam giác lớn của mặt đó,
+// nên mặt hộp che mất ống kính (hình "chiếc miệng"). Ống kính (nhóm màu có cờ 2) được kéo gần người xem thêm LENS_BIAS khi sắp xếp.
+const LENS_BIAS = 0.006;
+function faceBias(name) {
+  const groups = S.arm_mesh[name].colors || [];
+  if (!groups.some(g => g[2] === 2)) return null;
+  const out = []; groups.forEach(g => { for (let k = 0; k < g[0]; k++) out.push(g[2] === 2 ? LENS_BIAS : 0); });
+  return out;
+}
 function meshColors(name, frame) {
   const highlight = linkColor(frame, name, true), hl = highlight !== ARMCOL ? hexRgbCam(highlight) : null;
   const groups = S.arm_mesh[name].colors || [];
@@ -634,14 +643,14 @@ function draw3d(fr, fs) {
     for (const nm of Object.keys(S.arm_mesh)) {
       const w = W3[nm], F = S.arm_mesh[nm].f, n = w.length / 3, sc = new Float64Array(n * 3);
       for (let k = 0; k < n; k++) { const q = P([w[3*k], w[3*k+1], w[3*k+2]]); sc[3*k] = q[0]; sc[3*k+1] = q[1]; sc[3*k+2] = q[2]; }
-      const faceColor = meshColors(nm, f);
+      const faceColor = meshColors(nm, f), bias = faceBias(nm);
       for (let t = 0; t < F.length; t += 3) {
         const i0 = F[t], i1 = F[t+1], i2 = F[t+2];
         const ux = w[3*i1]-w[3*i0], uy = w[3*i1+1]-w[3*i0+1], uz = w[3*i1+2]-w[3*i0+2];
         const vx = w[3*i2]-w[3*i0], vy = w[3*i2+1]-w[3*i0+1], vz = w[3*i2+2]-w[3*i0+2];
         let nx = uy*vz - uz*vy, ny = uz*vx - ux*vz, nz = ux*vy - uy*vx; const nl = Math.hypot(nx, ny, nz) || 1;
         const lam = Math.abs((nx*LIGHT[0] + ny*LIGHT[1] + nz*LIGHT[2]) / nl), sh = 0.42 + 0.58 * lam;
-        tris.push([(sc[3*i0+2] + sc[3*i1+2] + sc[3*i2+2]) / 3, i0, i1, i2, sc, faceColor(t / 3), sh, .95]);
+        tris.push([(sc[3*i0+2] + sc[3*i1+2] + sc[3*i2+2]) / 3 - (bias ? bias[t / 3] : 0), i0, i1, i2, sc, faceColor(t / 3), sh, .95]);
       }
     }
     // hộp hiện tại cùng được sắp theo độ sâu với cánh tay, để tay che / bị hộp che đúng chỗ
@@ -757,12 +766,12 @@ function renderCam(cv, name, fr) {
   const W3 = armWorld(fr), L = [0.35, -0.45, 0.82], ln = Math.hypot(...L);
   for (const nm of Object.keys(S.arm_mesh)) { const wv = W3[nm], Fi = S.arm_mesh[nm].f, n = wv.length / 3, cc = new Array(n);
     for (let k2 = 0; k2 < n; k2++) cc[k2] = toCam([wv[3*k2], wv[3*k2+1], wv[3*k2+2]]);
-    const faceColor = meshColors(nm, fr);
+    const faceColor = meshColors(nm, fr), bias = faceBias(nm);
     for (let t = 0; t < Fi.length; t += 3) { const a2 = cc[Fi[t]], b2 = cc[Fi[t+1]], c2 = cc[Fi[t+2]];
       if (a2[2] > -0.02 || b2[2] > -0.02 || c2[2] > -0.02) continue;
       const ux = b2[0]-a2[0], uy = b2[1]-a2[1], uz = b2[2]-a2[2], vx = c2[0]-a2[0], vy = c2[1]-a2[1], vz = c2[2]-a2[2];
       const nx = uy*vz - uz*vy, ny = uz*vx - ux*vz, nz = ux*vy - uy*vx, nl = Math.hypot(nx, ny, nz) || 1;
-      items.push([-(a2[2] + b2[2] + c2[2]) / 3, [a2, b2, c2], faceColor(t / 3), 0.45 + 0.55 * Math.abs(nz / nl)]); } }
+      items.push([-(a2[2] + b2[2] + c2[2]) / 3 - (bias ? bias[t / 3] : 0), [a2, b2, c2], faceColor(t / 3), 0.45 + 0.55 * Math.abs(nz / nl)]); } }
   items.sort((p1, p2) => p2[0] - p1[0]);
   g.lineJoin = "round"; g.lineWidth = .6;
   for (const [, q, col, sh] of items) {
