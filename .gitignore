@@ -15,3 +15,6 @@ outputs/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Số bước của lần make_replay trước (để in chênh lệch), chỉ là trạng thái cục bộ
+docs/replay_prev_steps.json

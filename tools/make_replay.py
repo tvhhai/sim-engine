@@ -309,6 +309,23 @@ def main():
     else:
         seed_list = parse_seeds("0-29")
 
+    # Lần chạy trước (nếu có): để in thêm "(+N)" / "(-N)" bước so với lần đó, biết mình vừa tối ưu hay làm chậm đi
+    prev_path = os.path.join(here, "docs", "replay_prev_steps.json")
+    try:
+        with open(prev_path, encoding="utf-8") as f:
+            prev = json.load(f)
+    except (OSError, ValueError):
+        prev = {}
+    now = {}
+
+    def delta(key, steps, success):
+        p = prev.get(str(key))
+        if p is None:
+            return "(mới)"
+        tag = "" if p["success"] == success else (" ĐÃ SỬA" if success else " MỚI HỎNG")
+        d = steps - p["steps"]
+        return f"({d:+d}{tag})" if d or tag else f"(=){tag}"
+
     episodes = []
     for key in seed_list:
         seed = meta[key]["seed"] if key in meta else key
@@ -320,7 +337,21 @@ def main():
             if m.get("name"):
                 ep["name"] = m["name"]
         episodes.append(ep)
-        print(f"  seed {seed:3d}: {'OK  ' if ep['success'] else 'FAIL'} | {ep['steps']:3d} bước")
+        label = ep.get("name") or f"seed {seed:3d}"
+        print(f"  {label}: {'OK  ' if ep['success'] else 'FAIL'} | {ep['steps']:3d} bước {delta(key, ep['steps'], ep['success'])}")
+        now[str(key)] = {"steps": ep["steps"], "success": bool(ep["success"])}
+
+    # Tổng kết so với lần trước (chỉ tính các ván có ở cả hai lần)
+    both = [k for k in now if k in prev]
+    if both:
+        dsum = sum(now[k]["steps"] - prev[k]["steps"] for k in both)
+        better = sum(now[k]["steps"] < prev[k]["steps"] for k in both)
+        worse = sum(now[k]["steps"] > prev[k]["steps"] for k in both)
+        print(f"  So với lần chạy trước ({len(both)} ván chung): tổng {dsum:+d} bước, {better} ván nhanh hơn, {worse} ván chậm hơn, "
+              f"{len(both) - better - worse} ván không đổi")
+    prev.update(now)                                   # chạy một phần seed thì chỉ ghi đè phần đã chạy
+    with open(prev_path, "w", encoding="utf-8") as f:
+        json.dump(prev, f, ensure_ascii=False)
 
     # Thông tin cố định của cảnh để HTML vẽ đúng tỷ lệ
     scene = {
