@@ -175,11 +175,12 @@ input:focus-visible, summary:focus-visible {
   .media-button svg { display:block; width:14px; height:14px; }
   .ctl .media-play { color:var(--ink); }
   .ctl .media-speed { margin-left:auto; color:var(--muted); font-size:11px; }
-  .ctl .media-speed select { min-height:26px; padding:0 4px; font-size:12px; }
+  .ctl .media-speed input { width:clamp(72px, 9vw, 120px); margin:0; }
+  .ctl .media-speed output { min-width:4ch; text-align:right; font-variant-numeric:tabular-nums; }
   .phase-playhead { position:absolute; top:1px; bottom:1px; width:2px; transform:translateX(-50%); border-radius:1px; background:#fff; box-shadow:0 0 0 1px #0005; pointer-events:none; z-index:2; }
   @media (pointer:coarse) {
     .ctl .media-button { width:34px; min-height:34px; }
-    .ctl .media-speed select { min-height:34px; }
+    .ctl .media-speed input { min-height:34px; }
   }
 
 </style>
@@ -260,7 +261,7 @@ app.innerHTML = `
             <button id="bNext" class="media-button" title="Tiến 1 bước (→)" aria-label="Tiến 1 bước"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
             <button id="bPhase" class="media-button" title="Phase kế (↓)" aria-label="Phase kế"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 6 6 6-6 6m7-12 6 6-6 6"/></svg></button>
           </div>
-          <label class="media-speed">Tốc độ <select id="spd"><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="1.5">1,5×</option><option value="2">2×</option></select></label>
+          <label class="media-speed" for="spd">Tốc độ <input id="spd" type="range" min="0.25" max="2" step="0.25" value="1"><output id="speedValue" for="spd">1×</output></label>
         </div>
         <div class="scrub">
           <label for="rng">Thời gian <output id="stepCount" for="rng"></output></label>
@@ -1067,7 +1068,11 @@ $("showReach").onchange = () => render();
 $("sel").onchange = () => loadEp(+$("sel").value);
 $("sPrev").onclick = () => loadEp((ep - 1 + EPS.length) % EPS.length);
 $("sNext").onclick = () => loadEp((ep + 1) % EPS.length);
-$("spd").onchange = () => { speed = +$("spd").value; if (timer) { stop(); play(); } };   // play() lấy lại mốc thời gian từ khung đang xem
+$("spd").oninput = () => {
+  speed = Number($("spd").value);
+  $("speedValue").value = speed.toLocaleString("vi-VN") + "×";
+  if (timer) { stop(); play(); }
+};
 $("rng").oninput = () => go(+$("rng").value);
 $("bFirst").onclick = () => go(0);
 $("bPrev").onclick = () => go(i - 1);
