@@ -168,11 +168,11 @@
                 <geom name="fixed_jaw_col_11" type="mesh" class="collision" friction="2.0 0.01 0.001" solref="0.005 1" pos="8.32667e-17 -0.000218214 0.000949706" quat="0 1 0 0" mesh="fixed_jaw_part11"/>
                 <!-- Camera cổ tay: trụ cố định + hai khớp chữ C ôm chốt (xem tools/make_camera_mount.py). Body wrist_cam_arm gập quanh trục x
                      của chốt; độ gập = euler đầu tiên (rad), env áp config.WRIST_CAM_TILT_DEG lúc khởi tạo. Tư thế camera ở độ gập 0 lấy từ
-                     asdqwe9501/Soarm101_Mujoco sim/so101.xml. -->
+                     asdqwe9501/Soarm101_Mujoco sim/so101.xml, đã bỏ ~10° lệch trục chốt để gập chỉ đổi góc chúc. -->
                 <geom type="mesh" class="visual" mesh="wrist_cam_post" material="wrist_cam_bracket_material"/>
                 <body name="wrist_cam_arm" pos="-0.00300 0.04600 -0.03400" euler="0 0 0">
                   <inertial pos="0 0 0" mass="0.001" diaginertia="1e-8 1e-8 1e-8"/>
-                  <camera name="arm_cam" pos="0.00004 0.00836 -0.01910" quat="0.954498 -0.284308 -0.085070 0.029438" fovy="78"/>
+                  <camera name="arm_cam" pos="0.00004 0.00836 -0.01910" quat="0.958491 -0.285123 0 0" fovy="78"/>
                   <geom type="mesh" class="visual" mesh="wrist_cam_link" material="wrist_cam_bracket_material"/>
                   <geom type="mesh" class="visual" mesh="wrist_cam_module" material="wrist_cam_module_material"/>
                 </body>

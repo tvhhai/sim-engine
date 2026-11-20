@@ -26,7 +26,7 @@ OUT = os.path.join(HERE, "assets", "so101")
 
 # Tư thế camera ở độ gập 0 (khớp với tư thế cộng đồng SO-101 MuJoCo), trong khung body gripper
 CAM_POS = np.array([-0.00296, 0.05436, -0.05310])
-CAM_QUAT = np.array([0.954498, -0.284308, -0.085070, 0.029438])
+CAM_QUAT_COMMUNITY = np.array([0.954498, -0.284308, -0.085070, 0.029438])   # quat gốc của model cộng đồng (hơi lệch trục chốt ~10°)
 POST_BASE = np.array([-0.003, 0.019, -0.030])        # chân trụ: chìm trong mặt trên thân bộ kẹp (y ≈ 0.024)
 HINGE = np.array([-0.003, 0.046, -0.034])            # tâm chốt gập H (trục song song x)
 X = np.array([1.0, 0.0, 0.0])
@@ -55,6 +55,43 @@ def convex(tris):
     """Vật lồi (hộp bo góc, trụ, tấm): mặt nào hướng vào tâm thì đảo lại."""
     c = np.array(tris, float).reshape(-1, 3).mean(axis=0)
     return outward(tris, lambda P: c)
+
+
+def mat_to_quat(R):
+    """Ma trận quay 3x3 -> quaternion (w, x, y, z)."""
+    t = np.trace(R)
+    if t > 0:
+        sq = np.sqrt(t + 1) * 2
+        q = [0.25 * sq, (R[2, 1] - R[1, 2]) / sq, (R[0, 2] - R[2, 0]) / sq, (R[1, 0] - R[0, 1]) / sq]
+    else:
+        i = int(np.argmax(np.diag(R)))
+        j, k = (i + 1) % 3, (i + 2) % 3
+        sq = np.sqrt(R[i, i] - R[j, j] - R[k, k] + 1) * 2
+        q = [0, 0, 0, 0]
+        q[1 + i] = 0.25 * sq
+        q[0] = (R[k, j] - R[j, k]) / sq
+        q[1 + j] = (R[j, i] + R[i, j]) / sq
+        q[1 + k] = (R[k, i] + R[i, k]) / sq
+    q = np.array(q)
+    return q / np.linalg.norm(q) * (1 if q[0] >= 0 else -1)
+
+
+def aligned_camera_frame():
+    """Khung camera SONG SONG với chốt: trục phải của camera = trục chốt (x của gripper), hướng nhìn nằm trong mặt phẳng y-z.
+
+    Model cộng đồng cho camera lệch trục chốt khoảng 10° (có thành phần x trong hướng nhìn), nên khi gập quanh chốt hộp camera
+    quét lệch một bên, nhìn như khớp bị vênh. Bỏ thành phần x của hướng nhìn thì gập chỉ đổi góc chúc (pitch), đúng nghĩa bản lề."""
+    look0 = -quat_to_mat(CAM_QUAT_COMMUNITY)[:, 2]
+    look = np.array([0.0, look0[1], look0[2]])
+    look /= np.linalg.norm(look)
+    right = np.array([1.0, 0.0, 0.0])
+    back = -look
+    up = np.cross(back, right)
+    return np.column_stack([right, up, back])
+
+
+CAM_FRAME = aligned_camera_frame()
+CAM_QUAT = mat_to_quat(CAM_FRAME)
 
 
 def rounded_rect(w, h, r, seg=8):
