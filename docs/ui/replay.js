@@ -30,6 +30,7 @@ app.innerHTML = `
     <h1 title="Mỗi lần sửa policy, chạy lại python -m sim_engine.make_replay để cập nhật file này">Replay</h1>
     <span class="seed-controls">
       <button id="sPrev" title="seed trước (phím [)">◀ seed</button>
+      <label>Lọc <select id="flt" title="lọc danh sách seed; ◀ ▶ chỉ duyệt trong danh sách đã lọc"><option value="all">tất cả</option><option value="fail">chỉ FAIL</option><option value="ok">chỉ OK</option></select></label>
       <label>Seed <select id="sel" title="chọn nhanh seed ở xa; dùng nút ◀ ▶ để duyệt lần lượt"></select></label>
       <button id="sNext" title="seed sau (phím ])">seed ▶</button>
       <span class="sub" id="epPos"></span>
@@ -101,10 +102,17 @@ app.innerHTML = `
 `;
 const $ = id => document.getElementById(id);
 const epLabel = (e, k) => { const ex = (e.tags || []).filter(x => !/^(THÀNH CÔNG|HỎNG)/.test(x)); return `<option value="${k}">${k + 1}. ${e.name || "seed " + e.seed} — ${e.success ? "OK" : "FAIL"}${ex.length ? " · " + ex.join(" · ") : ""}</option>`; };
-{ // dropdown chia nhóm (nếu có): chỉ dùng để nhảy tới seed ở xa; duyệt lần lượt bằng nút ◀ ▶
+const passFlt = e => { const f = $("flt").value; return f === "all" || (f === "fail" ? !e.success : e.success); };
+function buildSel() {      // dropdown chia nhóm, chỉ giữ ván hợp bộ lọc (OK/FAIL); duyệt lần lượt bằng nút ◀ ▶ cũng chỉ trong danh sách này
   const groups = [...new Set(EPS.map(e => e.group || ""))];
-  $("sel").innerHTML = groups.map(g => g ? `<optgroup label="${g}">${EPS.map((e, k) => (e.group || "") === g ? epLabel(e, k) : "").join("")}</optgroup>`
-    : EPS.map((e, k) => (e.group || "") === g ? epLabel(e, k) : "").join("")).join("");
+  const opts = g => EPS.map((e, k) => (e.group || "") === g && passFlt(e) ? epLabel(e, k) : "").join("");
+  $("sel").innerHTML = groups.map(g => { const o = opts(g); return !o ? "" : g ? `<optgroup label="${g}">${o}</optgroup>` : o; }).join("");
+}
+const visible = () => EPS.map((e, k) => k).filter(k => passFlt(EPS[k]));
+function stepEp(d) {
+  const v = visible(); if (!v.length) return;
+  const at = v.indexOf(ep);
+  loadEp(at < 0 ? (d > 0 ? v.find(k => k > ep) ?? v[0] : [...v].reverse().find(k => k < ep) ?? v[v.length - 1]) : v[(at + d + v.length) % v.length]);
 }
 
 /* ---------- ánh xạ tọa độ -> pixel ---------- */
@@ -903,15 +911,17 @@ function loadEp(k) {
   const e = EPS[k];
   $("rng").max = e.frames.length - 1;
   $("res").innerHTML = `<span class="badge ${e.success ? "ok" : "bad"}">${e.success ? "THÀNH CÔNG" : "THẤT BẠI"}</span> <strong>${e.steps} bước tổng</strong>`;
-  $("sel").value = k; $("epPos").textContent = `${k + 1}/${EPS.length}`;
+  $("sel").value = k; $("epPos").textContent = `${k + 1}/${EPS.length}` + ($("flt").value !== "all" ? ` (lọc ${visible().indexOf(k) + 1}/${visible().length})` : "");
   $("tags").innerHTML = e.tags ? e.tags.filter(x => x !== "THÀNH CÔNG").map(x => `<span class="badge ${/HỎNG|timeout/.test(x) ? "bad" : "warn"}" style="margin-right:3px">${x}</span>`).join("") : "";
   buildLog(e.frames); buildTimeline(e.frames); render();
 }
 $("showReach").onchange = () => render();
 $("showUnreach").onchange = () => render();
 $("sel").onchange = () => loadEp(+$("sel").value);
-$("sPrev").onclick = () => loadEp((ep - 1 + EPS.length) % EPS.length);
-$("sNext").onclick = () => loadEp((ep + 1) % EPS.length);
+$("sPrev").onclick = () => stepEp(-1);
+$("sNext").onclick = () => stepEp(1);
+$("flt").onchange = () => { buildSel(); $("sel").value = ep; if ($("sel").selectedIndex < 0 || +$("sel").value !== ep) { const v = visible(); if (v.length) loadEp(v[0]); } };
+buildSel();
 $("rng").oninput = () => go(+$("rng").value);
 $("bFirst").onclick = () => go(0);
 $("bPrev").onclick = () => go(i - 1);
