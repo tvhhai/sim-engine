@@ -72,8 +72,8 @@ BOWL_RANDOM_RANGE = 0.0     # bát đứng yên; đặt > 0 để bát cũng ng�
 # ---- Vị trí hộp ngẫu nhiên: HÌNH QUẠT quanh trục khớp 1, đo thật bằng quét gắp (tools/scan_pick_region.py -> docs/pick_scan.json) ----
 PICK_PAN_XY = (0.0, -0.15)           # trục khớp 1 (x, y) trong world
 PICK_REGION = {                       # vùng hộp đặt được: r = khoảng cách tới trục khớp 1; góc đo từ hướng tay (+y) về phía +x
-    "r_min": 0.10, "r_max": 0.36,     # đo: r = 0.08 hay 0.38 trở đi chỗ gắp chỗ hỏng; r >= 0.40 hỏng hết
-    "angle_min_deg": -110.0, "angle_max_deg": 90.0,   # đo: -120 và +100 trở đi hỏng (phía sau cánh tay, khớp 1 không với tới)
+    "r_min": 0.12, "r_max": 0.36,     # đo: r <= 0.10 hay r >= 0.38 chỗ gắp chỗ hỏng; r >= 0.40 hỏng hết
+    "angle_min_deg": -110.0, "angle_max_deg": 110.0,   # đo: +-120 hỏng (ngoài giới hạn khớp 1 = +-110); +-100/+-110 gắp được như nhau
 }
 BOX_BOWL_CLEARANCE = 0.10            # hộp cách tâm bát tối thiểu (m)
 BOX_SAMPLING = "sector"              # "sector": 200 seed chia đều các ô góc x bán kính trong hình quạt (phủ đủ vùng gắp); "square": ô ±BOX_RANDOM_RANGE cũ
@@ -86,6 +86,21 @@ BOX_FIXED_SEEDS = {
     4: ("hộp XA bát + tay vươn gần", (0.118, -0.129)),
     5: ("hộp SÁT bát + tay vươn xa", (-0.260, 0.000)),
     6: ("hộp SÁT bát + tay vươn gần", (-0.118, -0.129)),
+    # 7-11: các điểm quét hỏng nằm TRONG vùng gắp (toạ độ đúng như docs/pick_scan.json, tái hiện được từng điểm)
+    # 12-19: pan 100-110° hai phía, để kiểm tra vùng gắp đối xứng
+    7: ("quét hỏng: r = 12 cm, góc -60°", (-0.1039, -0.0900)),
+    8: ("quét hỏng: r = 12 cm, góc +50°", (0.0919, -0.0729)),
+    9: ("quét hỏng: r = 16 cm, góc +50°", (0.1226, -0.0472)),
+    10: ("quét hỏng: r = 34 cm, góc -80°", (-0.3348, -0.0910)),
+    11: ("quét hỏng: r = 34 cm, góc +80°", (0.3348, -0.0910)),
+    12: ("pan +100°, r = 15 cm (trước đây hỏng: IK không giới hạn khớp ở phase 5-7 lật nhánh)", (0.1477, -0.1760)),
+    13: ("pan +100°, r = 25 cm (trước đây hỏng: IK không giới hạn khớp ở phase 5-7 lật nhánh)", (0.2462, -0.1934)),
+    14: ("pan +110°, r = 15 cm (trước đây hỏng: IK không giới hạn khớp ở phase 5-7 lật nhánh)", (0.1410, -0.2013)),
+    15: ("pan +110°, r = 25 cm (trước đây hỏng: IK không giới hạn khớp ở phase 5-7 lật nhánh)", (0.2349, -0.2355)),
+    16: ("pan -100°, r = 15 cm (trước đây hỏng: IK không giới hạn khớp ở phase 5-7 lật nhánh)", (-0.1477, -0.1760)),
+    17: ("pan -100°, r = 25 cm (trước đây hỏng: IK không giới hạn khớp ở phase 5-7 lật nhánh)", (-0.2462, -0.1934)),
+    18: ("pan -110°, r = 15 cm (trước đây hỏng: IK không giới hạn khớp ở phase 5-7 lật nhánh)", (-0.1410, -0.2013)),
+    19: ("pan -110°, r = 25 cm (trước đây hỏng: IK không giới hạn khớp ở phase 5-7 lật nhánh)", (-0.2349, -0.2355)),
 }
 SETTLED_SPEED = 0.05        # hộp chuyển động chậm hơn mức này (m/s) mới coi là "đã nằm yên"
 
