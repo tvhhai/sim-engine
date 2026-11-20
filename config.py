@@ -68,6 +68,25 @@ TABLE_HALF = (0.45, 0.40)   # nửa kích thước mặt bàn (x, y), mét: bàn
 BOX_HALF = 0.015            # nửa cạnh hộp (hộp 3 cm)
 BOX_RANDOM_RANGE = 0.03     # hộp được đặt ngẫu nhiên trong ±3 cm quanh BOX_DEFAULT_POS (theo x, y)
 BOWL_RANDOM_RANGE = 0.0     # bát đứng yên; đặt > 0 để bát cũng ngẫu nhiên trong ±giá trị này
+
+# ---- Vị trí hộp ngẫu nhiên: HÌNH QUẠT quanh trục khớp 1, đo thật bằng quét gắp (tools/scan_pick_region.py -> docs/pick_scan.json) ----
+PICK_PAN_XY = (0.0, -0.15)           # trục khớp 1 (x, y) trong world
+PICK_REGION = {                       # vùng hộp đặt được: r = khoảng cách tới trục khớp 1; góc đo từ hướng tay (+y) về phía +x
+    "r_min": 0.10, "r_max": 0.36,     # đo: r = 0.08 hay 0.38 trở đi chỗ gắp chỗ hỏng; r >= 0.40 hỏng hết
+    "angle_min_deg": -110.0, "angle_max_deg": 90.0,   # đo: -120 và +100 trở đi hỏng (phía sau cánh tay, khớp 1 không với tới)
+}
+BOX_BOWL_CLEARANCE = 0.10            # hộp cách tâm bát tối thiểu (m)
+BOX_SAMPLING = "sector"              # "sector": 200 seed chia đều các ô góc x bán kính trong hình quạt (phủ đủ vùng gắp); "square": ô ±BOX_RANDOM_RANGE cũ
+BOX_SECTOR_CELLS = (10, 20)          # (số khoảng góc, số vòng bán kính chia đều DIỆN TÍCH): 10 x 20 = 200 ô, mỗi seed 0-199 một ô
+# Seed cố định cho các trường hợp cực biên (thay cho 6 "case" trước đây): seed -> (tên, (x, y) của hộp)
+BOX_FIXED_SEEDS = {
+    1: ("hộp XA nhất (tay vươn tối đa)", (0.000, 0.230)),
+    2: ("hộp GẦN nhất (sát đế, lệch một bên)", (0.060, -0.046)),
+    3: ("hộp XA bát nhất + tay vươn xa (chéo)", (0.355, -0.087)),
+    4: ("hộp XA bát + tay vươn gần", (0.118, -0.129)),
+    5: ("hộp SÁT bát + tay vươn xa", (-0.260, 0.000)),
+    6: ("hộp SÁT bát + tay vươn gần", (-0.118, -0.129)),
+}
 SETTLED_SPEED = 0.05        # hộp chuyển động chậm hơn mức này (m/s) mới coi là "đã nằm yên"
 
 # Đường dẫn Python (dùng cho phím 3 Train trong giao diện).

@@ -12,7 +12,7 @@ import mujoco
 import numpy as np
 from gymnasium import spaces
 
-from . import config
+from . import box_sampling, config
 from .renderer import OffscreenRenderer
 
 
@@ -42,6 +42,8 @@ class SO101PickPlaceEnv(gym.Env):
         #   Mặc định lấy từ config (hộp ±3 cm, bát đứng yên). Cùng seed thì cùng vị trí.
         super().__init__()
         self.box_range = config.BOX_RANDOM_RANGE if box_range is None else box_range
+        # box_range đặt tay (không None) nghĩa là người gọi muốn ô vuông cũ; mặc định theo config.BOX_SAMPLING
+        self.box_sampling = "square" if box_range is not None else config.BOX_SAMPLING
         self.bowl_range = config.BOWL_RANDOM_RANGE if bowl_range is None else bowl_range
         self.render_mode = render_mode
         self.render_images = render_images
@@ -157,6 +159,8 @@ class SO101PickPlaceEnv(gym.Env):
         self.data.qpos[box_qpos_adr:box_qpos_adr + 3] = config.BOX_DEFAULT_POS + self.np_random.uniform(
             low=[-self.box_range, -self.box_range, 0.0], high=[self.box_range, self.box_range, 0.0]
         )
+        if self.box_sampling == "sector":          # phủ đều vùng gắp được theo seed (xem box_sampling.py); seed 1-6 là các trường hợp cực biên
+            self.data.qpos[box_qpos_adr:box_qpos_adr + 2] = box_sampling.box_xy_for_seed(seed)
         # Bát: luôn khôi phục về chỗ gốc, rồi (nếu bật) dịch ngẫu nhiên trong ±bowl_range. Rút số ngẫu nhiên SAU hộp
         # để vị trí hộp của mỗi seed không đổi khi bật random bát.
         self.model.body_pos[self._bowl_body][:2] = self._bowl_default_xy
