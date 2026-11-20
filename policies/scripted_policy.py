@@ -66,7 +66,7 @@ class ScriptedPolicy(BasePolicy):
     ROLL_CLEAR_MARGINS = (0.035, 0.025, 0.015)   # nhấc lên cao hơn miệng bát chừng này (m) trước khi xoay roll; lấy mức đầu tiên với tới được
     ROLL_TURN_STEPS = 60       # tối đa chừng này bước để xoay roll tại chỗ
     FAR_ROLL_R = 0.33          # hộp xa khớp 1 hơn mức này (m): kẹp với roll FAR_ROLL_DEG thay vì roll gần tư thế nghỉ (kẹp ổn hơn khi hộp trượt/ma sát thấp)
-    FAR_ROLL_EARLY = False     # True: xoay roll song song lúc di chuyển ra; False: tới phía trên hộp mới xoay tại chỗ
+    FAR_ROLL_EARLY = True      # True: xoay roll song song lúc di chuyển ra; False: tới phía trên hộp mới xoay tại chỗ
     FAR_ROLL_DEG = -87.0       # -87 (không phải +93): +93 làm cụm cam đâm xuống bàn (-11 mm) ở 7/43 hộp xa; -87 luôn cách bàn >= 30 mm
     MAX_ROLL_FLIPS = 3         # số lần đổi roll tối đa trong một ván (thử lần lượt: xoay 180°, +90°, -90° so với roll đang giữ)
     STALL_STEPS = 20           # đầu tay không tiến gần đích thêm STALL_PROGRESS trong chừng này bước liền thì coi là KẸT, sang phase kế
@@ -157,6 +157,7 @@ class ScriptedPolicy(BasePolicy):
         self._roll_pref = None          # roll ưu tiên sau khi đổi (None = chọn roll gần roll hiện tại nhất)
         self._pred_changed = False      # roll được DỰ ĐOÁN đổi để tránh bát (khác roll gần nhất)
         self._preturn_key = None        # vị trí hộp đã xoay-trước-khi-hạ cho
+        self._far_roll = None           # roll cho hộp xa (đặt ở reset)
         self._pred_key = None           # vị trí hộp đã dự đoán roll cho (để dự đoán lại khi hộp bị đẩy đi)
         self._roll_turn_target = None   # góc roll tại chỗ của bước "turn"
         self._roll_stage = None         # None | "lift" (nhấc thẳng lên khỏi miệng bát) | "turn" (xoay wrist_roll tại chỗ)
@@ -214,13 +215,13 @@ class ScriptedPolicy(BasePolicy):
         self._best_dist, self._stall, self.last_exit, self._p1_z, self._lift_z = 0.0, 0, None, None, None
         self._bowl_hits, self._roll_flips, self._roll_pref, self._roll_stage, self._roll_z = 0, 0, None, None, None
         self._pred_key, self._roll_turn_target, self._pred_changed, self._preturn_key = None, None, False, None
-        # Hộp nằm ngoài tầm chắc chắn (khớp 1 không xoay tới): không thử gắp, về home ngay (phase 10) thay vì chờ hết hạn từng phase
+        self._far_roll = None
+        # Hộp nằm ngoài giới hạn góc hoặc bán kính gắp: không thử gắp, về home ngay (phase 10) thay vì chờ hết hạn từng phase
         self.unreachable = bool(box_sampling.is_unreachable(self.env.get_box_pos()[:2]))
         bx = self.env.get_box_pos()
         if self.FAR_ROLL_R and math.hypot(bx[0] - config.PICK_PAN_XY[0], bx[1] - config.PICK_PAN_XY[1]) >= self.FAR_ROLL_R:
             self._roll_pref = math.radians(self.FAR_ROLL_DEG)
-            if self.FAR_ROLL_EARLY:                    # bắt đầu xoay roll ngay từ lúc đi ra (song song với di chuyển) thay vì tới nơi mới xoay
-                self._roll_hold = self._roll_pref
+            self._far_roll = self._roll_pref
         if self.unreachable:
             self._phase = 10
 
@@ -239,10 +240,16 @@ class ScriptedPolicy(BasePolicy):
         bowl_pos = self.env.get_bowl_pos()
         ee_pos = self.env.get_ee_pos()
 
+        # Tầm gắp trên bàn chỉ áp dụng cho hộp chưa được giữ.
+        if self._phase <= 4 and not self.env._grasped and box_sampling.is_unreachable(box_pos[:2]):
+            self._abort_unreachable_pick()
+
         # Hộp tuột khi đang mang (nằm xa ee > 5 cm vài bước liền): quay lại phase 1 để kẹp lại (tối đa 2 lần)
         if 5 <= self._phase <= 7:
             self._lost_steps = self._lost_steps + 1 if np.linalg.norm(box_pos - ee_pos) > 0.05 else 0
-            if self._lost_steps > 3 and self._regrasps < 2:
+            if self._lost_steps > 3 and box_sampling.is_unreachable(box_pos[:2]):
+                self._abort_unreachable_pick()
+            elif self._lost_steps > 3 and self._regrasps < 2:
                 self._regrasps += 1
                 self._place_retract_target = None
                 self._lost_steps = 0
@@ -297,6 +304,8 @@ class ScriptedPolicy(BasePolicy):
             self._recover_roll(ee_pos)
             return
         # Di chuyển ngang tới phía trên hộp ở độ cao an toàn
+        if self.FAR_ROLL_EARLY and self._far_roll is not None and self._roll_hold is None:
+            self._roll_hold = self._far_roll                  # xoay roll song song lúc đi ra; không áp ở phase 0 (nhấc từ home: khoá roll làm IK không tới được home)
         if self._phase_step == 0 or self._p1_z is None:
             self._p1_z = self._reachable_z(box_pos[:2]) if self.PHASE1_ADAPTIVE_Z else self._safe_z
         target = np.array([box_pos[0], box_pos[1], self._p1_z])
@@ -404,6 +413,12 @@ class ScriptedPolicy(BasePolicy):
         if self._phase == 10:                       # đã rút lên tới nơi: xem hộp đang ở đâu rồi mới đi tiếp
             self._after_retract(box_pos, bowl_pos)
 
+    def _abort_unreachable_pick(self):
+        self.unreachable = True
+        self.last_exit = "unreachable"
+        self._phase, self._phase_step = 10, 0
+        self._place_retract_target = None
+
     def _return_home(self):
         # Về tư thế GẤP GỌN ban đầu: đi thẳng trong không gian khớp tới HOME_QPOS_RAD (không qua IK để chắc chắn gập đúng kiểu)
         self._gripper_target = -1.0     # cất tay thì khép kẹp lại, giống tư thế ban đầu
@@ -421,6 +436,10 @@ class ScriptedPolicy(BasePolicy):
         - hộp ngoài tầm gắp, hoặc hết lượt  -> phase 10
         Đang chờ thì giữ ở phase 9 (tay vẫn ở trên bát), tối đa SETTLE_WAIT_MAX bước.
         """
+        if box_sampling.is_unreachable(box_pos[:2]):
+            self._abort_unreachable_pick()
+            return
+
         speed = float(np.linalg.norm(self.data.qvel[self.env._box_dof_adr:self.env._box_dof_adr + 3]))
         self._still = self._still + 1 if speed < config.SETTLED_SPEED else 0
         if self._still < self.SETTLE_STILL_STEPS and self._settle_wait < self.SETTLE_WAIT_MAX:   # hộp phải yên vài bước liền, không chỉ một khoảnh khắc
