@@ -29,6 +29,7 @@ import os
 import numpy as np
 
 from ..env import SO101PickPlaceEnv
+from ..policies.scripted_policy import ScriptedPolicy
 from .make_replay import Recorder, parse_seeds
 
 
@@ -39,6 +40,8 @@ EXTREME_CASES = [
     {"name": "CASE 2: hộp GẦN nhất", "seed": 0, "options": {"box_xy": [0.050, -0.063]}, "box_xy": (0.050, -0.063)},
 ]
 SHOULDER_XY = (0.0, -0.15)      # trục khớp 1
+MOVE_PHASES = (0, 1, 2, 3, 5, 6, 7, 9)   # các phase kết thúc khi tay tới đích (hoặc quá PHASE_TIMEOUT_STEPS bước)
+PHASE_TIMEOUT = ScriptedPolicy.PHASE_TIMEOUT_STEPS
 
 
 def evaluate_seed(rec, seed):
@@ -46,11 +49,11 @@ def evaluate_seed(rec, seed):
     with contextlib.redirect_stdout(io.StringIO()):
         ep = rec.run(seed)
     frames = ep["frames"]
-    timeouts = sorted({
-        f["ph"] for f in frames
-        if f["phn"] != f["ph"] and f["tg"] and np.linalg.norm(np.array(f["ee"]) - np.array(f["tg"])) >= f["th"]
-    })
-    retries = sum(1 for f in frames if f["ph"] == 4 and f["phn"] == 2)
+    # timeout thật = phase kết thúc vì quá PHASE_TIMEOUT_STEPS bước (không phải vì tay đã tới nơi)
+    timeouts = sorted({f["ph"] for f in frames if f["phn"] != f["ph"] and f["ph"] in MOVE_PHASES and f["ps"] > PHASE_TIMEOUT})
+    retries = sum(1 for f in frames if f["ph"] == 4 and f["phn"] == 2)                 # phase 4 không kẹp được, hạ lại phase 2
+    drops = sum(1 for f in frames if f["ph"] in (5, 6, 7) and f["phn"] == 1)           # làm rớt hộp khi đang mang, quay lại gắp
+    regrasps = sum(1 for f in frames if f["ph"] == 9 and f["phn"] == 1)                # rút lên rồi thấy hộp ngoài bát, gắp lại
     z0 = frames[0]["box"][2]
     ever_grasped = any(f["gr"] for f in frames)
     lifted = max(f["box"][2] for f in frames) > z0 + 0.03
@@ -64,6 +67,7 @@ def evaluate_seed(rec, seed):
         kind = "nhấc lên rồi tuột/không vào bát"
     return {
         "seed": seed, "success": bool(ep["success"]), "steps": ep["steps"], "timeouts": timeouts, "retries": retries,
+        "drops": drops, "regrasps": regrasps,
         "kind": kind, "box0": frames[0]["box"][:2], "bowl": ep["bowl"][:2],
     }
 
@@ -86,27 +90,76 @@ def farthest(cands, chosen, feat):
     return max(cands, key=lambda i: min(np.linalg.norm(feat[i] - feat[j]) for j in chosen))
 
 
+def reach(r):
+    """Khoảng cách từ trục khớp 1 tới hộp / bát, và từ hộp tới bát (m)."""
+    box = math.hypot(r["box0"][0] - SHOULDER_XY[0], r["box0"][1] - SHOULDER_XY[1])
+    bowl = math.hypot(r["bowl"][0] - SHOULDER_XY[0], r["bowl"][1] - SHOULDER_XY[1])
+    gap = math.hypot(r["box0"][0] - r["bowl"][0], r["box0"][1] - r["bowl"][1])
+    return box, bowl, gap
+
+
+def reach_picks(rows):
+    """Seed ở các biên của tầm với: tay vươn tới hộp xa/gần nhất, hộp cách bát xa/gần nhất, và 4 tổ hợp ngược nhau.
+
+    Trả về {chỉ số: [nhãn]}. Bát đứng yên nên "tay vươn tới bát" không đổi; khác nhau giữa các seed là vị trí hộp,
+    nên 4 tổ hợp là: (hộp xa trục, hộp xa bát), (xa trục, gần bát), (gần trục, xa bát), (gần trục, gần bát).
+    """
+    rb = np.array([reach(r)[0] for r in rows])
+    gp = np.array([reach(r)[2] for r in rows])
+    zr = (rb - rb.mean()) / (rb.std() or 1)
+    zg = (gp - gp.mean()) / (gp.std() or 1)
+    picks = {}
+
+    def add(i, label):
+        picks.setdefault(int(i), []).append(label)
+
+    add(rb.argmax(), "tay vươn tới hộp XA nhất")
+    add(rb.argmin(), "tay vươn tới hộp GẦN nhất")
+    add(gp.argmax(), "hộp cách bát XA nhất")
+    add(gp.argmin(), "hộp cách bát GẦN nhất")
+    add((zr + zg).argmax(), "hộp xa trục + xa bát")
+    add((zr - zg).argmax(), "hộp xa trục + gần bát")
+    add((-zr + zg).argmax(), "hộp gần trục + xa bát")
+    add((-zr - zg).argmax(), "hộp gần trục + gần bát")
+    return picks
+
+
 def select(rows, count, feat, slow_steps):
     n = len(rows)
-    sig = [(r["success"], r["kind"], tuple(r["timeouts"]), r["steps"] >= slow_steps) for r in rows]
-    bad = [i for i in range(n) if (not rows[i]["success"]) or rows[i]["timeouts"] or rows[i]["steps"] >= slow_steps]
+
+    def signature(i):
+        r = rows[i]
+        return (r["success"], r["kind"], tuple(r["timeouts"]), r["steps"] >= slow_steps,
+                r["retries"] > 0, r["drops"] > 0, r["regrasps"] > 0)
+
+    bad = [i for i in range(n) if (not rows[i]["success"]) or rows[i]["timeouts"] or rows[i]["steps"] >= slow_steps
+           or rows[i]["retries"] or rows[i]["drops"] or rows[i]["regrasps"]]
     chosen = []
-    # 1) mỗi chữ ký lỗi có một đại diện (chữ ký hiếm trước), đại diện xa các seed đã chọn
+    # 0) các biên của tầm với (hộp xa/gần trục, xa/gần bát và 4 tổ hợp)
+    picks = reach_picks(rows)
+    for i in picks:
+        if i not in chosen:
+            chosen.append(i)
+    # 1) MỌI seed hỏng (nếu có chỗ), rồi mỗi chữ ký lỗi (timeout / kẹp lại / làm rớt / gắp lại / chậm) có một đại diện
+    for i in [i for i in range(n) if not rows[i]["success"]]:
+        if i not in chosen and len(chosen) < count:
+            chosen.append(i)
     groups = collections.defaultdict(list)
     for i in bad:
-        groups[sig[i]].append(i)
+        groups[signature(i)].append(i)
     for key in sorted(groups, key=lambda k: len(groups[k])):
         if len(chosen) >= count:
             break
-        chosen.append(farthest(groups[key], chosen, feat))
-    # 2) còn chỗ: lấp bằng seed ưu tiên (hỏng/timeout/chậm) xa nhất, rồi tới mọi seed xa nhất
+        if not any(signature(j) == key for j in chosen):
+            chosen.append(farthest(groups[key], chosen, feat))
+    # 2) còn chỗ: lấp bằng seed ưu tiên (có chuyện xấu) xa nhất, rồi tới mọi seed xa nhất
     for pool in (bad, list(range(n))):
         while len(chosen) < count:
             left = [i for i in pool if i not in chosen]
             if not left:
                 break
             chosen.append(farthest(left, chosen, feat))
-    return chosen, bad
+    return chosen, bad, picks
 
 
 def main():
@@ -151,7 +204,7 @@ def main():
     print("số seed có timeout theo phase:", dict(sorted(to_count.items())))
 
     feat = features(rows, box_r, bowl_r)
-    chosen, bad = select(rows, args.count, feat, slow_steps)
+    chosen, bad, picks = select(rows, args.count, feat, slow_steps)
     fail_idx = [i for i, r in enumerate(rows) if not r["success"]]
     rest = [i for i in fail_idx if i not in chosen] if len(fail_idx) > args.count else []
 
@@ -162,13 +215,21 @@ def main():
             t.append("timeout phase " + ",".join(map(str, r["timeouts"])))
         if r["retries"]:
             t.append(f"thử kẹp lại {r['retries']} lần")
+        if r["drops"]:
+            t.append(f"làm rớt hộp {r['drops']} lần")
+        if r["regrasps"]:
+            t.append(f"gắp lại sau khi rút {r['regrasps']} lần")
         if r["steps"] >= slow_steps:
             t.append(f"chậm ({r['steps']} bước)")
         return t
 
     def pack(i, group):
         r = rows[i]
-        return {"seed": r["seed"], "group": group, "tags": tags(r), "steps": r["steps"], "box0": [round(v, 4) for v in r["box0"]]}
+        box_r, _, gap = reach(r)
+        t = picks.get(i, []) + tags(r)
+        t.append(f"hộp cách trục khớp 1 {box_r * 100:.1f} cm, cách bát {gap * 100:.1f} cm")
+        return {"seed": r["seed"], "group": group if i not in picks else "biên tầm với (xa/gần trục, xa/gần bát)", "tags": t,
+                "steps": r["steps"], "box0": [round(v, 4) for v in r["box0"]]}
 
     extremes = []
     for c in EXTREME_CASES:
@@ -193,7 +254,7 @@ def main():
                     "timeouts_by_phase": {str(k): v for k, v in sorted(to_count.items())}, "slow_seeds": slow},
         "selected": selected, "rest": others,
         "all": [{"seed": r["seed"], "success": r["success"], "steps": r["steps"], "timeouts": r["timeouts"], "kind": r["kind"],
-                 "retries": r["retries"], "box0": [round(v, 4) for v in r["box0"]]} for r in rows],
+                 "retries": r["retries"], "drops": r["drops"], "regrasps": r["regrasps"], "box0": [round(v, 4) for v in r["box0"]]} for r in rows],
     }
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False)
