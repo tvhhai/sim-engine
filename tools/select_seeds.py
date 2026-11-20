@@ -40,7 +40,7 @@ from .make_replay import Recorder, parse_seeds
 # (r = 0.40 trở lên hỏng), tới góc ±80° (±100° hỏng), và r ≥ 0.10 m. Bát cố định ở (-0.15, 0).
 EXTREME_CASES = [
     {"name": "CASE 1: hộp XA nhất (tay vươn tối đa)", "seed": 0, "box_xy": (0.000, 0.230)},
-    {"name": "CASE 2: hộp GẦN nhất (sát đế, lệch một bên)", "seed": 0, "box_xy": (0.050, -0.063)},
+    {"name": "CASE 2: hộp GẦN nhất (sát đế, lệch một bên)", "seed": 0, "box_xy": (0.060, -0.046)},
     {"name": "CASE 3: hộp XA bát nhất + tay vươn xa (chéo)", "seed": 0, "box_xy": (0.355, -0.087)},
     {"name": "CASE 4: hộp XA bát + tay vươn gần", "seed": 0, "box_xy": (0.118, -0.129)},
     {"name": "CASE 5: hộp SÁT bát + tay vươn xa", "seed": 0, "box_xy": (-0.260, 0.000)},
