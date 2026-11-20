@@ -113,19 +113,20 @@ class ScriptedPolicy(BasePolicy):
         self._roll_hold = None          # góc wrist_roll đã chọn để trục kẹp song song mặt hộp (None = chưa chọn)
         self._clamp_dir = np.array([1.0, 0.0, 0.0])   # hướng trục kẹp trong mặt phẳng ngang (từ hàm cố định sang hàm di động)
         self._home_ee = None            # vị trí đầu tay lúc ở home
-        # Hệ số làm mượt theo từng phase: càng lớn thì bám đích càng nhanh
+        # Hệ số làm mượt theo từng phase (chỉ áp cho 5 khớp tay, kẹp không qua đây): alpha càng lớn thì
+        # lệnh khớp bám đích IK càng nhanh; 1.0 = không làm mượt, lệnh = đích IK ngay.
         self._phase_smoothing = {
             0: 0.8,   # nhấc lên: nhanh
             1: 0.8,   # tới phía trên hộp: nhanh
             2: 0.7,   # hạ xuống pre-grasp: vừa
             3: 0.7,   # hạ xuống kẹp: vừa
             4: 1.0,   # đóng kẹp: tức thì
-            5: 0.5,   # nhấc hộp: chậm hơn
-            6: 0.5,   # chuyển hộp tới bát: chậm hơn
-            7: 0.5,   # hạ vào bát: chậm hơn
+            5: 0.5,   # nhấc hộp: chậm hơn (và bị giới hạn LIFT_STEP_LIMIT mỗi bước)
+            6: 0.5,   # chuyển hộp tới bát: chậm hơn (cũng bị giới hạn LIFT_STEP_LIMIT)
+            7: 0.5,   # hạ vào bát: chậm hơn (cũng bị giới hạn LIFT_STEP_LIMIT)
             8: 1.0,   # mở kẹp: tức thì
-            9: 0.4,   # rút lên: chậm
-            10: 0.4,  # về home: chậm
+            9: 1.0,   # rút lên: không làm mượt
+            10: 0.8,  # về home: khá nhanh (đích là góc khớp cố định, lệnh nhảy tới 0.8 rad/bước)
         }
 
         # Các độ cao (z trong hệ tọa độ world, đơn vị mét)
