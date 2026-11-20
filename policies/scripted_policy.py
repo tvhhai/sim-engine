@@ -77,6 +77,10 @@ class ScriptedPolicy(BasePolicy):
     # Lệnh mở kẹp lúc thả (action > 0.5 thì env coi là thả). 0.55 mở mỗi ngón ~33 mm, hai má hở ~67 mm: lớn hơn
     # đường chéo hộp (42 mm) để hộp rơi xéo vẫn lọt, nhưng nhỏ hơn mở hết (82 mm, rộng hơn lòng bát 84 mm).
     RELEASE_OPEN_CMD = 0.55
+    RELEASE_CLEAR_RAD = 0.8   # phase 8 kết thúc khi hộp đã rời tay (hai hàm hết cùng chạm) VÀ hàm di động mở tới góc này (rad)
+    SETTLE_WAIT_MAX = 15      # sau khi rút lên (phase 9), chờ tối đa chừng này bước cho hộp nằm yên rồi mới kiểm tra hộp có trong bát không
+    REGRASP_R_MIN = 0.08      # hộp rơi ra ngoài bát: chỉ gắp lại khi cách trục khớp 1 trong khoảng này (m), ngoài tầm thì về home
+    REGRASP_R_MAX = 0.31
     RELEASE_RAMP = 0.15       # lệnh mở kẹp tăng tối đa chừng này mỗi bước (thang -1..1)
 
     def __init__(self, env):
@@ -109,6 +113,7 @@ class ScriptedPolicy(BasePolicy):
         self._smoothed_action = None    # action đã làm mượt (để chuyển động không giật)
         self._prev_grip = -1.0          # lệnh kẹp ở bước trước (để giới hạn tốc độ mở); ván bắt đầu với kẹp khép
         self._regrasps = 0              # đã kẹp lại bao nhiêu lần vì hộp tuột khi đang mang
+        self._settle_wait = 0           # số bước đã chờ hộp nằm yên sau khi rút lên (phase 9)
         self._lost_steps = 0            # số bước liên tiếp hộp nằm xa ee khi đang mang
         self._roll_hold = None          # góc wrist_roll đã chọn để trục kẹp song song mặt hộp (None = chưa chọn)
         self._clamp_dir = np.array([1.0, 0.0, 0.0])   # hướng trục kẹp trong mặt phẳng ngang (từ hàm cố định sang hàm di động)
@@ -149,6 +154,7 @@ class ScriptedPolicy(BasePolicy):
         self._regrasps = 0
         self._lost_steps = 0
         self._prev_grip = -1.0
+        self._settle_wait = 0
 
     def select_action(self, observation: dict) -> np.ndarray:
         """Hàm chính: nhìn tình hình hiện tại, trả về action (7 số trong [-1, 1]).
@@ -237,10 +243,13 @@ class ScriptedPolicy(BasePolicy):
             self._move_toward(target, ee_pos, threshold=self.PLACE_ARRIVE_THRESHOLD)
 
         elif self._phase == 8:
-            # Mở kẹp vừa phải: chờ 20 bước cho hộp rơi vào bát
+            # Mở kẹp vừa phải. Xong khi hộp đã rời tay và hàm đã mở đủ rộng để rút lên không kéo theo hộp
+            # (không chờ hộp nằm yên ở đây: việc đó làm sau khi rút lên, ở cuối phase 9). Tối đa 20 bước.
             self._gripper_target = self.RELEASE_OPEN_CMD
             self._phase_step += 1
-            if self._phase_step > 20:
+            jaw = self.data.qpos[self.model.jnt_qposadr[self.env._gripper_jnt]]
+            if (not self.env._grasped and jaw >= self.RELEASE_CLEAR_RAD) or self._phase_step > 20:
+                self._settle_wait = 0
                 self._advance_phase()
 
         elif self._phase == 9:
@@ -248,6 +257,8 @@ class ScriptedPolicy(BasePolicy):
             target = np.array([bowl_pos[0], bowl_pos[1], self._safe_z])
             self._gripper_target = self.RELEASE_OPEN_CMD
             self._move_toward(target, ee_pos, threshold=0.025)
+            if self._phase == 10:                       # đã rút lên tới nơi: xem hộp đang ở đâu rồi mới đi tiếp
+                self._after_retract(box_pos, bowl_pos)
 
         elif self._phase == 10:
             # Về tư thế GẤP GỌN ban đầu: đi thẳng trong không gian khớp tới HOME_QPOS_RAD (không qua IK để chắc chắn gập đúng kiểu)
@@ -263,6 +274,31 @@ class ScriptedPolicy(BasePolicy):
             return self._build_action_from_current()
 
         return self._build_action()
+
+    def _after_retract(self, box_pos, bowl_pos):
+        """Cuối phase 9 (tay đã rút lên trên bát): chờ hộp nằm yên, rồi quyết định.
+
+        - hộp nằm yên trong bát            -> phase 10 (về home)
+        - hộp nằm ngoài bát, trong tầm gắp -> quay lại phase 1 gắp lại (dùng chung giới hạn _regrasps của phase 5-7)
+        - hộp ngoài tầm gắp, hoặc hết lượt  -> phase 10
+        Đang chờ thì giữ ở phase 9 (tay vẫn ở trên bát), tối đa SETTLE_WAIT_MAX bước.
+        """
+        speed = float(np.linalg.norm(self.data.qvel[self.env._box_dof_adr:self.env._box_dof_adr + 3]))
+        if speed >= config.SETTLED_SPEED and self._settle_wait < self.SETTLE_WAIT_MAX:
+            self._settle_wait += 1
+            self._phase = 9
+            return
+        in_bowl = (np.linalg.norm(box_pos[:2] - bowl_pos[:2]) < config.BOWL_INNER_RADIUS
+                   and bowl_pos[2] < box_pos[2] < bowl_pos[2] + config.BOWL_HEIGHT - config.BOX_HALF)
+        pan = self.data.xpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "shoulder")]
+        r = float(np.linalg.norm(box_pos[:2] - pan[:2]))
+        on_table = box_pos[2] < config.BOX_DEFAULT_POS[2] + 0.015      # nằm trên bàn, không gác trên miệng bát
+        if (not in_bowl and on_table and self.REGRASP_R_MIN <= r <= self.REGRASP_R_MAX and self._regrasps < 2):
+            self._regrasps += 1
+            self._phase, self._phase_step = 1, 0
+            self._roll_hold = None
+            self._last_finger = None
+            self._lost_steps = 0
 
     def _advance_phase(self):
         """Chuyển sang phase kế tiếp và đặt lại bộ đếm bước của phase."""
