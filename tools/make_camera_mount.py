@@ -57,7 +57,7 @@ def convex(tris):
     return outward(tris, lambda P: c)
 
 
-def rounded_rect(w, h, r, seg=5):
+def rounded_rect(w, h, r, seg=8):
     r = min(r, w / 2 - 1e-6, h / 2 - 1e-6)
     pts = []
     for k, (cx, cy) in enumerate([(w / 2 - r, h / 2 - r), (-w / 2 + r, h / 2 - r), (-w / 2 + r, -h / 2 + r), (w / 2 - r, -h / 2 + r)]):
@@ -66,7 +66,7 @@ def rounded_rect(w, h, r, seg=5):
     return np.array(pts)
 
 
-def loft(c0, c1, axes, size0, size1, radius, seg=5):
+def loft(c0, c1, axes, size0, size1, radius, seg=8):
     """Khối nối hai mặt cắt chữ nhật bo góc (thon dần), có nắp hai đầu."""
     def ring(c, size):
         p = rounded_rect(size[0], size[1], radius, seg)
@@ -145,6 +145,30 @@ def c_ring(center, axis, opening, r_out, r_in, length, gap_deg=110.0, n=22):
     return outward(tris, mid)
 
 
+def soft_slab(center, axes, w, h, thickness, radius, edge=0.0025, steps=4, seg=8):
+    """Tấm bo góc VÀ bo cạnh (cạnh nối mặt trước/sau với thành bo cung tròn bán kính `edge`), nên các mặt kề nhau lệch nhau
+    chỉ vài chục độ: MuJoCo làm mượt pháp tuyến đẹp, không còn hiện tượng hình chóp trên mặt phẳng lớn."""
+    z = axes[:, 2]
+    ts = np.linspace(0, np.pi / 2, steps + 1)
+    back = [(-thickness / 2 + edge - edge * np.sin(t), edge - edge * np.cos(t)) for t in ts][::-1]   # từ mặt sau tiến vào giữa
+    front = [(thickness / 2 - edge + edge * np.sin(t), edge - edge * np.cos(t)) for t in ts]         # từ giữa ra mặt trước
+    zs, ins = zip(*(back + front))
+    rings = []
+    for zk, ik in zip(zs, ins):
+        pts = rounded_rect(w - 2 * ik, h - 2 * ik, max(radius - ik, 1e-4), seg)
+        rings.append(center + z * zk + pts[:, :1] * axes[:, 0] + pts[:, 1:] * axes[:, 1])
+    tris = []
+    n = len(rings[0])
+    for a, b in zip(rings[:-1], rings[1:]):
+        for k in range(n):
+            j = (k + 1) % n
+            tris += [[a[k], a[j], b[j]], [a[k], b[j], b[k]]]
+    for ring, c in ((rings[0], rings[0].mean(axis=0)), (rings[-1], rings[-1].mean(axis=0))):
+        for k in range(n):
+            tris.append([c, ring[k], ring[(k + 1) % n]])
+    return convex(tris)
+
+
 def slab(center, axes, w, h, thickness, radius):
     z = axes[:, 2]
     return loft(center - z * thickness / 2, center + z * thickness / 2, axes, (w, h), (w, h), radius)
@@ -171,23 +195,22 @@ def build():
     pin = cylinder(H, X, 0.0027, 0.0288)
     post_mesh = np.concatenate([post, c_left, c_right, pin])
 
-    # ---- phần GẬP được (khung wrist_cam_arm, gốc tại H): khớp giữa, tay đỡ, khay ----
-    tray_c = CAM_POS - 0.0172 * look - H
-    knuckle = c_ring(np.zeros(3), X, look, 0.0060, 0.0029, 0.0098, gap_deg=0)          # khớp giữa kín, nằm giữa hai khớp C
-    to_tray = tray_c + 0.0010 * look
-    ln = np.linalg.norm(to_tray)
-    arm = loft(np.zeros(3), to_tray, frame_from_z(to_tray), (0.0098, 0.0062), (0.0098, 0.0050), 0.0026)
-    tray = slab(tray_c, axes, 0.036, 0.036, 0.0030, 0.006)
-    lip = slab(tray_c + 0.0031 * look, axes, 0.0345, 0.0345, 0.0020, 0.0055)
-    link = np.concatenate([knuckle, arm, tray, lip])
-
+    # ---- phần GẬP được (khung wrist_cam_arm, gốc tại H): khớp giữa, tay đỡ, HỘP camera liền khối ----
+    # Hộp camera là MỘT khối bo góc (như vỏ in 3D ôm bo mạch), chỉ có ống kính nhô ra mặt trước; tay đỡ cắm thẳng vào lưng hộp
+    # nên không còn các tấm mỏng chồng lên nhau.
     cam_local = CAM_POS - H
-    pcb = slab(cam_local - 0.0118 * look, axes, 0.032, 0.032, 0.0016, 0.0035)
-    holder = slab(cam_local - 0.0082 * look, axes, 0.0150, 0.0150, 0.0056, 0.0020)
-    barrel = cylinder(cam_local - 0.0042 * look, look, 0.0055, 0.0084)
-    ring_ = cylinder(cam_local - 0.0010 * look, look, 0.0042, 0.0020)
-    conn = slab(cam_local - 0.0138 * look - up * 0.0150, axes, 0.0110, 0.0040, 0.0022, 0.0008)
-    module = np.concatenate([pcb, holder, barrel, ring_, conn])
+    case_c = cam_local - 0.0118 * look                                   # tâm hộp: mặt trước lùi 4.8 mm sau đầu ống kính
+    case = soft_slab(case_c, axes, 0.0360, 0.0360, 0.0140, 0.0070)
+    knuckle = c_ring(np.zeros(3), X, look, 0.0060, 0.0029, 0.0098, gap_deg=0)          # khớp giữa kín, nằm giữa hai khớp C
+    to_case = case_c                                                      # tay đỡ cắm vào giữa hộp
+    arm = loft(np.zeros(3), to_case, frame_from_z(to_case), (0.0098, 0.0062), (0.0140, 0.0080), 0.0030)
+    link = np.concatenate([knuckle, arm, case])
+
+    # phần tối màu: ống kính (thân + viền kính) và vành đen quanh miệng ống kính trên mặt trước hộp
+    barrel = cylinder(cam_local - 0.0039 * look, look, 0.0058, 0.0058)                      # thân ống kính nhô ra khỏi mặt hộp
+    bezel = cylinder(cam_local - 0.0042 * look, look, 0.0080, 0.0012)                       # vành đen quanh miệng ống kính
+    glass = cylinder(cam_local - 0.0005 * look, look, 0.0042, 0.0010)                       # mặt kính ở đầu
+    module = np.concatenate([bezel, barrel, glass])
     return post_mesh, link, module
 
 
