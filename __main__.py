@@ -25,16 +25,16 @@ def main():
         from .app import main as app_main
         app_main()
     elif command == "view":
-        from .viewer import main as viewer_main
+        from .tools.viewer import main as viewer_main
         viewer_main()
     elif command == "record":
-        from .record import main as record_main
+        from .workflows.record import main as record_main
         record_main()
     elif command == "train":
-        from .train import main as train_main
+        from .workflows.train import main as train_main
         train_main()
     elif command == "eval":
-        from .evaluate import main as eval_main
+        from .workflows.evaluate import main as eval_main
         eval_main()
     else:
         print(f"Unknown command: {command}")
