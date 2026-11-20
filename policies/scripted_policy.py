@@ -43,7 +43,16 @@ class ScriptedPolicy(BasePolicy):
     IK_TOLERANCE = 0.001      # dừng IK khi đầu tay cách đích < 1 mm (trên bản sao)
     IK_DAMPING = 0.05         # hệ số giảm chấn của damped least squares (ổn định gần điểm kỳ dị)
     IK_STEP_GAIN = 0.4        # mỗi vòng chỉ đi 40% bước tính được, cho an toàn
-    PHASE_TIMEOUT_STEPS = 200  # ở một phase quá số bước này thì bỏ cuộc và sang phase kế
+    PHASE_TIMEOUT_STEPS = 200  # trần mặc định cho một phase di chuyển (bước), dùng khi phase không có hạn riêng ở PHASE_TIMEOUTS
+    # Hạn riêng cho phase di chuyển (bước). Phase 1 chạy tốt xong trong ≤ 30 bước (p99 = 15) nên 60 là dư; quá hạn nghĩa là đích sai, không đứng đợi 200 bước (6.7 s).
+    PHASE_TIMEOUTS = {1: 60}
+    STALL_PHASES = (1,)        # chỉ phase 1 dùng phát hiện kẹt; các phase kẹp/mang hộp dựa vào hạn mặc định (đã đo: rút ngắn chúng làm hỏng kẹp)
+    IK_LIMIT_PHASES = (5, 6, 7)  # phase nào IK kẹp góc khớp trong giới hạn thật. Đo 200 seed: (5, 6, 7) -> 198/200; cả mọi phase -> 195/200; không phase nào -> 197/200
+    IK_RESPECT_LIMITS = False  # True: mọi lời giải IK bị kẹp trong giới hạn khớp. Đo 200 seed: bật cho mọi phase làm 3-4 seed mất kẹp (91, 149...)
+    PHASE5_ADAPTIVE_Z = False  # True: phase 5 cũng hạ độ cao nhấc xuống mức tới được. Đo 200 seed: 192-194/200 (xấu hơn), nên TẮT
+    PHASE1_ADAPTIVE_Z = True   # phase 1 hạ độ cao đích xuống mức tới được
+    STALL_STEPS = 20           # đầu tay không tiến gần đích thêm STALL_PROGRESS trong chừng này bước liền thì coi là KẸT, sang phase kế
+    STALL_PROGRESS = 0.001     # mét
 
     # Ưu tiên PHỤ về tư thế "vòm" (khớp 2, 3, 4 cùng cong về một phía, khuỷu ở trên cao) để cánh tay
     # tránh võng xuống chạm bàn và bát. Đây chỉ là xu hướng "kéo nhẹ", không phải ràng buộc cứng:
@@ -104,6 +113,8 @@ class ScriptedPolicy(BasePolicy):
         self._wrist_roll_body = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "gripper")
         self._gripper_joint = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "gripper")
         self._qpos_adr = np.array([self.model.jnt_qposadr[jid] for jid in self._joint_ids])  # vị trí của 5 khớp trong data.qpos
+        self._jnt_lo = self.model.jnt_range[self._joint_ids, 0] + 0.01       # giới hạn góc 5 khớp (chừa 0.01 rad), IK không được vượt
+        self._jnt_hi = self.model.jnt_range[self._joint_ids, 1] - 0.01
         self._ee_site = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, "ee_site")
 
         self._phase = 0                 # đang ở phase nào
@@ -118,6 +129,11 @@ class ScriptedPolicy(BasePolicy):
         self._regrasps = 0              # đã kẹp lại bao nhiêu lần vì hộp tuột khi đang mang
         self._still = 0                 # số bước liền hộp đang nằm yên (sau khi rút lên)
         self._settle_wait = 0           # số bước đã chờ hộp nằm yên sau khi rút lên (phase 9)
+        self._best_dist = 0.0           # khoảng cách tốt nhất tới đích trong phase hiện tại (để phát hiện kẹt)
+        self._stall = 0                 # số bước liền không tiến thêm
+        self.last_exit = None           # lý do thoát phase ở bước này: arrived / stall / timeout (None = vẫn trong phase)
+        self._p1_z = None               # độ cao đích của phase 1 (hạ thấp nếu độ cao an toàn nằm ngoài tầm với)
+        self._lift_z = None             # độ cao đích của phase 5 (nhấc hộp), cũng hạ thấp khi hộp sát đế
         self._lost_steps = 0            # số bước liên tiếp hộp nằm xa ee khi đang mang
         self._roll_hold = None          # góc wrist_roll đã chọn để trục kẹp song song mặt hộp (None = chưa chọn)
         self._clamp_dir = np.array([1.0, 0.0, 0.0])   # hướng trục kẹp trong mặt phẳng ngang (từ hàm cố định sang hàm di động)
@@ -160,6 +176,7 @@ class ScriptedPolicy(BasePolicy):
         self._prev_grip = -1.0
         self._settle_wait = 0
         self._still = 0
+        self._best_dist, self._stall, self.last_exit, self._p1_z, self._lift_z = 0.0, 0, None, None, None
 
     def select_action(self, observation: dict) -> np.ndarray:
         """Hàm chính: nhìn tình hình hiện tại, trả về action (7 số trong [-1, 1]).
@@ -168,6 +185,7 @@ class ScriptedPolicy(BasePolicy):
         ("gian lận" so với policy AI, vì AI chỉ được nhìn ảnh camera và góc khớp).
         """
         self.motion_target = None
+        self.last_exit = None                                  # đặt lại mỗi bước; _move_toward ghi lý do nếu phase kết thúc ở bước này
         box_pos = self.env.get_box_pos()
         bowl_pos = self.env.get_bowl_pos()
         ee_pos = self.env.get_ee_pos()
@@ -190,7 +208,9 @@ class ScriptedPolicy(BasePolicy):
 
         elif self._phase == 1:
             # Di chuyển ngang tới phía trên hộp ở độ cao an toàn
-            target = np.array([box_pos[0], box_pos[1], self._safe_z])
+            if self._phase_step == 0 or self._p1_z is None:
+                self._p1_z = self._reachable_z(box_pos[:2]) if self.PHASE1_ADAPTIVE_Z else self._safe_z
+            target = np.array([box_pos[0], box_pos[1], self._p1_z])
             self._gripper_target = 1.0
             self._move_toward(target, ee_pos, threshold=0.025)
 
@@ -228,8 +248,10 @@ class ScriptedPolicy(BasePolicy):
                     self._advance_phase()                    # hết lượt thử: đi tiếp như cũ
 
         elif self._phase == 5:
-            # Nhấc thẳng lên (giữ nguyên x, y của tay)
-            target = np.array([ee_pos[0], ee_pos[1], self._safe_z])
+            # Nhấc thẳng lên (giữ nguyên x, y của tay). Sát đế thì độ cao an toàn nằm ngoài tầm với: nhấc tới độ cao tới được
+            if self._phase_step == 0 or self._lift_z is None:
+                self._lift_z = self._reachable_z(ee_pos[:2], z_lo=self._grasp_z + 0.04) if self.PHASE5_ADAPTIVE_Z else self._safe_z
+            target = np.array([ee_pos[0], ee_pos[1], self._lift_z])
             self._gripper_target = -1.0
             self._move_toward(target, ee_pos, threshold=0.02)
 
@@ -308,10 +330,31 @@ class ScriptedPolicy(BasePolicy):
             self._last_finger = None
             self._lost_steps = 0
 
+    def _reachable_z(self, xy, z_lo=None):
+        """Độ cao đích (phase 1 và phase 5): cao nhất trong [z_lo, độ cao an toàn] mà IK (có giới hạn khớp) còn tới được trong 4 mm.
+
+        Hộp sát đế (r < 15 cm) thì độ cao an toàn CARRY_Z nằm ngoài tầm với của cánh tay: IK không giới hạn khớp từng báo "tới được", nhưng
+        khớp thật dừng ở giới hạn nên đầu tay kẹt cách đích ~4 cm cho tới khi hết hạn phase. Hạ độ cao đích xuống mức tới được thì phase 1 kết
+        thúc ngay khi tới nơi. Nếu không độ cao nào tới được thì lấy độ cao có sai số IK nhỏ nhất."""
+        z_lo = self._pre_grasp_z + 0.02 if z_lo is None else z_lo
+        best = (1e9, self._safe_z)
+        z = self._safe_z
+        while z >= z_lo - 1e-9:
+            target = np.array([xy[0], xy[1], z])
+            self._solve_ik(target, limits=True)      # chỉ để THĂM DÒ tầm với: có kẹp giới hạn khớp nên sai số IK phản ánh đúng thực tế
+            err = float(np.linalg.norm(self._ik_data.site_xpos[self._ee_site] - target))
+            if err < 0.004:
+                return z
+            if err < best[0]:
+                best = (err, z)
+            z -= 0.01
+        return best[1]
+
     def _advance_phase(self):
         """Chuyển sang phase kế tiếp và đặt lại bộ đếm bước của phase."""
         self._phase += 1
         self._phase_step = 0
+        self._best_dist, self._stall = 0.0, 0
 
     def _grasp_target(self, z):
         """Đích của ee khi hạ xuống hộp: chọn roll theo mặt hộp, rồi lệch khỏi tâm hộp GRASP_SIDE_OFFSET theo trục kẹp."""
@@ -352,11 +395,11 @@ class ScriptedPolicy(BasePolicy):
                 best = (score, r, c)
         return best[1], best[2]
 
-    def _solve_ik(self, target_pos, roll=None):
+    def _solve_ik(self, target_pos, roll=None, limits=None):
         """IK: tìm góc khớp (radian) của 5 khớp để đầu tay (ee_site) tới target_pos.
 
         Chạy trên bản sao dữ liệu `_ik_data` nên không làm robot thật cử động. Chỉ tính HÌNH HỌC:
-        không biết va chạm và không giới hạn góc khớp. Nhiệm vụ chính là vị trí (x, y, z) của đầu tay.
+        không biết va chạm nhưng có kẹp góc khớp trong giới hạn thật. Nhiệm vụ chính là vị trí (x, y, z) của đầu tay.
         Hai nhiệm vụ phụ (đều "mềm"):
 
         1. Ở các phase TOOL_DOWN_PHASES: trục kẹp (từ cổ tay tới đầu tay) chúc thẳng xuống. Cộng thêm 3 hàng
@@ -419,6 +462,8 @@ class ScriptedPolicy(BasePolicy):
             dq = dq + ((eye5 - J_pinv @ J_all) @ (posture_k * (q_pref - q))) * free
 
             ik.qpos[self._qpos_adr] += self.IK_STEP_GAIN * dq
+            if (self.IK_RESPECT_LIMITS or self._phase in self.IK_LIMIT_PHASES) if limits is None else limits:
+                ik.qpos[self._qpos_adr] = np.clip(ik.qpos[self._qpos_adr], self._jnt_lo, self._jnt_hi)   # IK phải tôn trọng giới hạn khớp thật
             mujoco.mj_forward(self.model, ik)
 
         return ik.qpos[self._qpos_adr].copy()
@@ -449,8 +494,19 @@ class ScriptedPolicy(BasePolicy):
             self._current_joint_targets[4] = self._roll_hold
 
         self._phase_step += 1
-        arrived = np.linalg.norm(ee_pos - target_pos) < threshold
-        if arrived or self._phase_step > self.PHASE_TIMEOUT_STEPS:
+        dist = float(np.linalg.norm(ee_pos - target_pos))
+        if self._phase_step == 1 or dist < self._best_dist - self.STALL_PROGRESS:
+            self._best_dist, self._stall = dist, 0
+        else:
+            self._stall += 1
+        cap = self.PHASE_TIMEOUTS.get(self._phase, self.PHASE_TIMEOUT_STEPS)
+        if dist < threshold:
+            self.last_exit = "arrived"
+        elif self._phase_step > cap:
+            self.last_exit = "timeout"
+        elif self._stall >= self.STALL_STEPS and self._phase in self.STALL_PHASES:
+            self.last_exit = "stall"
+        if self.last_exit:
             self._advance_phase()
 
     def _to_action(self, angles):

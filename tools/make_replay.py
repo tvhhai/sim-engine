@@ -238,6 +238,7 @@ class Recorder:
             "fo": self.finger_open(),                    # góc hàm kẹp di động (rad): lớn = mở
             "gr": bool(self.env._grasped),               # hộp đang dính vào tay
             "ag": round(float(action_grip), 2),          # lệnh kẹp: +1 mở, -1 đóng
+            "ex": getattr(self.policy, "last_exit", None),   # lý do phase kết thúc ở bước này: arrived / stall / timeout
             "hd": round(float(info["box_to_bowl_dist"]), 3),   # khoảng cách ngang hộp-bát
             "ok": bool(info["success"]),
             "bs": round(float(info["box_speed"]), 3),    # tốc độ hộp (m/s): chỉ tính thành công khi hộp đã nằm yên

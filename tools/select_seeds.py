@@ -49,8 +49,8 @@ def evaluate_seed(rec, seed):
     with contextlib.redirect_stdout(io.StringIO()):
         ep = rec.run(seed)
     frames = ep["frames"]
-    # timeout thật = phase kết thúc vì quá PHASE_TIMEOUT_STEPS bước (không phải vì tay đã tới nơi)
-    timeouts = sorted({f["ph"] for f in frames if f["phn"] != f["ph"] and f["ph"] in MOVE_PHASES and f["ps"] > PHASE_TIMEOUT})
+    # timeout thật = phase kết thúc vì quá hạn hoặc vì KẸT (policy ghi lý do ở `last_exit`), không phải vì tay đã tới nơi
+    timeouts = sorted({f["ph"] for f in frames if f["phn"] != f["ph"] and f.get("ex") in ("timeout", "stall")})
     retries = sum(1 for f in frames if f["ph"] == 4 and f["phn"] == 2)                 # phase 4 không kẹp được, hạ lại phase 2
     drops = sum(1 for f in frames if f["ph"] in (5, 6, 7) and f["phn"] == 1)           # làm rớt hộp khi đang mang, quay lại gắp
     regrasps = sum(1 for f in frames if f["ph"] == 9 and f["phn"] == 1)                # rút lên rồi thấy hộp ngoài bát, gắp lại
