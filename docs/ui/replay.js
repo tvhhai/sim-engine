@@ -28,13 +28,13 @@ app.innerHTML = `
   <a href="#rng" class="skip">Đến thanh tua replay</a>
   <header class="hd">
     <h1 title="Mỗi lần sửa policy, chạy lại python -m sim_engine.make_replay để cập nhật file này">Replay</h1>
-    <span style="display:inline-flex;gap:4px;align-items:center">
+    <span class="seed-controls">
       <button id="sPrev" title="seed trước (phím [)">◀ seed</button>
       <label>Seed <select id="sel" title="chọn nhanh seed ở xa; dùng nút ◀ ▶ để duyệt lần lượt"></select></label>
       <button id="sNext" title="seed sau (phím ])">seed ▶</button>
       <span class="sub" id="epPos"></span>
     </span>
-    <span id="res"></span>
+    <span class="seed-summary" id="res" role="status"></span>
     <span id="tags" class="sub"></span>
     <span class="badge" style="background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)" title="Hộp chỉ được giữ bằng ma sát và va chạm thật">KẸP THẬT</span>
     <span class="sub">Policy <code>${S.policy}</code> · hình 2D vẽ lại từ số liệu thật, không phải vật lý</span>
@@ -50,30 +50,46 @@ app.innerHTML = `
     </div>
   </header>
   <main class="main">
-    <div class="card c-small"><h2>NHÌN TỪ TRÊN XUỐNG (x ngang, y dọc, mét) · số 1-5 = khớp<label style="float:right;font-weight:400"><input type="checkbox" id="showReach" checked> vùng gắp được</label></h2><svg id="top" viewBox="0 0 520 340"></svg>
-      <h2>NHÌN TỪ CẠNH = LÁT CẮT thẳng đứng qua trục khớp 1, theo hướng cánh tay (u ngang, z cao, mét)</h2><svg id="side" viewBox="0 0 520 340"></svg></div>
-    <div class="card c-3d"><h2>3D (VIEW CHÍNH) · kéo chuột = xoay · lăn = zoom · nhấp đúp = về mặc định<span class="vb"><button id="v1">chéo</button><button id="v2">trước</button><button id="v3">trên</button><button id="bCam" aria-pressed="true" title="bật/tắt khung camera đầu kẹp (arm_cam) ở góc phải dưới">cam kẹp</button></span></h2><div class="cv"><canvas id="c3"></canvas><canvas id="camA" width="320" height="240"></canvas></div>
+    <div class="card c-small"><h2>NHÌN TỪ TRÊN XUỐNG (x ngang, y dọc, mét) · số 1-5 = khớp<label style="float:right;font-weight:400"><input type="checkbox" id="showReach" checked> vùng gắp được</label></h2><svg id="top" role="img" aria-label="Hình chiếu XY cố định" viewBox="0 0 520 340"></svg>
+      <h2>Nhìn từ cạnh · Y ngang, Z cao (m)</h2><svg id="side" role="img" aria-label="Hình chiếu YZ cố định" viewBox="0 0 520 340"></svg></div>
+    <div class="card c-3d"><h2><span>3D (VIEW CHÍNH)</span><span class="hint">kéo = xoay · lăn = zoom · nhấp đúp = về mặc định</span></h2>
+      <div class="cv"><canvas id="c3"></canvas>
+        <div class="viewbar" role="group" aria-label="Góc nhìn 3D">
+          <button id="v1" title="Góc chéo mặc định">Chéo</button><button id="v2" title="Nhìn từ phía +Y về đế">Trước</button><button id="vSide" title="Chiếu vuông góc từ +X lên mặt phẳng YZ">Hông</button><button id="v3" title="Nhìn thẳng từ trên xuống">Trên</button><button id="vCams" title="Xem vị trí camera bên hông cổ tay">Vị trí cam</button>
+          <span class="sep"></span><button id="bCam" aria-pressed="true" title="Bật hoặc tắt ảnh camera cổ tay">Ảnh cam</button>
+        </div>
+        <div id="cameraFeeds"><canvas id="camA" width="320" height="240" aria-label="Ảnh dựng lại từ camera cổ tay"></canvas></div>
+      </div>
       <div class="ctl">
-        <div class="row">
-          <button id="bFirst" title="Home">⏮ đầu</button>
-          <button id="bPP" title="↑">⏪ phase trước</button>
-          <button id="bPrev" title="←">◀ lùi 1</button>
-          <button id="bNext" title="→">tiến 1 ▶</button>
-          <button id="bPhase" title="↓">phase kế ⏩</button>
-          <button id="bPlay" class="primary" title="Space">▶ phát</button>
-          <label>Tốc độ <select id="spd"><option value="0.5">chậm 0,5×</option><option value="1" selected>bình thường (thực tế)</option><option value="1.5">nhanh 1,5×</option><option value="2">nhanh 2×</option></select></label>
+        <div class="transport">
+          <span class="grp" role="group" aria-label="Điều khiển phát">
+            <button id="bFirst" class="icon-btn" title="Về bước đầu (Home)" aria-label="Về bước đầu"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M3 3h2v10H3zM13 3v10L6 8z"/></svg></button>
+            <button id="bPP" class="icon-btn" title="Phase trước (↑)" aria-label="Phase trước"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M8.5 3v10L2 8zM15 3v10L8.5 8z"/></svg></button>
+            <button id="bPrev" class="icon-btn" title="Lùi 1 bước (←)" aria-label="Lùi 1 bước"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M11 3v10L4 8z"/></svg></button>
+            <button id="bPlay" class="icon-btn primary play" title="Phát / dừng (Space)" aria-label="Phát"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M4 2.5v11L13.5 8z"/></svg></button>
+            <button id="bNext" class="icon-btn" title="Tiến 1 bước (→)" aria-label="Tiến 1 bước"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M5 3v10l7-5z"/></svg></button>
+            <button id="bPhase" class="icon-btn" title="Phase kế (↓)" aria-label="Phase kế"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M1 3v10l6.5-5zM7.5 3v10L14 8z"/></svg></button>
+          </span>
+          <label class="spd">Tốc độ <select id="spd"><option value="0.5">chậm 0,5×</option><option value="1" selected>bình thường (thực tế)</option><option value="1.5">nhanh 1,5×</option><option value="2">nhanh 2×</option></select></label>
         </div>
-        <label for="rng">Bước mô phỏng <output id="stepCount" for="rng"></output></label>
-        <input type="range" id="rng" min="0" value="0">
-        <div class="tl" id="tl"></div><div class="tlcur" id="tlc"><i></i></div>
-        <div class="row" style="margin-top:2px">
-          <label><input type="checkbox" id="oPast" checked><span style="color:var(--past);font-weight:700">quá khứ</span></label>
-          <label><input type="checkbox" id="oFut" checked><span style="color:var(--future);font-weight:700">tương lai</span></label>
-          <label><input type="checkbox" id="oPath" checked>đường đi của tay</label>
-          <label>phạm vi <select id="oHz"><option value="1" selected>1 bước</option><option value="5">5 bước</option><option value="15">15 bước</option><option value="phase">hết phase</option><option value="end">hết ván</option></select></label>
-          <label>1 cánh tay mờ mỗi <select id="oEv"><option value="1" selected>1 bước</option><option value="3">3 bước</option><option value="5">5 bước</option><option value="10">10 bước</option></select></label>
-          <span class="sub">Phím: ← → · ↑ ↓ phase · Space · Home/End</span>
+        <div class="scrub">
+          <label for="rng">Thời gian <output id="stepCount" for="rng"></output></label>
+          <input type="range" id="rng" min="0" value="0">
         </div>
+        <div class="phasebar" id="phasebar">
+          <div class="tlcur" id="tlc"><button type="button" id="tlh" role="slider" aria-label="Kéo để chọn bước trong các phase" aria-valuemin="0" aria-valuenow="0"><svg viewBox="0 0 18 24" aria-hidden="true"><path class="pin" d="M3 1h12a2 2 0 0 1 1.5 3.3L10.4 17a2 2 0 0 1-2.8 0L1.5 4.3A2 2 0 0 1 3 1z"/><rect class="needle" x="8.2" y="16" width="1.6" height="8"/></svg></button></div>
+          <div class="tl" id="tl"></div>
+        </div>
+        <details class="opts"><summary>Hiển thị quá khứ / tương lai</summary>
+          <div class="row">
+            <label><input type="checkbox" id="oPast" checked><span style="color:var(--past);font-weight:700">quá khứ</span></label>
+            <label><input type="checkbox" id="oFut" checked><span style="color:var(--future);font-weight:700">tương lai</span></label>
+            <label><input type="checkbox" id="oPath" checked>đường đi của tay</label>
+            <label>phạm vi <select id="oHz"><option value="1" selected>1 bước</option><option value="5">5 bước</option><option value="15">15 bước</option><option value="phase">hết phase</option><option value="end">hết ván</option></select></label>
+            <label>1 cánh tay mờ mỗi <select id="oEv"><option value="1" selected>1 bước</option><option value="3">3 bước</option><option value="5">5 bước</option><option value="10">10 bước</option></select></label>
+          </div>
+        </details>
+        <span class="sub keys">Phím: ← → từng bước · ↑ ↓ phase · Space · Home/End</span>
       </div>
     </div>
     <div class="col">
@@ -94,13 +110,15 @@ const epLabel = (e, k) => { const ex = (e.tags || []).filter(x => !/^(THÀNH CÔ
 /* ---------- ánh xạ tọa độ -> pixel ---------- */
 const W = 520, H = 340;
 const TOP = { x0:-0.42, x1:0.42, y0:-0.30, y1:0.24 };
-const SIDE = { x0:-0.12, x1:0.42, z0:0.40, z1:0.82 };
-const sx = (v, R) => 10 + (v - R.x0) / (R.x1 - R.x0) * (W - 20);
+const SIDE = { x0:-0.42, x1:0.42, z0:0.32, z1:0.89 };
+// One pixel-per-metre scale for both axes within each orthographic view.
+const scaleX = R => Math.min((W - 20) / (R.x1 - R.x0), (H - 20) / ((R.y1 ?? R.z1) - (R.y0 ?? R.z0)));
+const sx = (v, R) => W / 2 + (v - (R.x0 + R.x1) / 2) * scaleX(R);
+const sy = (v, R, low, high) => H / 2 - (v - (low + high) / 2) * scaleX(R);
 const topX = x => sx(x, TOP);
-const topY = y => H - 10 - (y - TOP.y0) / (TOP.y1 - TOP.y0) * (H - 20);
-const sideX = x => sx(x, SIDE);
-const sideY = z => H - 10 - (z - SIDE.z0) / (SIDE.z1 - SIDE.z0) * (H - 20);
-const scaleX = R => (W - 20) / (R.x1 - R.x0);
+const topY = y => sy(y, TOP, TOP.y0, TOP.y1);
+const sideX = y => sx(y, SIDE);
+const sideY = z => sy(z, SIDE, SIDE.z0, SIDE.z1);
 const polyPts = (arr, fx, fy, a, b) => arr.map(p => fx(p[a]).toFixed(1) + "," + fy(p[b]).toFixed(1)).join(" ");
 function cross(x, y, r, col, w) { return `<path d="M${x-r} ${y} H${x+r} M${x} ${y-r} V${y+r}" stroke="${col}" stroke-width="${w}"/>`; }
 function F() { return EPS[ep].frames; }
@@ -146,28 +164,33 @@ function armWorld(fr) {                                  // đỉnh lưới củ
   }
   return (fr._w = out);
 }
-let SM = p => p;                                        // ánh xạ điểm world -> toạ độ vẽ (mặc định giữ nguyên; hình cạnh dùng lát cắt)
+let SM = p => p;                                        // ánh xạ điểm world -> toạ độ vẽ (mặc định giữ nguyên; hình cạnh dùng Y ngang)
 const ARMCOL = "#e8b923";
-const ARM_ALPHA = 0.3;                                  // cánh tay hơi trong suốt để vẫn thấy rõ trục khớp (vòng số 1-5) và hộp phía sau
 function linkColor(fr, nm, main) {                       // đỏ = chạm hộp, cam = chạm bàn, tím = chạm bát
   if (!main) return ARMCOL;
   return (fr.ct || []).includes(nm) ? "#e5484d" : (fr.tb || []).includes(nm) ? "#f59e0b" : touchBowl(fr, nm) ? BOWLC : ARMCOL;
 }
-function armHulls(fr, fx, fy, a, b, slab) {              // bóng 2D của từng link = bao lồi của các đỉnh đã chiếu
+function meshColors(name, frame) {
+  const highlight = linkColor(frame, name, true);
+  if (highlight !== ARMCOL) return () => hexRgbCam(highlight);
+  const groups = S.arm_mesh[name].colors || [];
+  let group = 0, end = groups[0]?.[0] || 0;
+  return face => {
+    while (group+1 < groups.length && face >= end) end += groups[++group][0];
+    return groups[group]?.[1] || hexRgbCam(ARMCOL);
+  };
+}
+function armHulls(fr, fx, fy, a, b) {              // bóng 2D của từng link = bao lồi của các đỉnh đã chiếu
   let s = "";
   const W3 = armWorld(fr);
   for (const nm of Object.keys(S.arm_mesh)) {
-    const w = W3[nm], pts = [], cut = [];
+    const w = W3[nm], pts = [];
     for (let i = 0; i < w.length; i += 6) {
       const q = SM([w[i], w[i+1], w[i+2]]);
       pts.push([fx(q[a]), fy(q[b])]);
-      if (slab && Math.abs(q[1]) < slab) cut.push([fx(q[a]), fy(q[b])]);
     }
     const poly = P => P.map(p => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
-    if (slab) {      // bóng cả link (mờ, nét đứt) + LÁT CẮT thật: chỉ phần link nằm trong lớp dày 2*slab quanh mặt phẳng cắt
-      s += `<polygon points="${poly(hull2(pts))}" fill="none" stroke="#3a2c00" stroke-opacity=".28" stroke-dasharray="3 3" stroke-width=".8"/>`;
-      if (cut.length > 2) s += `<polygon points="${poly(hull2(cut))}" fill="${linkColor(fr, nm, true)}" fill-opacity=".3" stroke="#3a2c00" stroke-opacity=".6" stroke-width="1"/>`;
-    } else s += `<polygon points="${poly(hull2(pts))}" fill="${linkColor(fr, nm, true)}" fill-opacity=".3" stroke="#3a2c00" stroke-opacity=".5" stroke-width=".8"/>`;
+    s += `<polygon points="${poly(hull2(pts))}" fill="${linkColor(fr, nm, true)}" fill-opacity=".3" stroke="#3a2c00" stroke-opacity=".5" stroke-width=".8"/>`;
   }
   return s;
 }
@@ -185,9 +208,9 @@ function wallCorners3(g) {                            // 8 đỉnh (x, y, z) c�
     return [g.pos[0] + lx*co - ly*si, g.pos[1] + lx*si + ly*co, g.pos[2] + lz];
   });
 }
-function armSeg(fr, fx, fy, a, b, w, op, red, col, slab) {
+function armSeg(fr, fx, fy, a, b, w, op, red, col) {
   const A = fr.arm.map(p => { const q = SM(p); return [q[a], q[b]]; }); { const q = SM(fr.ee); A.push([q[a], q[b]]); }
-  let s = red ? armHulls(fr, fx, fy, a, b, slab) : "";
+  let s = red ? armHulls(fr, fx, fy, a, b) : "";
   for (let k = 0; k < A.length - 1; k++) {
     const nm = S.arm_bodies[k];                       // đoạn k nằm giữa khớp k và khớp k+1, mang tên link nm
     const hit = red && fr.ct.includes(nm), tb = red && fr.tb.includes(nm), bw = red && touchBowl(fr, nm);
@@ -320,7 +343,6 @@ function drawTop(fr, fs) {
   s += axes(TOP, topX, topY, TOP.y0, TOP.y1, 0.05, 0.1, "x (m)", "y (m)");
   s += reachTop(k);
   s += `<text x="${topX(b[0])}" y="${topY(b[1]) - 0.06*k}" font-size="10" text-anchor="middle" fill="var(--bowl)" font-weight="700">bát</text>`;
-  s += `<text x="${topX(fr.arm[0][0]) + 9}" y="${topY(fr.arm[0][1]) + 4}" font-size="10" fill="var(--ink)">đế robot</text>`;
   S.bowl_geoms.forEach(g => {                           // bát thật: đáy tròn + 24 tấm tường hẹp xếp thành vòng tròn (gần đúng hình trụ rỗng)
     if (g.type === "cylinder") s += `<circle cx="${topX(g.pos[0])}" cy="${topY(g.pos[1])}" r="${g.size[0]*k}" fill="var(--bowl)" opacity=".2"/>`;
     else s += `<polygon points="${wallCorners(g).map(p => topX(p[0]) + "," + topY(p[1])).join(" ")}" fill="var(--bowl)" fill-opacity=".4" stroke="var(--bowl)" stroke-width="1"/>`;
@@ -330,9 +352,6 @@ function drawTop(fr, fs) {
   s += `<text x="${topX(b0[0])}" y="${topY(b0[1]) + h + 11}" font-size="9" text-anchor="middle" fill="var(--box)">hộp ban đầu</text>`;
   if (Math.hypot(fr.box[0]-b0[0], fr.box[1]-b0[1]) > 0.004)     // mũi tên: hộp đã lệch khỏi chỗ cũ
     s += `<line x1="${topX(b0[0])}" y1="${topY(b0[1])}" x2="${topX(fr.box[0])}" y2="${topY(fr.box[1])}" stroke="var(--bad)" stroke-width="2" stroke-dasharray="2 2"/>`;
-  { const bs = fr.arm[1], th = fr.jq[0] * Math.PI / 180, L = 0.55;
-    s += `<line x1="${topX(bs[0])}" y1="${topY(bs[1])}" x2="${topX(bs[0] + L * Math.sin(th))}" y2="${topY(bs[1] + L * Math.cos(th))}" stroke="var(--hand)" stroke-width="1.5" stroke-dasharray="6 4" opacity=".8"/>`;
-    s += `<text x="${topX(bs[0] + 0.33 * Math.sin(th)) + 5}" y="${topY(bs[1] + 0.33 * Math.cos(th)) - 4}" font-size="9" fill="var(--hand)">mặt cắt hình cạnh</text>`; }
   s += trails(topX, topY, 0, 1, "ghost");
   s += armSeg(fr, topX, topY, 0, 1, 7, .85, true);
   s += trails(topX, topY, 0, 1, "path");
@@ -344,28 +363,24 @@ function drawTop(fr, fs) {
   s += cross(topX(fr.ee[0]), topY(fr.ee[1]), 8, "var(--hand)", 2.5);
   $("top").innerHTML = s;
 }
-function sliceMap(fr) {                                  // lát cắt: u = khoảng cách dọc hướng tay, l = lệch ngang so với mặt cắt, z giữ nguyên
-  const base = fr.arm[1], th = fr.jq[0] * Math.PI / 180, su = Math.sin(th), cu = Math.cos(th);
-  return p => { const dx = p[0] - base[0], dy = p[1] - base[1]; return [dx * su + dy * cu, dx * cu - dy * su, p[2]]; };
-}
 function drawSide(fr, fs) {
-  const k = scaleX(SIDE), b = S.bowl, SLAB = 0.03;
-  SM = sliceMap(fr);
-  const bm = SM(b), lb = Math.abs(bm[1]);
+  const b = S.bowl;
+  SM = ([x, y, z]) => [y, x, z];
+  const bm = SM(b);
   const hullPoly = (pts, fx, fy, a, c) => hull2(pts.map(q => { const m = SM(q); return [fx(m[a]), fy(m[c])]; })).map(p => p.join(",")).join(" ");
   let s = `<rect x="10" y="${sideY(0.42)}" width="${W-20}" height="${H-10-sideY(0.42)}" fill="var(--table)" opacity=".5"/>`;
-  s += axes(SIDE, sideX, sideY, SIDE.z0, SIDE.z1, 0.05, 0.05, "u (m)", "z = độ cao (m)");
+  s += axes(SIDE, sideX, sideY, SIDE.z0, SIDE.z1, 0.05, 0.05, "y (m)", "z (m)");
   s += `<line x1="10" y1="${sideY(0.42)}" x2="${W-10}" y2="${sideY(0.42)}" stroke="var(--muted)" stroke-width="2"/>`;
-  s += `<text x="${W-12}" y="${sideY(0.42) + 12}" font-size="10" text-anchor="end" fill="var(--muted)">mặt bàn z=0.42 · u=0 là trục khớp 1</text>`;
-  // bát: bóng của cả bát; đậm nếu nằm trong lát cắt, mờ nếu lệch ngang
-  const bowlOp = lb < 0.05 ? .45 : .12;
-  S.bowl_geoms.forEach(g => {
-    let pts;
-    if (g.type === "cylinder") pts = Array.from({ length: 16 }, (_, q) => { const t = q / 16 * 2 * Math.PI; return [g.pos[0] + g.size[0] * Math.cos(t), g.pos[1] + g.size[0] * Math.sin(t), g.pos[2] + g.size[1] * (q % 2 ? 1 : -1)]; });
-    else pts = wallCorners3(g);
-    s += `<polygon points="${hullPoly(pts, sideX, sideY, 0, 2)}" fill="var(--bowl)" fill-opacity="${bowlOp}" stroke="var(--bowl)" stroke-opacity="${lb < 0.05 ? .8 : .3}" stroke-width="1"/>`;
-  });
-  s += `<text x="${sideX(bm[0])}" y="${sideY(b[2] + S.bowl_height) - 5}" font-size="10" text-anchor="middle" fill="var(--bowl)" font-weight="700">bát${lb < 0.05 ? "" : " (lệch " + cm(lb) + " cm ngoài lát cắt)"}</text>`;
+  s += `<text x="${W-12}" y="${sideY(0.42) + 12}" font-size="10" text-anchor="end" fill="var(--muted)">mặt bàn z=0.42</text>`;
+  for (const g of S.bowl_geoms) {
+    if (g.type === "cylinder") {
+      const [, y, z] = g.pos, [r, halfHeight] = g.size;
+      s += `<rect x="${sideX(y-r)}" y="${sideY(z+halfHeight)}" width="${sideX(y+r)-sideX(y-r)}" height="${sideY(z-halfHeight)-sideY(z+halfHeight)}" fill="var(--bowl)" opacity=".25"/>`;
+    } else {
+      s += `<polygon points="${hullPoly(wallCorners3(g), sideX, sideY, 0, 2)}" fill="var(--bowl)" fill-opacity=".18" stroke="var(--bowl)" stroke-width="1"/>`;
+    }
+  }
+  s += `<text x="${sideX(bm[0])}" y="${sideY(b[2]+S.bowl_height)-5}" text-anchor="middle" fill="var(--bowl)" font-size="10">bát</text>`;
   const rim = b[2] + S.bowl_height, lim = rim - S.box_half;
   s += `<line x1="${sideX(bm[0]-0.09)}" y1="${sideY(rim)}" x2="${sideX(bm[0]+0.09)}" y2="${sideY(rim)}" stroke="var(--bowl)" stroke-width="1.2"/>`;
   s += `<text x="${sideX(bm[0]+0.095)}" y="${sideY(rim) + 3}" font-size="9" fill="var(--bowl)">miệng bát ${rim.toFixed(2)}</text>`;
@@ -376,18 +391,15 @@ function drawSide(fr, fs) {
   if (Math.hypot(fr.box[0]-b0[0], fr.box[1]-b0[1]) > 0.004)
     s += `<line x1="${sideX(B0[0])}" y1="${sideY(B0[2])}" x2="${sideX(SM(fr.box)[0])}" y2="${sideY(fr.box[2])}" stroke="var(--bad)" stroke-width="2" stroke-dasharray="2 2"/>`;
   s += trails(sideX, sideY, 0, 2, "ghost");
-  s += armSeg(fr, sideX, sideY, 0, 2, 7, .85, true, null, SLAB);
+  s += armSeg(fr, sideX, sideY, 0, 2, 7, .85, true);
   s += trails(sideX, sideY, 0, 2, "path");
-  const bl = Math.abs(SM(fr.box)[1]), inCut = bl < 0.02;
-  s += `<polygon points="${hull2(boxV(fr.box, bq(fr), S.box_half).map(v => { const m = SM(v); return [sideX(m[0]), sideY(m[2])]; })).map(p => p.join(",")).join(" ")}" fill="var(--box)" fill-opacity="${inCut ? 1 : .3}" stroke="#00000066" ${inCut ? "" : 'stroke-dasharray="3 2"'}/>`;
-  if (!inCut) s += `<text x="${sideX(SM(fr.box)[0]) + 12}" y="${sideY(fr.box[2]) - 8}" font-size="9" fill="var(--box)">hộp lệch ${cm(bl)} cm ngoài lát cắt</text>`;
+  s += `<polygon points="${hullPoly(boxV(fr.box, bq(fr), S.box_half), sideX, sideY, 0, 2)}" fill="var(--box)" stroke="#00000066"/>`;
   if (fr.tg) {
     const t = SM(fr.tg), e = SM(fr.ee);
     s += `<line x1="${sideX(e[0])}" y1="${sideY(e[2])}" x2="${sideX(t[0])}" y2="${sideY(t[2])}" stroke="var(--warn)" stroke-width="2"/>`;
     s += `<circle cx="${sideX(t[0])}" cy="${sideY(t[2])}" r="7" fill="none" stroke="var(--goal)" stroke-width="2.5"/>`;
   }
   { const e = SM(fr.ee); s += cross(sideX(e[0]), sideY(e[2]), 8, "var(--hand)", 2.5); }
-  s += `<text x="13" y="${H - 26}" font-size="10" fill="var(--muted)">mặt cắt theo góc khớp 1 = ${fr.jq[0].toFixed(0)}° · phần link trong lớp ±${(SLAB*100).toFixed(0)} cm quanh mặt cắt tô đậm, bóng cả link nét đứt</text>`;
   SM = p => p;
   $("side").innerHTML = s;
 }
@@ -521,17 +533,32 @@ function buildTimeline(fs) {
   // chiều rộng tỉ lệ với số bước của phase (phase nào lâu nhất thấy ngay), nhưng tối thiểu 26px để luôn bấm được;
   // bấm một đoạn = nhảy tới bước đầu của phase đó
   $("tl").innerHTML = SEGS.map(([p, a, b]) => `<div data-a="${a}" title="phase ${p}: ${PHASE_NAME[p] || ""} (bước ${a}-${b}, ${b-a+1} bước)" style="--w:${b-a+1};background:${PHASE_COLOR[p]}">${p}</div>`).join("");
-  $("tl").onclick = e => { const d = e.target.closest("[data-a]"); if (d) go(+d.dataset.a); };
+  // (kéo thả được xử lý ở bộ lắng nghe của #phasebar, bên dưới)
 }
 function tlPos(i) {                                    // vị trí vạch con trỏ (%) theo đúng bề rộng thật của các đoạn
   if (!SEGS.length || i <= 0) return 0;
   const k = Math.max(0, SEGS.findIndex(([, a, b]) => i >= a && i <= b)), [, a, b] = SEGS[k];
   const el = $("tl").children[k], W = $("tl").clientWidth;
-  return W ? (el.offsetLeft + (i - a + 1) / (b - a + 1) * el.offsetWidth) / W * 100 : 0;
+  return W ? (el.offsetLeft + (i - a + 0.5) / (b - a + 1) * el.offsetWidth) / W * 100 : 0;
+}
+function stepAtX(clientX) {                           // ngược lại của tlPos: vị trí chuột trên thanh phase -> bước
+  const tl = $("tl"), x = clientX - tl.getBoundingClientRect().left, els = [...tl.children];
+  if (!els.length) return 0;
+  let k = els.findIndex(el => x < el.offsetLeft + el.offsetWidth + 1);
+  if (k < 0) k = els.length - 1;
+  const el = els[k], [, a, b] = SEGS[k], f = Math.min(1, Math.max(0, (x - el.offsetLeft) / el.offsetWidth));
+  return Math.min(b, a + Math.floor(f * (b - a + 1)));
+}
+{
+  const bar = $("phasebar"); let down = false;
+  bar.addEventListener("pointerdown", e => { down = true; try { bar.setPointerCapture(e.pointerId); } catch (err) {} stop(); go(stepAtX(e.clientX)); e.preventDefault(); });
+  bar.addEventListener("pointermove", e => { if (down) go(stepAtX(e.clientX)); });
+  const end = e => { down = false; try { bar.releasePointerCapture(e.pointerId); } catch (err) {} };
+  bar.addEventListener("pointerup", end); bar.addEventListener("pointercancel", end);
 }
 
 /* ---------- 3D: tự vẽ bằng canvas 2D, không cần thư viện ---------- */
-const CAM0 = { yaw:-0.95, pitch:0.5, dist:0.95 };
+const CAM0 = { yaw:-0.95, pitch:0.5, dist:0.95, orthographic:false };
 const CAM = { ...CAM0, t:[0.02, -0.03, 0.5] };
 const JN = ["pan", "lift", "elbow", "wflex", "wroll"];
 const css = n => getComputedStyle(document.documentElement).getPropertyValue("--" + n).trim();
@@ -545,7 +572,8 @@ function makeProj(w, h) {
   return v => {
     const d = [v[0]-cam[0], v[1]-cam[1], v[2]-cam[2]];
     const zc = d[0]*f[0] + d[1]*f[1] + d[2]*f[2];
-    return [w/2 + fp * (d[0]*r[0] + d[1]*r[1]) / zc, h/2 - fp * (d[0]*u[0] + d[1]*u[1] + d[2]*u[2]) / zc, zc];
+    const depth = CAM.orthographic ? CAM.dist : zc;
+    return [w/2 + fp * (d[0]*r[0] + d[1]*r[1]) / depth, h/2 - fp * (d[0]*u[0] + d[1]*u[1] + d[2]*u[2]) / depth, zc];
   };
 }
 function draw3d(fr, fs) {
@@ -599,20 +627,19 @@ function draw3d(fr, fs) {
   // cánh tay (xương) từ danh sách điểm: 6 khớp + điểm giữa 2 ngón
   // lưới tam giác THẬT của cánh tay (vẽ xa trước), shading theo hướng pháp tuyến
   const LIGHT = (() => { const l = [0.35, -0.45, 0.82], n = Math.hypot(...l); return l.map(v => v / n); })();
-  const hexRgb = h => [1, 3, 5].map(k => parseInt(h.slice(k, k + 2), 16));
   const drawMesh = f => {
     const W3 = armWorld(f), tris = [];
     for (const nm of Object.keys(S.arm_mesh)) {
       const w = W3[nm], F = S.arm_mesh[nm].f, n = w.length / 3, sc = new Float64Array(n * 3);
       for (let k = 0; k < n; k++) { const q = P([w[3*k], w[3*k+1], w[3*k+2]]); sc[3*k] = q[0]; sc[3*k+1] = q[1]; sc[3*k+2] = q[2]; }
-      const base = hexRgb(linkColor(f, nm, true));
+      const faceColor = meshColors(nm, f);
       for (let t = 0; t < F.length; t += 3) {
         const i0 = F[t], i1 = F[t+1], i2 = F[t+2];
         const ux = w[3*i1]-w[3*i0], uy = w[3*i1+1]-w[3*i0+1], uz = w[3*i1+2]-w[3*i0+2];
         const vx = w[3*i2]-w[3*i0], vy = w[3*i2+1]-w[3*i0+1], vz = w[3*i2+2]-w[3*i0+2];
         let nx = uy*vz - uz*vy, ny = uz*vx - ux*vz, nz = ux*vy - uy*vx; const nl = Math.hypot(nx, ny, nz) || 1;
         const lam = Math.abs((nx*LIGHT[0] + ny*LIGHT[1] + nz*LIGHT[2]) / nl), sh = 0.42 + 0.58 * lam;
-        tris.push([(sc[3*i0+2] + sc[3*i1+2] + sc[3*i2+2]) / 3, i0, i1, i2, sc, base, sh, ARM_ALPHA]);
+        tris.push([(sc[3*i0+2] + sc[3*i1+2] + sc[3*i2+2]) / 3, i0, i1, i2, sc, faceColor(t / 3), sh, .95]);
       }
     }
     // hộp hiện tại cùng được sắp theo độ sâu với cánh tay, để tay che / bị hộp che đúng chỗ
@@ -671,7 +698,6 @@ function draw3d(fr, fs) {
   // đường đi của tay vẽ SAU cánh tay hiện tại để không bị mesh che
   if (OPT.path && OPT.past && i > 0) { g.strokeStyle = K.past; g.lineWidth = 3; g.globalAlpha = .95; g.beginPath(); fs.slice(pastStart(), i + 1).forEach((f, k) => { const p = P(f.ee); k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }); g.stroke(); g.globalAlpha = 1; }
   if (OPT.path && OPT.future && i < n) { g.strokeStyle = K.future; g.lineWidth = 3.2; g.setLineDash([6, 3]); g.beginPath(); fs.slice(i, futureEnd() + 1).forEach((f, k) => { const p = P(f.ee); k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }); g.stroke(); g.setLineDash([]); }
-  txt(fr.arm[0], "đế robot", K.ink, 10, "left");
   const hz = [fr.ee[0], fr.ee[1], TZ];
   line(fr.ee, hz, K.hand, 1, .8, [2, 3]);
   poly(ring(hz, 0.008, TZ, 12), K.hand, null, 0, .5);
@@ -729,12 +755,12 @@ function renderCam(cv, name, fr) {
   const W3 = armWorld(fr), L = [0.35, -0.45, 0.82], ln = Math.hypot(...L);
   for (const nm of Object.keys(S.arm_mesh)) { const wv = W3[nm], Fi = S.arm_mesh[nm].f, n = wv.length / 3, cc = new Array(n);
     for (let k2 = 0; k2 < n; k2++) cc[k2] = toCam([wv[3*k2], wv[3*k2+1], wv[3*k2+2]]);
-    const col = hexRgbCam(linkColor(fr, nm, true));
+    const faceColor = meshColors(nm, fr);
     for (let t = 0; t < Fi.length; t += 3) { const a2 = cc[Fi[t]], b2 = cc[Fi[t+1]], c2 = cc[Fi[t+2]];
       if (a2[2] > -0.02 || b2[2] > -0.02 || c2[2] > -0.02) continue;
       const ux = b2[0]-a2[0], uy = b2[1]-a2[1], uz = b2[2]-a2[2], vx = c2[0]-a2[0], vy = c2[1]-a2[1], vz = c2[2]-a2[2];
       const nx = uy*vz - uz*vy, ny = uz*vx - ux*vz, nz = ux*vy - uy*vx, nl = Math.hypot(nx, ny, nz) || 1;
-      items.push([-(a2[2] + b2[2] + c2[2]) / 3, [a2, b2, c2], col, 0.45 + 0.55 * Math.abs(nz / nl)]); } }
+      items.push([-(a2[2] + b2[2] + c2[2]) / 3, [a2, b2, c2], faceColor(t / 3), 0.45 + 0.55 * Math.abs(nz / nl)]); } }
   items.sort((p1, p2) => p2[0] - p1[0]);
   g.lineJoin = "round"; g.lineWidth = .6;
   for (const [, q, col, sh] of items) {
@@ -746,9 +772,10 @@ function renderCam(cv, name, fr) {
 const hexRgbCam = h => [1, 3, 5].map(k => parseInt(h.slice(k, k + 2), 16));
 let SHOW_CAM = true;
 try { SHOW_CAM = localStorage.getItem("showArmCam") !== "0"; } catch (e) {}
-function applyCamToggle() { $("camA").style.display = SHOW_CAM ? "" : "none"; $("bCam").setAttribute("aria-pressed", String(SHOW_CAM)); $("bCam").textContent = "cam kẹp"; }
+function applyCamToggle() { $("cameraFeeds").hidden = !SHOW_CAM; $("bCam").setAttribute("aria-pressed", String(SHOW_CAM));  }
 function drawCams(fr) {
-  if (SHOW_CAM) renderCam($("camA"), "arm_cam", fr);
+  if (!SHOW_CAM) return;
+  renderCam($("camA"), "arm_cam", fr);
 }
 
 /* ---------- điều khiển ---------- */
@@ -757,7 +784,8 @@ function render() {
   drawTop(fr, fs); drawSide(fr, fs); draw3d(fr, fs); drawCams(fr); drawInfo(fr, fs); drawChk(fr);
   $("rng").value = i;
   $("stepCount").value = `${i} / ${fs.length - 1} · ${(i * STEP_DT).toFixed(2)} / ${((fs.length - 1) * STEP_DT).toFixed(2)} s thực tế`;
-  $("tlc").firstElementChild.style.left = tlPos(i) + "%";
+  $("tlh").style.left = tlPos(i) + "%"; $("tlh").setAttribute("aria-valuenow", i); $("tlh").setAttribute("aria-valuemax", fs.length - 1);
+  $("tlh").setAttribute("aria-valuetext", "bước " + i + ", phase " + fr.ph);
   const cur = $("logw").querySelector("tr.cur"); if (cur) cur.classList.remove("cur");
   const row = $("logw").querySelector(`tr[data-k="${i}"]`);
   if (row) { row.classList.add("cur"); const w = $("logw"), t = row.offsetTop; if (t < w.scrollTop + 30 || t > w.scrollTop + w.clientHeight - 30) w.scrollTop = t - w.clientHeight / 2; }
@@ -773,11 +801,12 @@ function prevPhase() {
   while (k > 0 && fs[k-1].ph === fs[k].ph) k--;
   go(Math.max(0, k - 1));
 }
-function stop() { if (timer) { clearInterval(timer); timer = null; } $("bPlay").textContent = "▶ phát"; }
+const PLAY_ICON = '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M4 2.5v11L13.5 8z"/></svg>', PAUSE_ICON = '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M4 3h3v10H4zM9 3h3v10H9z"/></svg>';
+function stop() { if (timer) { clearInterval(timer); timer = null; } $("bPlay").innerHTML = PLAY_ICON; $("bPlay").setAttribute("aria-label", "Phát"); }
 function play() {
   if (timer) return stop();
   if (i >= F().length - 1) i = 0;
-  $("bPlay").textContent = "⏸ dừng";
+  $("bPlay").innerHTML = PAUSE_ICON; $("bPlay").setAttribute("aria-label", "Dừng");
   // Phát theo ĐỒNG HỒ thật: khung hình = thời gian đã trôi × tốc độ / STEP_DT, nên không bị chậm đi khi máy vẽ không kịp
   let t0 = performance.now(), i0 = i;
   timer = setInterval(() => {
@@ -791,7 +820,7 @@ function loadEp(k) {
   if (EPS[ep].bowl) { S.bowl = EPS[ep].bowl; S.bowl_geoms = EPS[ep].bowl_geoms; }   // mỗi ván có thể có bát ở chỗ khác
   const e = EPS[k];
   $("rng").max = e.frames.length - 1;
-  $("res").innerHTML = `<span class="badge ${e.success ? "ok" : "bad"}">${e.success ? "THÀNH CÔNG" : "THẤT BẠI"}</span> <span class="sub">${e.steps} bước</span>`;
+  $("res").innerHTML = `<span class="badge ${e.success ? "ok" : "bad"}">${e.success ? "THÀNH CÔNG" : "THẤT BẠI"}</span> <strong>${e.steps} bước tổng</strong>`;
   $("sel").value = k; $("epPos").textContent = `${k + 1}/${EPS.length}`;
   $("tags").innerHTML = e.tags ? e.tags.filter(x => x !== "THÀNH CÔNG").map(x => `<span class="badge ${/HỎNG|timeout/.test(x) ? "bad" : "warn"}" style="margin-right:3px">${x}</span>`).join("") : "";
   buildLog(e.frames); buildTimeline(e.frames); render();
@@ -816,10 +845,15 @@ $("oEv").disabled = true;
 $("oEv").onchange = e => { OPT.every = +e.target.value; render(); };
 // điều khiển camera 3D
 const redraw3 = () => draw3d(F()[i], F());
-const setCam = (yaw, pitch, dist) => { CAM.yaw = yaw; CAM.pitch = pitch; CAM.dist = dist ?? CAM.dist; redraw3(); };
+const setCam = (yaw, pitch, dist = CAM0.dist, orthographic = false) => {
+  Object.assign(CAM, { yaw, pitch, dist, orthographic });
+  redraw3();
+};
 $("v1").onclick = () => setCam(CAM0.yaw, CAM0.pitch, CAM0.dist);
-$("v2").onclick = () => setCam(-Math.PI / 2, 0.12);
-$("v3").onclick = () => setCam(-Math.PI / 2, 1.5);
+$("v2").onclick = () => setCam(Math.PI / 2, 0, CAM0.dist, true);
+$("vSide").onclick = () => setCam(0, 0, CAM0.dist, true);
+$("vCams").onclick = () => setCam(CAM0.yaw, CAM0.pitch, CAM0.dist, true);
+$("v3").onclick = () => setCam(-Math.PI / 2, Math.PI / 2, CAM0.dist, true);
 $("bCam").onclick = () => { SHOW_CAM = !SHOW_CAM; try { localStorage.setItem("showArmCam", SHOW_CAM ? "1" : "0"); } catch (e) {} applyCamToggle(); render(); };
 applyCamToggle();
 {
