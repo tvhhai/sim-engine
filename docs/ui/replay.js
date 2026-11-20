@@ -849,6 +849,21 @@ document.addEventListener("keydown", e => {
   else return;
   e.preventDefault();
 });
-const def = EPS.findIndex(e => e.seed === 2);
-$("sel").value = def >= 0 ? def : 0;
-loadEp(+$("sel").value);
+// Nhớ ván đang xem và khung hình trong localStorage để F5 không mất. Khoá theo TÊN ván (CASE 1... hoặc seed N),
+// không theo số thứ tự, vì danh sách đổi sau mỗi lần chạy select_seeds.
+const epKey = e => String(e.name || "seed " + e.seed);
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
+const saveView = () => { store.set("replayEp", epKey(EPS[ep])); store.set("replayFrame", String(i)); };
+{
+  const saved = store.get("replayEp");
+  let def = saved ? EPS.findIndex(e => epKey(e) === saved) : -1;
+  const restored = def >= 0;
+  if (def < 0) def = EPS.findIndex(e => /^CASE 1/.test(e.name || ""));   // mặc định: hộp XA nhất
+  loadEp(def >= 0 ? def : 0);
+  if (restored) go(Math.min(+store.get("replayFrame") || 0, F().length - 1));
+}
+// lưu mỗi khi đổi ván hoặc khung hình
+{ const r = render; render = function () { r.apply(this, arguments); saveView(); }; }
