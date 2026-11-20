@@ -179,6 +179,7 @@ def main():
     ap.add_argument("--bowl-range", type=float, default=None)
     ap.add_argument("--slow-factor", type=float, default=1.5, help="chậm = số bước >= hệ số này x số bước trung vị")
     ap.add_argument("--slow-min", type=int, default=100, help="và tối thiểu bằng số bước này")
+    ap.add_argument("--repin", action="store_true", help="bỏ danh sách seed đã ghim, chọn lại từ đầu rồi ghim bộ mới")
     ap.add_argument("--workers", type=int, default=default_workers(), help="số tiến trình chạy song song (mặc định: số lõi - 1; 1 = tuần tự)")
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ap.add_argument("--out", default=os.path.join(here, "docs", "replay_seeds.json"))
@@ -208,6 +209,23 @@ def main():
 
     feat = features(rows, box_r, bowl_r)
     chosen, bad, picks = select(rows, args.count, feat, slow_steps)
+    # GHIM seed: bộ seed xem trong replay không bị đổi khi một seed hết hỏng (xanh), để còn xem lại quá trình sửa.
+    # docs/replay_pins.json giữ danh sách; mỗi lần chấm: seed cố định + seed đã ghim + MỌI seed hiện đang hỏng chưa có trong danh sách.
+    # Seed hỏng mới được thêm vào ghim; seed đã ghim không bao giờ bị bỏ (trừ khi chạy --repin).
+    pins_path = os.path.join(os.path.dirname(args.out), "replay_pins.json")
+    pinned = []
+    if not args.repin and os.path.exists(pins_path):
+        with open(pins_path, encoding="utf-8") as f:
+            pinned = json.load(f).get("pinned", [])
+    by_seed = {r["seed"]: i for i, r in enumerate(rows)}
+    fixed_idx = [i for i, r in enumerate(rows) if r["seed"] in config.BOX_FIXED_SEEDS]
+    if not pinned:                                                # lần đầu (hoặc --repin): ghim bộ vừa chọn
+        pinned = [rows[i]["seed"] for i in chosen if rows[i]["seed"] not in config.BOX_FIXED_SEEDS]
+    new_fail = [r["seed"] for r in rows if not r["success"] and r["seed"] not in pinned and r["seed"] not in config.BOX_FIXED_SEEDS]
+    pinned = pinned + new_fail
+    with open(pins_path, "w", encoding="utf-8") as f:
+        json.dump({"pinned": pinned, "note": "seed xem trong replay; thêm seed hỏng mới, không bỏ seed đã xanh. --repin để chọn lại"}, f)
+    chosen = fixed_idx + [by_seed[sd] for sd in pinned if sd in by_seed]
     fail_idx = [i for i, r in enumerate(rows) if not r["success"]]
     rest = [i for i in fail_idx if i not in chosen] if len(fail_idx) > args.count else []
 
