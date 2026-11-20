@@ -1,15 +1,16 @@
 """Tạo mesh cho giá đỡ và module camera cổ tay của SO-101 (model gốc chỉ cho vị trí camera, không có hình giá đỡ).
 
-Ảnh robot thật: camera USB nhỏ (bo mạch vuông ~3.2 cm, ống kính tròn) gắn trên một trụ nhô lên từ thân bộ kẹp, nghiêng nhìn
-xuống phía mũi hàm. Ở đây dựng lại bằng hình hộp và hình trụ, theo đúng tư thế camera `arm_cam` đã có trong model:
-vị trí và hướng nhìn lấy từ XML, nên hình vẽ và ảnh camera khớp nhau.
+Ảnh robot thật: camera USB nhỏ (bo mạch vuông ~3.2 cm, ống kính tròn) gắn trên một trụ dẹt nhô lên từ thân bộ kẹp, nghiêng nhìn
+xuống phía mũi hàm. Ở đây dựng lại bằng các khối bo tròn góc (không còn các tấm phẳng góc cạnh): trụ dẹt thon dần, khay đỡ bo mạch
+bo góc, bo mạch bo góc, khối đế ống kính, ống kính tròn có viền. Vị trí và hướng nhìn lấy từ camera `arm_cam` trong XML nên
+hình vẽ và ảnh camera khớp nhau.
 
 Cách dùng (đứng ở thư mục chứa sim_engine):
     python -m sim_engine.tools.make_camera_mount            # ghi assets/so101/wrist_cam_bracket.stl và wrist_cam_module.stl
 
 Toạ độ ghi trong khung body "gripper" (cùng khung với camera arm_cam trong XML). Hai file:
-    wrist_cam_bracket.stl: trụ nghiêng + tấm giữ bo mạch (nhựa in 3D, cùng màu thân robot)
-    wrist_cam_module.stl : bo mạch + khối ống kính + ống kính (màu tối)
+    wrist_cam_bracket.stl: trụ dẹt + khay đỡ bo mạch (nhựa in 3D, cùng màu thân robot)
+    wrist_cam_module.stl : bo mạch + đế ống kính + ống kính + đầu nối (màu tối)
 """
 
 import os
@@ -24,7 +25,7 @@ OUT = os.path.join(HERE, "assets", "so101")
 # Tư thế camera arm_cam trong khung body gripper (khớp với XML): vị trí, và các trục của camera (MuJoCo: nhìn theo -z)
 CAM_POS = np.array([-0.00296, 0.05436, -0.05310])
 CAM_QUAT = np.array([0.954498, -0.284308, -0.085070, 0.029438])
-POST_BASE = np.array([-0.003, 0.021, -0.030])        # chân trụ: nằm chìm trong mặt trên thân bộ kẹp (y ≈ 0.024)
+POST_BASE = np.array([-0.003, 0.019, -0.030])        # chân trụ: chìm trong mặt trên thân bộ kẹp (y ≈ 0.024)
 
 
 def quat_to_mat(q):
@@ -34,18 +35,35 @@ def quat_to_mat(q):
                      [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)]])
 
 
-def box(center, axes, half):
-    """Hình hộp có hướng: `axes` là ma trận 3x3 (cột = trục), `half` = nửa kích thước theo 3 trục. Trả (12, 3, 3) tam giác."""
-    corners = np.array([[sx, sy, sz] for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)], float) * half
-    v = center + corners @ axes.T
-    quads = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+def rounded_rect(w, h, r, seg=5):
+    """Chu vi hình chữ nhật w x h bo góc bán kính r: mảng (4*(seg+1), 2), ngược chiều kim đồng hồ."""
+    r = min(r, w / 2 - 1e-6, h / 2 - 1e-6)
+    pts = []
+    for k, (cx, cy) in enumerate([(w / 2 - r, h / 2 - r), (-w / 2 + r, h / 2 - r), (-w / 2 + r, -h / 2 + r), (w / 2 - r, -h / 2 + r)]):
+        for a in np.linspace(k * np.pi / 2, (k + 1) * np.pi / 2, seg + 1):
+            pts.append((cx + r * np.cos(a), cy + r * np.sin(a)))
+    return np.array(pts)
+
+
+def loft(c0, c1, axes, size0, size1, radius, seg=5):
+    """Khối nối hai mặt cắt chữ nhật bo góc: tâm c0 -> c1, `axes` = cột (x, y, z) của khung mặt cắt (z là hướng từ c0 sang c1).
+
+    size0, size1 = (rộng, dày) ở hai đầu, nên có thể thon dần. Có nắp hai đầu. Trả (n, 3, 3) tam giác.
+    """
+    def ring(c, size):
+        p = rounded_rect(size[0], size[1], radius, seg)
+        return c + p[:, :1] * axes[:, 0] + p[:, 1:] * axes[:, 1]
+
+    a, b = ring(c0, size0), ring(c1, size1)
+    n = len(a)
     tris = []
-    for a, b, c, d in quads:
-        tris += [[v[a], v[b], v[c]], [v[a], v[c], v[d]]]
+    for k in range(n):
+        j = (k + 1) % n
+        tris += [[a[k], a[j], b[j]], [a[k], b[j], b[k]], [c0, a[j], a[k]], [c1, b[k], b[j]]]
     return np.array(tris)
 
 
-def cylinder(center, axis, radius, length, n=28):
+def cylinder(center, axis, radius, length, n=32):
     """Hình trụ tâm `center`, dọc theo `axis`, có nắp hai đầu. Trả (4n, 3, 3) tam giác."""
     axis = axis / np.linalg.norm(axis)
     t = np.cross(axis, [1.0, 0, 0] if abs(axis[0]) < 0.9 else [0, 1.0, 0])
@@ -61,30 +79,39 @@ def cylinder(center, axis, radius, length, n=28):
     return np.array(tris)
 
 
+def slab(center, axes, w, h, thickness, radius):
+    """Tấm bo góc w x h dày `thickness`, mặt phẳng theo (x, y) của axes, tâm `center`, dày theo z của axes."""
+    z = axes[:, 2]
+    return loft(center - z * thickness / 2, center + z * thickness / 2, axes, (w, h), (w, h), radius)
+
+
 def build():
     R = quat_to_mat(CAM_QUAT)
     right, up, back = R[:, 0], R[:, 1], R[:, 2]          # camera nhìn theo -back
     look = -back
-    axes = np.column_stack([right, up, look])            # hộp: x = phải, y = lên, z = hướng nhìn
+    axes = np.column_stack([right, up, look])            # khung camera: x = phải, y = lên, z = hướng nhìn
 
-    # Giá đỡ: tấm giữ bo mạch phía sau + trụ nghiêng nối xuống thân bộ kẹp
-    holder_c = CAM_POS - 0.0165 * look
-    holder = box(holder_c, axes, np.array([0.0185, 0.0185, 0.0020]))
-    post_top = holder_c - 0.0025 * look
+    # --- Giá đỡ ---
+    tray_c = CAM_POS - 0.0172 * look
+    tray = slab(tray_c, axes, 0.036, 0.036, 0.0030, 0.006)                  # khay đỡ bo mạch
+    lip = slab(tray_c + 0.0022 * look, axes, 0.0345, 0.0345, 0.0016, 0.0055)  # gờ nhỏ quanh bo mạch
+    post_top = tray_c - 0.0010 * look
     d = post_top - POST_BASE
     length = np.linalg.norm(d)
     pz = d / length
     px = np.cross([0.0, 0.0, 1.0], pz)
     px /= np.linalg.norm(px)
     py = np.cross(pz, px)
-    post = box((POST_BASE + post_top) / 2, np.column_stack([px, py, pz]), np.array([0.0085, 0.0045, length / 2]))
-    bracket = np.concatenate([holder, post])
+    post = loft(POST_BASE, post_top, np.column_stack([px, py, pz]), (0.022, 0.0105), (0.016, 0.0075), 0.0032)   # trụ dẹt thon dần
+    bracket = np.concatenate([tray, lip, post])
 
-    # Module camera: bo mạch vuông, khối đế ống kính, ống kính tròn (đầu ống kính chạm đúng vị trí camera trong XML)
-    pcb = box(CAM_POS - 0.0105 * look, axes, np.array([0.0160, 0.0160, 0.0008]))
-    base = box(CAM_POS - 0.0070 * look, axes, np.array([0.0072, 0.0072, 0.0040]))
-    barrel = cylinder(CAM_POS - 0.0040 * look, look, 0.0050, 0.0080)
-    module = np.concatenate([pcb, base, barrel])
+    # --- Module camera ---
+    pcb = slab(CAM_POS - 0.0118 * look, axes, 0.032, 0.032, 0.0016, 0.0035)                   # bo mạch bo góc
+    holder = slab(CAM_POS - 0.0082 * look, axes, 0.0150, 0.0150, 0.0056, 0.0020)              # đế ống kính
+    barrel = cylinder(CAM_POS - 0.0042 * look, look, 0.0055, 0.0084)                          # thân ống kính
+    ring_ = cylinder(CAM_POS - 0.0010 * look, look, 0.0042, 0.0020)                           # viền kính ở đầu
+    conn = slab(CAM_POS - 0.0138 * look - up * 0.0150, axes, 0.0110, 0.0040, 0.0022, 0.0008)   # đầu nối cáp ở cạnh dưới bo mạch
+    module = np.concatenate([pcb, holder, barrel, ring_, conn])
     return bracket, module
 
 
