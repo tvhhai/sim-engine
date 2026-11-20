@@ -53,8 +53,14 @@ class ScriptedPolicy(BasePolicy):
     IK_RESPECT_LIMITS = False  # True: mọi lời giải IK bị kẹp trong giới hạn khớp. Đo 200 seed: bật cho mọi phase làm 3-4 seed mất kẹp (91, 149...)
     PHASE5_ADAPTIVE_Z = False  # True: phase 5 cũng hạ độ cao nhấc xuống mức tới được. Đo 200 seed: 192-194/200 (xấu hơn), nên TẮT
     PHASE1_ADAPTIVE_Z = True   # phase 1 hạ độ cao đích xuống mức tới được
+    REACTIVE_ROLL = True       # tay chạm bát lúc hạ xuống kẹp -> nhấc lên, đổi roll, kẹp lại (xem _flip_roll)
+    PREDICT_BOWL_ROLL = True   # dự đoán TRƯỚC khi hạ: chọn sẵn roll mà hàm kẹp mở rộng không chạm bát (xem _predict_roll)
+    ROLL_TURN_MODE = "half"    # "full": xoay tại chỗ tới roll mới rồi hạ; "half": xoay tại chỗ nửa đường, nửa còn lại xoay trong lúc hạ xuống
+    BOWL_CLEARANCE_MARGIN = 0.010   # hàm kẹp (mở hết cỡ) phải cách bát tối thiểu chừng này (m) ở tư thế chuẩn bị kẹp và tư thế kẹp
     BOWL_HIT_STEPS = 3         # tay chạm bát liền chừng này bước khi hạ xuống kẹp (phase 2-4) thì nhấc lên, xoay wrist_roll rồi kẹp lại
-    ROLL_FLIP_OFFSETS = (math.pi, -math.pi, math.pi / 2, -math.pi / 2)   # thứ tự thử khi đổi roll (rad so với roll đang giữ)
+    ROLL_FLIP_OFFSETS = (math.pi / 2, -math.pi / 2, math.pi, -math.pi)   # thứ tự thử khi đổi roll (rad so với roll đang giữ): 90° trước, 180° sau
+    # Đo 200 seed + 57 vị trí quanh bát: dự đoán + phản ứng (90°, 45° tại chỗ + 45° lúc hạ) -> 194/200 (seed 7: 157 bước, 198: 102, 99: 126);
+    # chỉ phản ứng 180° -> 193/200; dự đoán + phản ứng 180° đầy đủ -> 194/200 nhưng chậm (seed 7: 238); 90° đầy đủ -> seed 7 hỏng.
     ROLL_CLEAR_MARGINS = (0.035, 0.025, 0.015)   # nhấc lên cao hơn miệng bát chừng này (m) trước khi xoay roll; lấy mức đầu tiên với tới được
     ROLL_TURN_STEPS = 60       # tối đa chừng này bước để xoay roll tại chỗ
     MAX_ROLL_FLIPS = 3         # số lần đổi roll tối đa trong một ván (thử lần lượt: xoay 180°, +90°, -90° so với roll đang giữ)
@@ -144,6 +150,9 @@ class ScriptedPolicy(BasePolicy):
         self._bowl_hits = 0             # số bước liền tay đang chạm bát khi hạ xuống kẹp
         self._roll_flips = 0            # đã đổi roll bao nhiêu lần vì tay chạm bát
         self._roll_pref = None          # roll ưu tiên sau khi đổi (None = chọn roll gần roll hiện tại nhất)
+        self._pred_changed = False      # roll được DỰ ĐOÁN đổi để tránh bát (khác roll gần nhất)
+        self._pred_key = None           # vị trí hộp đã dự đoán roll cho (để dự đoán lại khi hộp bị đẩy đi)
+        self._roll_turn_target = None   # góc roll tại chỗ của bước "turn"
         self._roll_stage = None         # None | "lift" (nhấc thẳng lên khỏi miệng bát) | "turn" (xoay wrist_roll tại chỗ)
         self._roll_z = None             # độ cao nhấc lên để xoay roll
         self._arm_body_ids = {mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, n) for n in
@@ -198,6 +207,7 @@ class ScriptedPolicy(BasePolicy):
         self._still = 0
         self._best_dist, self._stall, self.last_exit, self._p1_z, self._lift_z = 0.0, 0, None, None, None
         self._bowl_hits, self._roll_flips, self._roll_pref, self._roll_stage, self._roll_z = 0, 0, None, None, None
+        self._pred_key, self._roll_turn_target, self._pred_changed = None, None, False
 
     def select_action(self, observation: dict) -> np.ndarray:
         """Hàm chính: nhìn tình hình hiện tại, trả về action (7 số trong [-1, 1]).
@@ -225,7 +235,7 @@ class ScriptedPolicy(BasePolicy):
                 self._roll_hold = None
                 self._last_finger = None
 
-        if self._phase in (2, 3, 4) and not self.env._grasped:
+        if self.REACTIVE_ROLL and self._phase in (2, 3, 4) and not self.env._grasped:
             # chỉ đếm khi tay chạm bát MÀ hàm kẹp chưa chạm hộp: hàm đã chạm hộp nghĩa là việc kẹp đang tiến triển, đừng cắt ngang
             self._bowl_hits = self._bowl_hits + 1 if (self._arm_touches_bowl() and not self._jaw_touches_box()) else 0
             if self._bowl_hits >= self.BOWL_HIT_STEPS and self._roll_flips < self.MAX_ROLL_FLIPS:
@@ -433,6 +443,14 @@ class ScriptedPolicy(BasePolicy):
             z -= 0.01
         return best[1]
 
+    def annotation(self):
+        """Chú thích hành vi của bước vừa chọn, để ghi cạnh dữ liệu huấn luyện (không phải action).
+
+        phase: phase hiện tại; recovery: 0 bình thường, 1 đang nhấc lên khỏi bát, 2 đang xoay roll tại chỗ (đều là PHỤC HỒI sau khi chạm bát);
+        roll_flips: đã đổi roll vì chạm bát bao nhiêu lần; bowl_avoid: 1 nếu roll được chọn sẵn từ đầu để tránh bát (không có va chạm xảy ra)."""
+        stage = {None: 0, "lift": 1, "turn": 2}[self._roll_stage]
+        return {"phase": int(self._phase), "recovery": stage, "roll_flips": int(self._roll_flips), "bowl_avoid": int(self._pred_changed)}
+
     def _arm_touches_bowl(self):
         """True nếu có khâu tay (kể cả hàm kẹp) đang chạm bát."""
         bowl = self.env._bowl_body
@@ -469,6 +487,7 @@ class ScriptedPolicy(BasePolicy):
         self._last_finger = None
         self._bowl_hits = 0
         self._roll_stage, self._roll_z = "lift", None
+        self._roll_turn_target = r0 + (self._roll_pref - r0) / 2 if (self.ROLL_TURN_MODE == "half" and self._roll_pref is not None) else self._roll_pref
         self._phase, self._phase_step = 1, 0
         self._best_dist, self._stall = 0.0, 0
 
@@ -501,13 +520,13 @@ class ScriptedPolicy(BasePolicy):
         # "turn": giữ nguyên vị trí đầu tay, chỉ xoay wrist_roll tới roll ưu tiên
         target = np.array(self._roll_target)
         q = self._solve_ik(target)
-        if self._roll_pref is not None:
-            q[4] = self._roll_pref
+        if self._roll_turn_target is not None:
+            q[4] = self._roll_turn_target
         self._current_joint_targets = q
         self.motion_target = (target.copy(), 0.02)
         self._phase_step += 1
-        roll_err = abs(float(self.data.qpos[self._qpos_adr[4]]) - (self._roll_pref if self._roll_pref is not None else 0.0))
-        if self._roll_pref is None or roll_err < 0.06 or self._phase_step > self.ROLL_TURN_STEPS:
+        roll_err = abs(float(self.data.qpos[self._qpos_adr[4]]) - (self._roll_turn_target if self._roll_turn_target is not None else 0.0))
+        if self._roll_turn_target is None or roll_err < 0.06 or self._phase_step > self.ROLL_TURN_STEPS:
             self._roll_stage, self._roll_z = None, None
             self._advance_phase()                                  # sang phase 2: hạ xuống kẹp bằng roll mới
 
@@ -554,7 +573,70 @@ class ScriptedPolicy(BasePolicy):
             score = abs(dev) + 0.02 * abs(r - cur)
             if best is None or score < best[0]:
                 best = (score, r, c)
-        return best[1], best[2]
+        roll, clamp = best[1], best[2]
+        if self.PREDICT_BOWL_ROLL and self._roll_stage is None:
+            roll2 = self._predict_roll(roll, q5)
+            if roll2 is not None and abs(roll2 - roll) > 1e-6:
+                roll, clamp = roll2, self._clamp_direction(np.where(np.arange(5) == 4, roll2, np.asarray(q5, dtype=float)))
+        return roll, clamp
+
+    def _bowl_geom_distance(self, q5, grip):
+        """Khoảng cách nhỏ nhất (m) từ các khâu tay + hàm kẹp tới bát khi tay ở tư thế q5 và hàm mở góc `grip` (trên bản sao IK)."""
+        ik = self._ik_data
+        ik.qpos[:] = self.data.qpos[:]
+        ik.qpos[self._qpos_adr] = q5
+        ik.qpos[self.model.jnt_qposadr[self.env._gripper_jnt]] = grip
+        self._fk(ik)
+        if not hasattr(self, "_clear_pairs"):
+            bowl = self.env._bowl_body
+            arm = [g for g in range(self.model.ngeom) if self.model.geom_bodyid[g] in self._arm_body_ids and self.model.geom_contype[g] != 0]
+            walls = [g for g in range(self.model.ngeom) if self.model.geom_bodyid[g] == bowl]
+            self._clear_pairs = [(a, w) for a in arm for w in walls]
+        fromto = np.zeros(6)
+        return min(mujoco.mj_geomDistance(self.model, ik, a, w, 0.06, fromto) for a, w in self._clear_pairs)
+
+    def _predict_roll(self, roll, q5):
+        """Bước 1 (trước khi hạ): với bốn góc roll song song mặt hộp (cách nhau 90°), tính khoảng cách hàm kẹp mở hết cỡ tới bát ở tư thế
+        chuẩn bị kẹp và tư thế kẹp; chọn góc đủ xa bát (>= BOWL_CLEARANCE_MARGIN) và gần roll hiện tại nhất; nếu không góc nào đủ xa thì
+        lấy góc xa nhất. Chỉ tính khi hộp nằm gần bát (< 20 cm); tính lại khi hộp bị đẩy đi. Trả về None nếu không cần đổi."""
+        box = self.env.get_box_pos()
+        bowl = self.env.get_bowl_pos()
+        if np.linalg.norm(box[:2] - bowl[:2]) > 0.20:
+            return None
+        key = (round(float(box[0]), 3), round(float(box[1]), 3))
+        if self._pred_key == key and self._roll_pref is not None:
+            return self._roll_pref
+        lo, hi = self.model.jnt_range[self._joint_ids[4]]
+        cur = float(self.data.qpos[self._qpos_adr[4]])
+        saved_phase = self._phase
+        self._phase = 3                                           # IK với trục kẹp thẳng xuống, như lúc thật hạ xuống kẹp
+        results = []
+        try:
+            for k in range(-2, 3):
+                r = roll + k * math.pi / 2
+                if not lo + 0.05 <= r <= hi - 0.05:
+                    continue
+                clear = 1e9
+                for z in (self._pre_grasp_z, self._grasp_z):
+                    above = np.array([box[0], box[1], z])
+                    q = self._solve_ik(above, roll=r)
+                    q[4] = r
+                    c = self._clamp_direction(q)
+                    tgt = above - self.GRASP_SIDE_OFFSET * np.append(c[:2], 0.0)
+                    q = self._solve_ik(tgt, roll=r)
+                    q[4] = r
+                    clear = min(clear, self._bowl_geom_distance(q, config.GRIPPER_OPEN_RAD))
+                results.append((r, clear))
+        finally:
+            self._phase = saved_phase
+        if not results:
+            return None
+        ok = [x for x in results if x[1] >= self.BOWL_CLEARANCE_MARGIN]
+        pick = min(ok, key=lambda x: abs(x[0] - cur)) if ok else max(results, key=lambda x: x[1])
+        self._pred_key = key
+        self._roll_pref = pick[0]
+        self._pred_changed = abs(pick[0] - roll) > 1e-6
+        return pick[0]
 
     def _solve_ik(self, target_pos, roll=None, limits=None):
         """IK: tìm góc khớp (radian) của 5 khớp để đầu tay (ee_site) tới target_pos.
