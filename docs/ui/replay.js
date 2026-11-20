@@ -43,7 +43,7 @@ app.innerHTML = `
     <div id="legendPop" popover class="legend-pop">
       <span><i style="background:var(--box)"></i>hộp</span><span><i style="background:var(--bowl)"></i>bát (nét đứt = ngưỡng vào bát)</span>
       <span><i style="background:var(--hand)"></i>tay (giữa 2 ngón)</span><span><i style="background:var(--goal)"></i>đích</span>
-      <span><i style="background:var(--arm)"></i>Nét giữa = xương tay · vùng nhạt = bề rộng khâu · khung hộp = bộ kẹp. Đỏ = khâu chạm hộp, cam = chạm bàn hoặc sàn, <b style="color:#a855f7">tím = chạm bát</b>.</span>
+      <span><i style="background:var(--arm)"></i>Nét giữa = xương tay · vùng nhạt = bề rộng khâu · khung hộp = bộ kẹp. Đỏ = khâu tay (không phải hàm kẹp) chạm hộp, cam = chạm bàn hoặc sàn, <b style="color:#a855f7">tím = chạm bát</b>.</span>
       <span><i style="background:var(--past)"></i>cánh tay mờ xanh lục = QUÁ KHỨ</span><span><i style="background:var(--future)"></i>cánh tay mờ cam = TƯƠNG LAI</span>
       <span>5 khớp: ${JMEAN}. Đoạn <b>base</b> (đế) đứng yên; hàm kẹp (1 hàm cố định + 1 hàm di động) không có trong IK.</span>
       <span>số nhỏ cạnh cánh tay = lệch bao nhiêu bước so với hiện tại · chấm trên đường đứt = 1 bước</span>
@@ -56,19 +56,19 @@ app.innerHTML = `
       <div class="cv"><canvas id="c3"></canvas>
         <div class="viewbar" role="group" aria-label="Góc nhìn 3D">
           <button id="v1" title="Góc chéo mặc định">Chéo</button><button id="v2" title="Nhìn từ phía +Y về đế">Trước</button><button id="vSide" title="Chiếu vuông góc từ +X lên mặt phẳng YZ">Hông</button><button id="v3" title="Nhìn thẳng từ trên xuống">Trên</button><button id="vCams" title="Xem vị trí camera bên hông cổ tay">Vị trí cam</button>
-          <span class="sep"></span><button id="bCam" aria-pressed="true" title="Bật hoặc tắt ảnh camera cổ tay">Ảnh cam</button>
+          <span class="sep"></span><button id="bCam" aria-pressed="true" title="Bật hoặc tắt ảnh camera cổ tay">Ảnh cam</button><label class="tilt" title="Gập giá đỡ camera quanh chốt để đổi góc nhìn; giá trị ưng ý thì ghi vào config.WRIST_CAM_TILT_DEG">Gập cam <input type="range" id="camTilt" min="-45" max="45" step="1" value="0"><output id="camTiltV">0°</output></label>
         </div>
         <div id="cameraFeeds"><canvas id="camA" width="320" height="240" aria-label="Ảnh dựng lại từ camera cổ tay"></canvas></div>
       </div>
       <div class="ctl">
         <div class="transport">
           <span class="grp" role="group" aria-label="Điều khiển phát">
-            <button id="bFirst" class="icon-btn" title="Về bước đầu (Home)" aria-label="Về bước đầu"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M3 3h2v10H3zM13 3v10L6 8z"/></svg></button>
-            <button id="bPP" class="icon-btn" title="Phase trước (↑)" aria-label="Phase trước"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M8.5 3v10L2 8zM15 3v10L8.5 8z"/></svg></button>
-            <button id="bPrev" class="icon-btn" title="Lùi 1 bước (←)" aria-label="Lùi 1 bước"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M11 3v10L4 8z"/></svg></button>
-            <button id="bPlay" class="icon-btn primary play" title="Phát / dừng (Space)" aria-label="Phát"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M4 2.5v11L13.5 8z"/></svg></button>
-            <button id="bNext" class="icon-btn" title="Tiến 1 bước (→)" aria-label="Tiến 1 bước"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M5 3v10l7-5z"/></svg></button>
-            <button id="bPhase" class="icon-btn" title="Phase kế (↓)" aria-label="Phase kế"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M1 3v10l6.5-5zM7.5 3v10L14 8z"/></svg></button>
+            <button id="bFirst" class="icon-btn" title="Về bước đầu (Home)" aria-label="Về bước đầu"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" x2="5" y1="19" y2="5"/></svg></button>
+            <button id="bPP" class="icon-btn" title="Phase trước (↑)" aria-label="Phase trước"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></svg></button>
+            <button id="bPrev" class="icon-btn" title="Lùi 1 bước (←)" aria-label="Lùi 1 bước"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+            <button id="bPlay" class="icon-btn primary play" title="Phát / dừng (Space)" aria-label="Phát"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg></button>
+            <button id="bNext" class="icon-btn" title="Tiến 1 bước (→)" aria-label="Tiến 1 bước"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+            <button id="bPhase" class="icon-btn" title="Phase kế (↓)" aria-label="Phase kế"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/></svg></button>
           </span>
           <label class="spd">Tốc độ <select id="spd"><option value="0.5">chậm 0,5×</option><option value="1" selected>bình thường (thực tế)</option><option value="1.5">nhanh 1,5×</option><option value="2">nhanh 2×</option></select></label>
         </div>
@@ -138,6 +138,7 @@ function quatMat(q) {
   return [[1-2*(y*y+z*z), 2*(x*y-w*z), 2*(x*z+w*y)], [2*(x*y+w*z), 1-2*(x*x+z*z), 2*(y*z-w*x)], [2*(x*z-w*y), 2*(y*z+w*x), 1-2*(x*x+y*y)]];
 }
 const KIN = (S.kin || []).map(k => ({ ...k, Rl: quatMat(k.quat) }));
+let CAM_TILT_EXTRA = 0;                                 // độ gập thêm (rad) do thanh "Gập cam", cộng vào độ gập có sẵn trong model
 function fkPose(fr) {                                    // tư thế world của từng link: base (đứng yên) -> ... -> hàm kẹp di động
   if (fr._pose) return fr._pose;
   const ang = {}; S.joints.forEach((n, k) => ang[n] = fr.jq[k] * Math.PI / 180); ang.gripper = fr.fo;
@@ -145,6 +146,7 @@ function fkPose(fr) {                                    // tư thế world củ
   for (const k of KIN) {
     let R = k.Rl, p = k.pos;
     if (k.parent) { const P = out[k.parent]; R = mmul(P.R, k.Rl); p = mvec(P.R, k.pos).map((v, j) => v + P.p[j]); }
+    if (k.name === "wrist_cam_arm" && CAM_TILT_EXTRA) { const c = Math.cos(CAM_TILT_EXTRA), s3 = Math.sin(CAM_TILT_EXTRA); R = mmul(R, [[1, 0, 0], [0, c, -s3], [0, s3, c]]); }   // gập thêm quanh trục x của chốt
     if (k.joint) { const c = Math.cos(ang[k.joint]), s2 = Math.sin(ang[k.joint]); R = mmul(R, [[c, -s2, 0], [s2, c, 0], [0, 0, 1]]); }
     out[k.name] = { R, p };
   }
@@ -166,9 +168,10 @@ function armWorld(fr) {                                  // đỉnh lưới củ
 }
 let SM = p => p;                                        // ánh xạ điểm world -> toạ độ vẽ (mặc định giữ nguyên; hình cạnh dùng Y ngang)
 const ARMCOL = "#e8b923";
+const JAWS = ["gripper", "moving_jaw_so101_v1"];     // hàm kẹp (cố định + di động): chạm hộp là bình thường nên không tô màu cảnh báo
 function linkColor(fr, nm, main) {                       // đỏ = chạm hộp, cam = chạm bàn, tím = chạm bát
   if (!main) return ARMCOL;
-  return (fr.ct || []).includes(nm) ? "#e5484d" : (fr.tb || []).includes(nm) ? "#f59e0b" : touchBowl(fr, nm) ? BOWLC : ARMCOL;
+  return ((fr.ct || []).includes(nm) && !JAWS.includes(nm)) ? "#e5484d" : (fr.tb || []).includes(nm) ? "#f59e0b" : touchBowl(fr, nm) ? BOWLC : ARMCOL;
 }
 function meshColors(name, frame) {
   const highlight = linkColor(frame, name, true);
@@ -213,7 +216,7 @@ function armSeg(fr, fx, fy, a, b, w, op, red, col) {
   let s = red ? armHulls(fr, fx, fy, a, b) : "";
   for (let k = 0; k < A.length - 1; k++) {
     const nm = S.arm_bodies[k];                       // đoạn k nằm giữa khớp k và khớp k+1, mang tên link nm
-    const hit = red && fr.ct.includes(nm), tb = red && fr.tb.includes(nm), bw = red && touchBowl(fr, nm);
+    const hit = red && fr.ct.includes(nm) && !JAWS.includes(nm), tb = red && fr.tb.includes(nm), bw = red && touchBowl(fr, nm);
     const c = hit ? "var(--bad)" : tb ? "var(--warn)" : bw ? BOWLC : (col || "var(--arm)");
     s += `<line x1="${fx(A[k][0])}" y1="${fy(A[k][1])}" x2="${fx(A[k+1][0])}" y2="${fy(A[k+1][1])}" stroke="${c}" stroke-width="${red ? 2.2 : w}" stroke-linecap="round" opacity="${hit || tb || bw ? 1 : red ? .9 : op}"/>`;
   }
@@ -453,7 +456,7 @@ function drawInfo(fr, fs) {
   html += `<table class="jt"><thead><tr><th>#</th><th>khớp</th><th class="r">IK muốn</th><th class="r">thật</th><th class="r">lệch</th><th>đoạn tay</th></tr></thead><tbody>` +
     S.joints.map((jn, k) => {
       const link = S.arm_bodies[k + 1], a = fr.ik ? fr.ik[k] : null, dv = a === null ? null : a - fr.jq[k], ad = Math.abs(dv), cls = dv === null ? "" : ad > 15 ? "hlb" : ad > 5 ? "hlw" : "";
-      const st = (fr.ct.includes(link) ? ' <span class="badge bad">chạm HỘP</span>' : "") +
+      const st = ((fr.ct.includes(link) && !JAWS.includes(link)) ? ' <span class="badge bad">chạm HỘP</span>' : "") +
         (fr.tb.includes(link) ? ' <span class="badge" style="background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)">chạm bàn</span>' : "") +
         (touchBowl(fr, link) ? ` <span class="badge" style="background:color-mix(in srgb,${BOWLC} 20%,transparent);color:${BOWLC}">chạm BÁT</span>` : "");
       return `<tr><td><b>${k + 1}</b></td><td title="${jn}">${JSHORT[jn] || jn}</td><td class="r mono">${a === null ? "—" : a.toFixed(1)}</td><td class="r mono">${fr.jq[k].toFixed(1)}</td><td class="r mono ${cls}">${dv === null ? "—" : (dv >= 0 ? "+" : "") + dv.toFixed(1)}</td><td class="mono">${link.replace("_link", "")}${st}</td></tr>`;
@@ -665,7 +668,7 @@ function draw3d(fr, fs) {
     const A = pts(f);
     if (main) drawMesh(f);
     for (let k = 0; k < A.length - 1; k++) {
-      const nm = S.arm_bodies[k], hit = main && f.ct.includes(nm), tb = main && f.tb.includes(nm), bw = main && touchBowl(f, nm);
+      const nm = S.arm_bodies[k], hit = main && f.ct.includes(nm) && !JAWS.includes(nm), tb = main && f.tb.includes(nm), bw = main && touchBowl(f, nm);
       g.save();
       g.lineCap = "round";
       const color = hit ? K.bad : tb ? K.warn : bw ? BOWLC : (col || K.arm);
@@ -801,7 +804,7 @@ function prevPhase() {
   while (k > 0 && fs[k-1].ph === fs[k].ph) k--;
   go(Math.max(0, k - 1));
 }
-const PLAY_ICON = '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M4 2.5v11L13.5 8z"/></svg>', PAUSE_ICON = '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M4 3h3v10H4zM9 3h3v10H9z"/></svg>';
+const PLAY_ICON = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>', PAUSE_ICON = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>';
 function stop() { if (timer) { clearInterval(timer); timer = null; } $("bPlay").innerHTML = PLAY_ICON; $("bPlay").setAttribute("aria-label", "Phát"); }
 function play() {
   if (timer) return stop();
@@ -854,6 +857,16 @@ $("v2").onclick = () => setCam(Math.PI / 2, 0, CAM0.dist, true);
 $("vSide").onclick = () => setCam(0, 0, CAM0.dist, true);
 $("vCams").onclick = () => setCam(CAM0.yaw, CAM0.pitch, CAM0.dist, true);
 $("v3").onclick = () => setCam(-Math.PI / 2, Math.PI / 2, CAM0.dist, true);
+{
+  const base = S.cam_tilt_deg || 0, sl = $("camTilt");
+  const apply = v => { CAM_TILT_EXTRA = (v - base) * Math.PI / 180; $("camTiltV").textContent = v + "°";
+    EPS.forEach(e => e.frames.forEach(f => { delete f._pose; delete f._w; })); render(); };
+  let saved = null; try { saved = localStorage.getItem("camTilt"); } catch (e) {}
+  sl.value = saved !== null ? saved : base;
+  sl.oninput = () => { apply(+sl.value); try { localStorage.setItem("camTilt", sl.value); } catch (e) {} };
+  sl.ondblclick = () => { sl.value = base; sl.oninput(); };
+  if (+sl.value !== base) apply(+sl.value); else $("camTiltV").textContent = base + "°";
+}
 $("bCam").onclick = () => { SHOW_CAM = !SHOW_CAM; try { localStorage.setItem("showArmCam", SHOW_CAM ? "1" : "0"); } catch (e) {} applyCamToggle(); render(); };
 applyCamToggle();
 {
