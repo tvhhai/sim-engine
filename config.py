@@ -66,6 +66,8 @@ BOWL_HEIGHT = 0.04   # chiều cao tường bát: miệng bát = z của bát + 
 BOWL_INNER_RADIUS = 0.042   # lòng bát tới mặt TRONG của tường (tường dày 0.3 cm nên 0.045 - 0.003)
 TABLE_HALF = (0.45, 0.40)   # nửa kích thước mặt bàn (x, y), mét: bàn 90 x 80 cm (khớp với assets/so101_real_scene.xml)
 BOX_HALF = 0.015            # nửa cạnh hộp (hộp 3 cm)
+BOX_IN_BOWL_MARGIN = 0.005  # "hộp trong bát": TÂM hộp phải thấp hơn miệng bát ít nhất chừng này (m). Không dùng "đỉnh hộp thấp hơn miệng" (tâm < miệng - nửa cạnh):
+                            # hộp nằm nghiêng tựa thành bát có tâm cao hơn mức đó vài mm (seed 9, 38) dù vẫn nằm trọn trong lòng bát, bị chấm hỏng oan
 BOX_RANDOM_RANGE = 0.03     # hộp được đặt ngẫu nhiên trong ±3 cm quanh BOX_DEFAULT_POS (theo x, y)
 BOWL_RANDOM_RANGE = 0.0     # bát đứng yên; đặt > 0 để bát cũng ngẫu nhiên trong ±giá trị này
 

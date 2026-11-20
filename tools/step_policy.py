@@ -400,7 +400,7 @@ def main():
         info = runner.info
         bowl_p = info["bowl_pos"]
         horiz = info["box_to_bowl_dist"]
-        z_ok = bowl_p[2] < box[2] < bowl_p[2] + config.BOWL_HEIGHT - config.BOX_HALF   # đỉnh hộp thấp hơn miệng bát
+        z_ok = bowl_p[2] < box[2] < bowl_p[2] + config.BOWL_HEIGHT - config.BOX_IN_BOWL_MARGIN   # tâm hộp thấp hơn miệng bát
         # Dùng phase của bước VỪA chạy để khớp với dòng log ở terminal
         phase_txt = f"phase {runner.phase_run} (buoc {runner.phase_step} trong phase)"
         if runner.phase_next != runner.phase_run:

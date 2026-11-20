@@ -293,7 +293,9 @@ class SO101PickPlaceEnv(gym.Env):
 
         success = hộp THẬT SỰ nằm trong bát, tức là cả 4 điều cùng đúng:
             1. tâm hộp cách tâm bát (theo chiều ngang) < BOWL_INNER_RADIUS (lòng bát, tới mặt trong tường)
-            2. ĐỈNH hộp thấp hơn miệng bát (tâm hộp < miệng - nửa cạnh hộp), nên hộp nằm bên trong chứ không đặt trên miệng
+            2. TÂM hộp thấp hơn miệng bát ít nhất BOX_IN_BOWL_MARGIN (5 mm), nên hộp nằm bên trong chứ không gác trên miệng. Dùng TÂM chứ
+               không dùng đỉnh: hộp nằm nghiêng tựa thành bát vẫn ở trong bát dù một góc nhô cao hơn miệng. Hộp gác trên miệng có tâm
+               ngang thành bát (xy >= lòng bát) và cao hơn miệng, nên vẫn bị loại bởi điều 1 và 2
             3. hộp đã được THẢ ra (không còn bị kẹp giữ)
             4. hộp đã nằm yên (tốc độ < SETTLED_SPEED), nên hộp đang rơi hay nảy chưa tính
         Đây chính là chỗ "chấm điểm" một episode thành công hay không.
@@ -306,7 +308,7 @@ class SO101PickPlaceEnv(gym.Env):
         rim_z = bowl_pos[2] + config.BOWL_HEIGHT
         box_speed = float(np.linalg.norm(self.data.qvel[self._box_dof_adr:self._box_dof_adr + 3]))
         in_xy = horizontal_dist < config.BOWL_INNER_RADIUS
-        in_z = bowl_pos[2] < box_pos[2] < rim_z - config.BOX_HALF
+        in_z = bowl_pos[2] < box_pos[2] < rim_z - config.BOX_IN_BOWL_MARGIN
         released = not self._grasped
         settled = box_speed < config.SETTLED_SPEED
         success = in_xy and in_z and released and settled

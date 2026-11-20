@@ -418,6 +418,7 @@ def main():
         "bowl_inner": config.BOWL_INNER_RADIUS,      # lòng bát: tâm hộp phải cách tâm bát ít hơn mức này
         "settled_speed": config.SETTLED_SPEED,       # hộp phải chậm hơn mức này (m/s) mới tính là nằm yên
         "box_half": config.BOX_HALF,
+        "bowl_z_margin": config.BOX_IN_BOWL_MARGIN,   # tâm hộp phải thấp hơn miệng bát chừng này mới tính trong bát
         "table": list(config.TABLE_HALF),            # nửa kích thước bàn (x, y)
         "max_steps": config.MAX_EPISODE_STEPS,
         "cam_tilt_deg": config.WRIST_CAM_TILT_DEG,     # độ gập hiện tại của giá đỡ camera cổ tay (để thanh "Gập cam" trong replay tính độ gập thêm)
