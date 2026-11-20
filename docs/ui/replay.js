@@ -50,8 +50,8 @@ app.innerHTML = `
     </div>
   </header>
   <main class="main">
-    <div class="card c-small"><h2>NHÌN TỪ TRÊN XUỐNG (x ngang, y dọc, mét) · số 1-5 = khớp<label style="float:right;font-weight:400"><input type="checkbox" id="showReach" checked> vùng gắp được</label></h2><svg id="top" role="img" aria-label="Hình chiếu XY cố định" viewBox="0 0 520 340"></svg>
-      <h2>Nhìn từ cạnh · Y ngang, Z cao (m)</h2><svg id="side" role="img" aria-label="Hình chiếu YZ cố định" viewBox="0 0 520 340"></svg></div>
+    <div class="card c-small"><h2>Nhìn từ trên · XY từ khớp 1 (m)<span style="float:right;font-weight:400"><label><input type="checkbox" id="showReach" checked> vùng gắp được</label> <label style="color:#a855f7"><input type="checkbox" id="showUnreach" checked> vùng KHÔNG gắp được</label></span></h2><svg id="top" role="img" aria-label="Hình chiếu XY cố định" viewBox="0 0 520 340"></svg>
+      <h2>Nhìn từ cạnh · Y ngang, Z cao (m)</h2><svg id="side" role="img" aria-label="Hình chiếu YZ cố định" viewBox="0 18 520 202"></svg></div>
     <div class="card c-3d"><h2><span>3D (VIEW CHÍNH)</span><span class="hint">kéo = xoay · lăn = zoom · nhấp đúp = về mặc định</span></h2>
       <div class="cv"><canvas id="c3"></canvas>
         <div class="viewbar" role="group" aria-label="Góc nhìn 3D">
@@ -70,7 +70,7 @@ app.innerHTML = `
             <button id="bNext" class="media-button" title="Tiến 1 bước (→)" aria-label="Tiến 1 bước"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
             <button id="bPhase" class="media-button" title="Phase kế (↓)" aria-label="Phase kế"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 6 6 6-6 6m7-12 6 6-6 6"/></svg></button>
           </div>
-          <label class="media-speed">Tốc độ <select id="spd"><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="1.5">1,5×</option><option value="2">2×</option></select></label>
+          <label class="media-speed" for="spd">Tốc độ <input id="spd" type="range" min="0.25" max="2" step="0.25" value="1"><output id="speedValue" for="spd">1×</output></label>
         </div>
         <div class="scrub">
           <label for="rng">Thời gian <output id="stepCount" for="rng"></output></label>
@@ -108,13 +108,14 @@ const epLabel = (e, k) => { const ex = (e.tags || []).filter(x => !/^(THÀNH CÔ
 }
 
 /* ---------- ánh xạ tọa độ -> pixel ---------- */
-const W = 520, H = 340;
-const TOP = { x0:-0.42, x1:0.42, y0:-0.30, y1:0.24 };
-const SIDE = { x0:-0.42, x1:0.42, z0:0.32, z1:0.89 };
+const W = 520, H = 340, SIDE_H = 220;
+// World-coordinate viewport. The top grid labels are relative to the pan joint.
+const TOP = { x0:-0.44, x1:0.44, y0:-0.34, y1:0.31 };
+const SIDE = { x0:-0.42, x1:0.42, z0:0.37, z1:0.80, height:SIDE_H };
 // One pixel-per-metre scale for both axes within each orthographic view.
-const scaleX = R => Math.min((W - 20) / (R.x1 - R.x0), (H - 20) / ((R.y1 ?? R.z1) - (R.y0 ?? R.z0)));
+const scaleX = R => Math.min((W - 20) / (R.x1 - R.x0), ((R.height ?? H) - 20) / ((R.y1 ?? R.z1) - (R.y0 ?? R.z0)));
 const sx = (v, R) => W / 2 + (v - (R.x0 + R.x1) / 2) * scaleX(R);
-const sy = (v, R, low, high) => H / 2 - (v - (low + high) / 2) * scaleX(R);
+const sy = (v, R, low, high) => (R.height ?? H) / 2 - (v - (low + high) / 2) * scaleX(R);
 const topX = x => sx(x, TOP);
 const topY = y => sy(y, TOP, TOP.y0, TOP.y1);
 const sideX = y => sx(y, SIDE);
@@ -282,21 +283,22 @@ function trails(fx, fy, a, b, pass) {   // pass 'ghost' = cánh tay mờ (vẽ d
 }
 
 // Lưới + trục có số (mét). ystep: bước vạch dọc, ylab: bước ghi số.
-function axes(R, fx, fy, vlo, vhi, ystep, ylab, xname, yname) {
+function axes(R, fx, fy, vlo, vhi, ystep, ylab, xname, yname, xOrigin = 0, yOrigin = 0) {
+  const height = R.height ?? H;
   const num = v => (Math.abs(v) < 1e-9 ? 0 : v).toFixed(2);
   let s = "";
-  for (let v = Math.ceil(R.x0 / 0.05 - 1e-9) * 0.05; v <= R.x1 + 1e-9; v += 0.05) {
-    const X = fx(v), z0 = Math.abs(v) < 1e-9, major = Math.abs(v / 0.1 - Math.round(v / 0.1)) < 1e-6;
-    s += `<line x1="${X}" y1="10" x2="${X}" y2="${H-10}" stroke="var(--muted)" stroke-width="${z0 ? 1.4 : .5}" opacity="${z0 ? .7 : major ? .35 : .18}"/>`;
-    if (major) s += `<text x="${X}" y="${H-13}" font-size="9" text-anchor="middle" fill="var(--muted)">${num(v)}</text>`;
+  for (let v = Math.ceil((R.x0 - xOrigin) / 0.05 - 1e-9) * 0.05; v <= R.x1 - xOrigin + 1e-9; v += 0.05) {
+    const X = fx(v + xOrigin), z0 = Math.abs(v) < 1e-9, major = Math.abs(v / 0.1 - Math.round(v / 0.1)) < 1e-6;
+    s += `<line x1="${X}" y1="10" x2="${X}" y2="${height-10}" stroke="var(--muted)" stroke-width="${z0 ? 1.4 : .5}" opacity="${z0 ? .7 : major ? .35 : .18}"/>`;
+    if (major) s += `<text x="${X}" y="${height-13}" font-size="9" text-anchor="middle" fill="var(--muted)">${num(v)}</text>`;
   }
-  for (let v = Math.ceil(vlo / ystep - 1e-9) * ystep; v <= vhi + 1e-9; v += ystep) {
-    const Y = fy(v), z0 = Math.abs(v) < 1e-9, lab = Math.abs(v / ylab - Math.round(v / ylab)) < 1e-6;
+  for (let v = Math.ceil((vlo - yOrigin) / ystep - 1e-9) * ystep; v <= vhi - yOrigin + 1e-9; v += ystep) {
+    const Y = fy(v + yOrigin), z0 = Math.abs(v) < 1e-9, lab = Math.abs(v / ylab - Math.round(v / ylab)) < 1e-6;
     s += `<line x1="10" y1="${Y}" x2="${W-10}" y2="${Y}" stroke="var(--muted)" stroke-width="${z0 ? 1.4 : .5}" opacity="${z0 ? .7 : lab ? .35 : .18}"/>`;
-    if (lab && Y < H - 24) s += `<text x="13" y="${Y - 2}" font-size="9" fill="var(--muted)">${num(v)}</text>`;
+    if (lab && Y < height - 24) s += `<text x="13" y="${Y - 2}" font-size="9" fill="var(--muted)">${num(v)}</text>`;
   }
-  s += `<text x="${W-12}" y="${H-26}" font-size="11" font-weight="700" text-anchor="end" fill="var(--ink)">${xname} →</text>`;
-  s += `<text x="13" y="22" font-size="11" font-weight="700" fill="var(--ink)">↑ ${yname}</text>`;
+  s += `<text x="${W-12}" y="${height-26}" font-size="11" font-weight="700" text-anchor="end" fill="var(--ink)">${xname} →</text>`;
+  s += `<text x="13" y="${R === SIDE ? 34 : 22}" font-size="11" font-weight="700" fill="var(--ink)">↑ ${yname}</text>`;
   return s;
 }
 /* ---------- hộp có hướng (quaternion) để vẽ được cảnh hộp bị nghiêng/lật ---------- */
@@ -332,6 +334,25 @@ const sectorPts = (n = 48) => { const P0 = S.pick_region, pan = P0.pan, pts = []
   for (let q = n; q >= 0; q--) { const a = (P0.angle_min_deg + (P0.angle_max_deg - P0.angle_min_deg) * q / n) * Math.PI / 180; pts.push([pan[0] + P0.r_min * Math.sin(a), pan[1] + P0.r_min * Math.cos(a)]); }
   return pts; };
 const cpath = (cx, cy, r) => `M${cx + r},${cy}a${r},${r} 0 1 0 ${-2*r},0a${r},${r} 0 1 0 ${2*r},0`;
+const unreachOn = () => S.unreachable_region && $("showUnreach") && $("showUnreach").checked;
+// Vùng CHẮC CHẮN không gắp được: phía sau khớp 1, góc đo từ hướng tay (+y) lớn hơn S.unreachable_region.angle_deg ở cả hai phía.
+// Mỗi phía là một hình quạt từ góc A tới 180 độ, bán kính đủ lớn (sẽ bị cắt theo mặt bàn).
+function unreachPolys(R = 0.9, n = 36) {
+  const U = S.unreachable_region, pan = U.pan, polys = [];
+  for (const sg of [1, -1]) {
+    const pts = [[pan[0], pan[1]]];
+    for (let q = 0; q <= n; q++) { const a = (U.angle_deg + (180 - U.angle_deg) * q / n) * sg * Math.PI / 180; pts.push([pan[0] + R * Math.sin(a), pan[1] + R * Math.cos(a)]); }
+    polys.push(pts);
+  }
+  return polys;
+}
+function unreachTop() {
+  if (!unreachOn()) return "";
+  const tx0 = topX(-S.table[0]), tx1 = topX(S.table[0]), ty0 = topY(S.table[1]), ty1 = topY(-S.table[1]);
+  let s = `<clipPath id="tblclip2"><rect x="${tx0}" y="${ty0}" width="${tx1 - tx0}" height="${ty1 - ty0}"/></clipPath><g clip-path="url(#tblclip2)">`;
+  unreachPolys().forEach(pts => { s += `<polygon points="${pts.map(([x, y]) => topX(x) + "," + topY(y)).join(" ")}" fill="#a855f7" fill-opacity=".17" stroke="#a855f7" stroke-opacity=".7" stroke-width="1.2" stroke-dasharray="5 3"/>`; });
+  return s + `</g><text x="${topX(-0.30)}" y="${topY(-0.27)}" font-size="10" fill="#a855f7" font-weight="700">không gắp được</text><text x="${topX(0.19)}" y="${topY(-0.27)}" font-size="10" fill="#a855f7" font-weight="700">không gắp được</text>`;
+}
 function reachTop(k) {                         // vùng gắp được: hình quạt đo thật + các điểm quét (chấm = gắp được, dấu x = hỏng)
   if (!reachOn()) return "";
   if (S.pick_region) {
@@ -340,7 +361,7 @@ function reachTop(k) {                         // vùng gắp được: hình qu
     (S.pick_scan || []).forEach(([x, y, ok]) => {
       const X = topX(x), Y = topY(y);
       s += ok ? `<circle cx="${X}" cy="${Y}" r="1.8" fill="#0e9aa7" opacity=".55"/>`
-              : `<path d="M${X - 3.4},${Y - 3.4}l6.8,6.8m0,-6.8l-6.8,6.8" stroke="var(--bad)" stroke-width="1.9" stroke-linecap="round" opacity=".95"/>`;
+              : `<path d="M${X - 2.35},${Y - 2.35}l4.7,4.7m0,-4.7l-4.7,4.7" stroke="var(--bad)" stroke-width="1.35" stroke-linecap="round" opacity=".95"/>`;
     });
     return s;
   }
@@ -377,10 +398,12 @@ function reachInfo(fs) {
   return h;
 }
 function drawTop(fr, fs) {
+  const pan = S.pick_region?.pan ?? S.reach?.base ?? fr.arm[1];
   const k = scaleX(TOP), b = S.bowl, b0 = fs[0].box, h = S.box_half * k;
   let s = `<rect x="${topX(-S.table[0])}" y="${topY(S.table[1])}" width="${topX(S.table[0])-topX(-S.table[0])}" height="${topY(-S.table[1])-topY(S.table[1])}" fill="var(--table)" opacity=".5"/>`;
-  s += axes(TOP, topX, topY, TOP.y0, TOP.y1, 0.05, 0.1, "x (m)", "y (m)");
+  s += axes(TOP, topX, topY, TOP.y0, TOP.y1, 0.05, 0.1, "x (m)", "y (m)", pan[0], pan[1]);
   s += reachTop(k);
+  s += unreachTop();
   s += `<text x="${topX(b[0])}" y="${topY(b[1]) - 0.06*k}" font-size="10" text-anchor="middle" fill="var(--bowl)" font-weight="700">bát</text>`;
   S.bowl_geoms.forEach(g => {                           // bát thật: đáy tròn + 24 tấm tường hẹp xếp thành vòng tròn (gần đúng hình trụ rỗng)
     if (g.type === "cylinder") s += `<circle cx="${topX(g.pos[0])}" cy="${topY(g.pos[1])}" r="${g.size[0]*k}" fill="var(--bowl)" opacity=".2"/>`;
@@ -400,6 +423,10 @@ function drawTop(fr, fs) {
     s += `<circle cx="${topX(fr.tg[0])}" cy="${topY(fr.tg[1])}" r="7" fill="none" stroke="var(--goal)" stroke-width="2.5"/>`;
   }
   s += cross(topX(fr.ee[0]), topY(fr.ee[1]), 8, "var(--hand)", 2.5);
+  const panX = topX(pan[0]), panY = topY(pan[1]);
+  s += `<circle cx="${panX}" cy="${panY}" r="3" fill="var(--card)" stroke="var(--ink)" stroke-width="1.25"/>
+    <path d="M${panX} ${panY} l-8 19 h-10" fill="none" stroke="var(--ink)" stroke-width="1"/>
+    <text x="${panX - 23}" y="${panY + 22}" text-anchor="end" class="map-label">(0, 0) · tâm khớp 1</text>`;
   $("top").innerHTML = s;
 }
 function drawSide(fr, fs) {
@@ -407,7 +434,7 @@ function drawSide(fr, fs) {
   SM = ([x, y, z]) => [y, x, z];
   const bm = SM(b);
   const hullPoly = (pts, fx, fy, a, c) => hull2(pts.map(q => { const m = SM(q); return [fx(m[a]), fy(m[c])]; })).map(p => p.join(",")).join(" ");
-  let s = `<rect x="10" y="${sideY(0.42)}" width="${W-20}" height="${H-10-sideY(0.42)}" fill="var(--table)" opacity=".5"/>`;
+  let s = `<rect x="10" y="${sideY(0.42)}" width="${W-20}" height="${SIDE_H-10-sideY(0.42)}" fill="var(--table)" opacity=".5"/>`;
   s += axes(SIDE, sideX, sideY, SIDE.z0, SIDE.z1, 0.05, 0.05, "y (m)", "z (m)");
   s += `<line x1="10" y1="${sideY(0.42)}" x2="${W-10}" y2="${sideY(0.42)}" stroke="var(--muted)" stroke-width="2"/>`;
   s += `<text x="${W-12}" y="${sideY(0.42) + 12}" font-size="10" text-anchor="end" fill="var(--muted)">mặt bàn z=0.42</text>`;
@@ -647,6 +674,13 @@ function draw3d(fr, fs) {
     EDGES3.forEach(([p, q]) => line(V[p], V[q], K.bowl, 1, .7));
   });
   poly(ring(b, S.bowl_radius, bz1), null, K.bowl, 1, .8, [4, 3]);
+  if (unreachOn()) {                                    // vùng KHÔNG gắp được (tím), cắt theo mặt bàn
+    const path3 = pts => pts.forEach((v, n) => { const q = P(v); n ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); });
+    g.save(); g.beginPath(); path3([[-TX, -TY, TZ], [TX, -TY, TZ], [TX, TY, TZ], [-TX, TY, TZ]]); g.closePath(); g.clip();
+    unreachPolys(0.9, 24).forEach(pts => { g.beginPath(); path3(pts.map(([x, y]) => [x, y, TZ + 0.001])); g.closePath();
+      g.fillStyle = "#a855f7"; g.globalAlpha = .2; g.fill(); g.globalAlpha = .75; g.strokeStyle = "#a855f7"; g.lineWidth = 1.2; g.setLineDash([5, 3]); g.stroke(); g.setLineDash([]); g.globalAlpha = 1; });
+    g.restore();
+  }
   if (reachOn()) {                                      // vùng gắp được: hình quạt màu nhạt trên mặt bàn
     const path = pts => pts.forEach((v, n) => { const q = P(v); n ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); });
     if (S.pick_region) {
@@ -874,10 +908,10 @@ function loadEp(k) {
   buildLog(e.frames); buildTimeline(e.frames); render();
 }
 $("showReach").onchange = () => render();
+$("showUnreach").onchange = () => render();
 $("sel").onchange = () => loadEp(+$("sel").value);
 $("sPrev").onclick = () => loadEp((ep - 1 + EPS.length) % EPS.length);
 $("sNext").onclick = () => loadEp((ep + 1) % EPS.length);
-$("spd").onchange = () => { speed = +$("spd").value; if (timer) { stop(); play(); } };   // play() lấy lại mốc thời gian từ khung đang xem
 $("rng").oninput = () => go(+$("rng").value);
 $("bFirst").onclick = () => go(0);
 $("bPrev").onclick = () => go(i - 1);
@@ -954,7 +988,22 @@ const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
 };
-// Chỉ lưu VỊ TRÍ xem (ván + khung hình), không lưu cấu hình hay dữ liệu. Khung hình chỉ được khôi phục khi ván đó có đúng cùng số khung
+const speedSlider = $("spd");
+function syncPlaybackSpeed() {
+  speed = Number(speedSlider.value);
+  $("speedValue").value = speed.toLocaleString("vi-VN") + "×";
+}
+const savedSpeed = Number(store.get("replaySpeed"));
+if (savedSpeed >= Number(speedSlider.min) && savedSpeed <= Number(speedSlider.max)) {
+  speedSlider.value = String(savedSpeed);
+}
+syncPlaybackSpeed();
+speedSlider.oninput = () => {
+  syncPlaybackSpeed();
+  store.set("replaySpeed", String(speed));
+  if (timer) { stop(); play(); }
+};
+// Vị trí xem gồm ván và khung hình. Khung hình chỉ được khôi phục khi ván đó có đúng cùng số khung
 // (replay dựng lại sau khi đổi policy sẽ khác số khung -> về khung 0 thay vì nhảy tới một thời điểm không còn tương ứng).
 const saveView = () => { store.set("replayEp", epKey(EPS[ep])); store.set("replayFrame", String(i)); store.set("replayLen", String(F().length)); };
 {
