@@ -56,6 +56,8 @@ class ScriptedPolicy(BasePolicy):
     REACTIVE_ROLL = True       # tay chạm bát lúc hạ xuống kẹp -> nhấc lên, đổi roll, kẹp lại (xem _flip_roll)
     PREDICT_BOWL_ROLL = True   # dự đoán TRƯỚC khi hạ: chọn sẵn roll mà hàm kẹp mở rộng không chạm bát (xem _predict_roll)
     ROLL_TURN_MODE = "half"    # "full": xoay tại chỗ tới roll mới rồi hạ; "half": xoay tại chỗ nửa đường, nửa còn lại xoay trong lúc hạ xuống
+    PREDICT_PATH = True        # dự đoán xét cả quãng xoay roll (ở độ cao lơ lửng), không chỉ hai tư thế cuối
+    PREDICT_PRETURN = True     # roll dự đoán khác roll hiện tại nhiều thì xoay TẠI CHỖ ở độ cao lơ lửng (cuối phase 1) rồi mới hạ, không xoay lúc đang hạ gần bát
     BOWL_CLEARANCE_MARGIN = 0.010   # hàm kẹp (mở hết cỡ) phải cách bát tối thiểu chừng này (m) ở tư thế chuẩn bị kẹp và tư thế kẹp
     BOWL_HIT_STEPS = 3         # tay chạm bát liền chừng này bước khi hạ xuống kẹp (phase 2-4) thì nhấc lên, xoay wrist_roll rồi kẹp lại
     ROLL_FLIP_OFFSETS = (math.pi / 2, -math.pi / 2, math.pi, -math.pi)   # thứ tự thử khi đổi roll (rad so với roll đang giữ): 90° trước, 180° sau
@@ -151,6 +153,7 @@ class ScriptedPolicy(BasePolicy):
         self._roll_flips = 0            # đã đổi roll bao nhiêu lần vì tay chạm bát
         self._roll_pref = None          # roll ưu tiên sau khi đổi (None = chọn roll gần roll hiện tại nhất)
         self._pred_changed = False      # roll được DỰ ĐOÁN đổi để tránh bát (khác roll gần nhất)
+        self._preturn_key = None        # vị trí hộp đã xoay-trước-khi-hạ cho
         self._pred_key = None           # vị trí hộp đã dự đoán roll cho (để dự đoán lại khi hộp bị đẩy đi)
         self._roll_turn_target = None   # góc roll tại chỗ của bước "turn"
         self._roll_stage = None         # None | "lift" (nhấc thẳng lên khỏi miệng bát) | "turn" (xoay wrist_roll tại chỗ)
@@ -207,7 +210,7 @@ class ScriptedPolicy(BasePolicy):
         self._still = 0
         self._best_dist, self._stall, self.last_exit, self._p1_z, self._lift_z = 0.0, 0, None, None, None
         self._bowl_hits, self._roll_flips, self._roll_pref, self._roll_stage, self._roll_z = 0, 0, None, None, None
-        self._pred_key, self._roll_turn_target, self._pred_changed = None, None, False
+        self._pred_key, self._roll_turn_target, self._pred_changed, self._preturn_key = None, None, False, None
         # Hộp nằm ngoài tầm chắc chắn (khớp 1 không xoay tới): không thử gắp, về home ngay (phase 10) thay vì chờ hết hạn từng phase
         self.unreachable = bool(box_sampling.is_unreachable(self.env.get_box_pos()[:2]))
         if self.unreachable:
@@ -291,6 +294,8 @@ class ScriptedPolicy(BasePolicy):
         target = np.array([box_pos[0], box_pos[1], self._p1_z])
         self._gripper_target = 1.0
         self._move_toward(target, ee_pos, threshold=0.025)
+        if self._phase == 2 and self.PREDICT_BOWL_ROLL and self.PREDICT_PRETURN:
+            self._maybe_preturn(box_pos, ee_pos)
 
     def _lower_to_box(self, ee_pos, height):
         target = self._grasp_target(height)
@@ -585,6 +590,31 @@ class ScriptedPolicy(BasePolicy):
                 roll, clamp = roll2, self._clamp_direction(np.where(np.arange(5) == 4, roll2, np.asarray(q5, dtype=float)))
         return roll, clamp
 
+    def _maybe_preturn(self, box_pos, ee_pos):
+        """Vừa tới phía trên hộp (hết phase 1). Nếu roll dự đoán để tránh bát khác roll hiện tại nhiều thì xoay roll TẠI CHỖ ở độ cao lơ lửng
+        trước, rồi mới hạ (phase 2). Nếu để khớp xoay trong lúc hạ gần bát thì hàm kẹp mở rộng quét qua các góc roll va vào bát."""
+        key = (round(float(box_pos[0]), 3), round(float(box_pos[1]), 3))
+        if self._preturn_key == key:
+            return
+        self._preturn_key = key
+        saved = self._phase
+        self._phase = 3
+        try:
+            self._roll_hold = None
+            self._grasp_target(self._pre_grasp_z)                      # chọn roll (có dự đoán tránh bát)
+        finally:
+            self._phase = saved
+        roll = self._roll_hold
+        self._roll_hold = None
+        cur = float(self.data.qpos[self._qpos_adr[4]])
+        if self._roll_pref is None or abs(roll - cur) < 0.35:
+            return
+        self._roll_stage, self._roll_turn_target = "turn", roll
+        self._roll_target = np.array(ee_pos, dtype=float)
+        self._roll_z = float(ee_pos[2])
+        self._phase, self._phase_step = 1, 0
+        self._best_dist, self._stall = 0.0, 0
+
     def _bowl_geom_distance(self, q5, grip):
         """Khoảng cách nhỏ nhất (m) từ các khâu tay + hàm kẹp tới bát khi tay ở tư thế q5 và hàm mở góc `grip` (trên bản sao IK)."""
         ik = self._ik_data
@@ -631,6 +661,14 @@ class ScriptedPolicy(BasePolicy):
                     q = self._solve_ik(tgt, roll=r)
                     q[4] = r
                     clear = min(clear, self._bowl_geom_distance(q, config.GRIPPER_OPEN_RAD))
+                if self.PREDICT_PATH:                                  # đường xoay: từ roll hiện tại tới r, ở độ cao lơ lửng phía trên hộp
+                    hover = self._p1_z if self._p1_z is not None else self._pre_grasp_z + 0.02
+                    for f in (0.25, 0.5, 0.75, 1.0):
+                        ri = cur + (r - cur) * f
+                        above = np.array([box[0], box[1], hover])
+                        q = self._solve_ik(above, roll=ri)
+                        q[4] = ri
+                        clear = min(clear, self._bowl_geom_distance(q, config.GRIPPER_OPEN_RAD))
                 results.append((r, clear))
         finally:
             self._phase = saved_phase
