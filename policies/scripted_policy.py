@@ -82,7 +82,9 @@ class ScriptedPolicy(BasePolicy):
     SETTLE_WAIT_MAX = 15      # sau khi rút lên (phase 9), chờ tối đa chừng này bước cho hộp nằm yên rồi mới kiểm tra hộp có trong bát không
     REGRASP_R_MIN = 0.08      # hộp rơi ra ngoài bát: chỉ gắp lại khi cách trục khớp 1 trong khoảng này (m), ngoài tầm thì về home
     REGRASP_R_MAX = 0.31
-    RELEASE_RAMP = 0.15       # lệnh mở kẹp tăng tối đa chừng này mỗi bước (thang -1..1)
+    RELEASE_RAMP = 0.10       # lệnh mở kẹp tăng tối đa chừng này mỗi bước (thang -1..1)
+    # 0.10: mở kẹp đủ chậm để hàm không kéo lật hộp khi thả (hàm kẹp chia khối ôm sát hơn). Đo trên 400 seed: 0.10 -> 400/400 (trung vị 158),
+    # 0.07 -> 400/400 (trung vị 164), 0.085 -> 195/200, 0.15 -> 192/200. Kết quả nhạy ở khoảng này, nên đổi thì phải đo lại.
 
     def __init__(self, env):
         self.env = env
