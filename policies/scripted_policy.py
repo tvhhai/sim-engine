@@ -65,6 +65,11 @@ class ScriptedPolicy(BasePolicy):
     # chỉ phản ứng 180° -> 193/200; dự đoán + phản ứng 180° đầy đủ -> 194/200 nhưng chậm (seed 7: 238); 90° đầy đủ -> seed 7 hỏng.
     ROLL_CLEAR_MARGINS = (0.035, 0.025, 0.015)   # nhấc lên cao hơn miệng bát chừng này (m) trước khi xoay roll; lấy mức đầu tiên với tới được
     ROLL_TURN_STEPS = 60       # tối đa chừng này bước để xoay roll tại chỗ
+    SETTLE_RELEASE = False     # A (đã thử: -2 seed, tắt): phase 7 chỉ sang 8 (mở kẹp) khi đầu tay đã gần đứng yên SETTLE_STEPS bước liên tiếp (mỗi bước dịch < SETTLE_DIST m)
+    SETTLE_DIST = 0.0015
+    SETTLE_STEPS = 3
+    HOLD_OFFSET = False        # B (đã thử: -1 seed, tắt): đo độ lệch hộp-đầu tay MỘT lần khi bắt đầu phase 6 rồi giữ cho phase 6-7 (thay vì tính lại mỗi bước)
+    TCP_STEP = 0.02            # C: >0: ở phase 2-3 giới hạn mỗi tick đích đầu tay tiến tối đa chừng này (m) trước khi giải IK
     FAR_ROLL_R = 0.33          # hộp xa khớp 1 hơn mức này (m): kẹp với roll FAR_ROLL_DEG thay vì roll gần tư thế nghỉ (kẹp ổn hơn khi hộp trượt/ma sát thấp)
     FAR_ROLL_EARLY = True      # True: xoay roll song song lúc di chuyển ra; False: tới phía trên hộp mới xoay tại chỗ
     FAR_ROLL_DEG = -87.0       # -87 (không phải +93): +93 làm cụm cam đâm xuống bàn (-11 mm) ở 7/43 hộp xa; -87 luôn cách bàn >= 30 mm
@@ -158,6 +163,7 @@ class ScriptedPolicy(BasePolicy):
         self._pred_changed = False      # roll được DỰ ĐOÁN đổi để tránh bát (khác roll gần nhất)
         self._preturn_key = None        # vị trí hộp đã xoay-trước-khi-hạ cho
         self._far_roll = None           # roll cho hộp xa (đặt ở reset)
+        self._prev_ee, self._still_ee, self._carry_off, self._tcp_goal = None, 0, None, None
         self._pred_key = None           # vị trí hộp đã dự đoán roll cho (để dự đoán lại khi hộp bị đẩy đi)
         self._roll_turn_target = None   # góc roll tại chỗ của bước "turn"
         self._roll_stage = None         # None | "lift" (nhấc thẳng lên khỏi miệng bát) | "turn" (xoay wrist_roll tại chỗ)
@@ -216,6 +222,7 @@ class ScriptedPolicy(BasePolicy):
         self._bowl_hits, self._roll_flips, self._roll_pref, self._roll_stage, self._roll_z = 0, 0, None, None, None
         self._pred_key, self._roll_turn_target, self._pred_changed, self._preturn_key = None, None, False, None
         self._far_roll = None
+        self._prev_ee, self._still_ee, self._carry_off, self._tcp_goal = None, 0, None, None
         # Hộp nằm ngoài giới hạn góc hoặc bán kính gắp: không thử gắp, về home ngay (phase 10) thay vì chờ hết hạn từng phase
         self.unreachable = bool(box_sampling.is_unreachable(self.env.get_box_pos()[:2]))
         bx = self.env.get_box_pos()
@@ -346,12 +353,18 @@ class ScriptedPolicy(BasePolicy):
             self._lift_z = self._reachable_z(ee_pos[:2], z_lo=self._grasp_z + 0.04) if self.PHASE5_ADAPTIVE_Z else self._safe_z
         target = np.array([ee_pos[0], ee_pos[1], self._lift_z])
         self._gripper_target = -1.0
+        self._carry_off = None                      # đo lại độ lệch hộp-tay sau khi nhấc (HOLD_OFFSET)
         self._move_toward(target, ee_pos, threshold=0.02)
 
     def _move_box_to_bowl(self, box_pos, bowl_pos, ee_pos, height, threshold, *, advance_on_failure=True):
         target = np.array([bowl_pos[0], bowl_pos[1], height])
         # Căn tâm hộp với tâm bát khi hộp nằm lệch khỏi đầu kẹp.
-        target[:2] -= np.clip((box_pos - ee_pos)[:2], -0.04, 0.04)
+        if self.HOLD_OFFSET and self.env._grasped:
+            if self._carry_off is None:
+                self._carry_off = np.clip((box_pos - ee_pos)[:2], -0.04, 0.04)
+            target[:2] -= self._carry_off
+        else:
+            target[:2] -= np.clip((box_pos - ee_pos)[:2], -0.04, 0.04)
         self._gripper_target = -1.0
         self._move_toward(target, ee_pos, threshold=threshold, advance_on_failure=advance_on_failure)
 
@@ -808,7 +821,17 @@ class ScriptedPolicy(BasePolicy):
         (không đáng kể).
         """
         self.motion_target = (target_pos.copy(), threshold)
-        self._current_joint_targets = self._solve_ik(target_pos)
+        ik_target = target_pos
+        if self.TCP_STEP > 0 and self._phase in (2, 3):             # C: đích đầu tay tiến từng đoạn nhỏ
+            if self._tcp_goal is None or self._phase_step == 0:
+                self._tcp_goal = np.array(ee_pos, dtype=float)
+            d = target_pos - self._tcp_goal
+            n = float(np.linalg.norm(d))
+            self._tcp_goal = target_pos.copy() if n <= self.TCP_STEP else self._tcp_goal + d * (self.TCP_STEP / n)
+            ik_target = self._tcp_goal
+        else:
+            self._tcp_goal = None
+        self._current_joint_targets = self._solve_ik(ik_target)
         if self._roll_hold is not None:                            # đã chọn roll thì giữ nguyên tới hết ván
             self._current_joint_targets[4] = self._roll_hold
 
@@ -819,7 +842,14 @@ class ScriptedPolicy(BasePolicy):
         else:
             self._stall += 1
         cap = timeout_steps if timeout_steps is not None else self.PHASE_TIMEOUTS.get(self._phase, self.PHASE_TIMEOUT_STEPS)
-        if dist < threshold:
+        if self.SETTLE_RELEASE and self._phase == 7:                # A: đứng yên vài bước mới được mở kẹp
+            moved = 9.0 if self._prev_ee is None else float(np.linalg.norm(ee_pos - self._prev_ee))
+            self._still_ee = self._still_ee + 1 if moved < self.SETTLE_DIST else 0
+            settled = self._still_ee >= self.SETTLE_STEPS
+        else:
+            settled = True
+        self._prev_ee = np.array(ee_pos, dtype=float)
+        if dist < threshold and settled:
             self.last_exit = "arrived"
         elif self._phase_step > cap:
             self.last_exit = "timeout"
