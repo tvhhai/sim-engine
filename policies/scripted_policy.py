@@ -55,6 +55,8 @@ class ScriptedPolicy(BasePolicy):
     PHASE1_ADAPTIVE_Z = True   # phase 1 hạ độ cao đích xuống mức tới được
     BOWL_HIT_STEPS = 3         # tay chạm bát liền chừng này bước khi hạ xuống kẹp (phase 2-4) thì nhấc lên, xoay wrist_roll rồi kẹp lại
     ROLL_FLIP_OFFSETS = (math.pi, -math.pi, math.pi / 2, -math.pi / 2)   # thứ tự thử khi đổi roll (rad so với roll đang giữ)
+    ROLL_CLEAR_MARGINS = (0.035, 0.025, 0.015)   # nhấc lên cao hơn miệng bát chừng này (m) trước khi xoay roll; lấy mức đầu tiên với tới được
+    ROLL_TURN_STEPS = 60       # tối đa chừng này bước để xoay roll tại chỗ
     MAX_ROLL_FLIPS = 3         # số lần đổi roll tối đa trong một ván (thử lần lượt: xoay 180°, +90°, -90° so với roll đang giữ)
     STALL_STEPS = 20           # đầu tay không tiến gần đích thêm STALL_PROGRESS trong chừng này bước liền thì coi là KẸT, sang phase kế
     STALL_PROGRESS = 0.001     # mét
@@ -142,6 +144,8 @@ class ScriptedPolicy(BasePolicy):
         self._bowl_hits = 0             # số bước liền tay đang chạm bát khi hạ xuống kẹp
         self._roll_flips = 0            # đã đổi roll bao nhiêu lần vì tay chạm bát
         self._roll_pref = None          # roll ưu tiên sau khi đổi (None = chọn roll gần roll hiện tại nhất)
+        self._roll_stage = None         # None | "lift" (nhấc thẳng lên khỏi miệng bát) | "turn" (xoay wrist_roll tại chỗ)
+        self._roll_z = None             # độ cao nhấc lên để xoay roll
         self._arm_body_ids = {mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, n) for n in
                               ("shoulder", "upper_arm", "lower_arm", "wrist", "gripper", "moving_jaw_so101_v1", "wrist_cam_arm")}
         self._place_retries = 0
@@ -193,7 +197,7 @@ class ScriptedPolicy(BasePolicy):
         self._settle_wait = 0
         self._still = 0
         self._best_dist, self._stall, self.last_exit, self._p1_z, self._lift_z = 0.0, 0, None, None, None
-        self._bowl_hits, self._roll_flips, self._roll_pref = 0, 0, None
+        self._bowl_hits, self._roll_flips, self._roll_pref, self._roll_stage, self._roll_z = 0, 0, None, None, None
 
     def select_action(self, observation: dict) -> np.ndarray:
         """Hàm chính: nhìn tình hình hiện tại, trả về action (7 số trong [-1, 1]).
@@ -264,6 +268,9 @@ class ScriptedPolicy(BasePolicy):
         self._move_toward(target, ee_pos, threshold=0.02)
 
     def _approach_box(self, box_pos, ee_pos):
+        if self._roll_stage is not None:
+            self._recover_roll(ee_pos)
+            return
         # Di chuyển ngang tới phía trên hộp ở độ cao an toàn
         if self._phase_step == 0 or self._p1_z is None:
             self._p1_z = self._reachable_z(box_pos[:2]) if self.PHASE1_ADAPTIVE_Z else self._safe_z
@@ -446,10 +453,11 @@ class ScriptedPolicy(BasePolicy):
         return False
 
     def _flip_roll(self):
-        """Tay chạm bát lúc hạ xuống kẹp: nhấc lên (về phase 1, đứng trên hộp), xoay wrist_roll sang một phương án khác rồi kẹp lại.
+        """Tay chạm bát lúc hạ xuống kẹp: nhấc THẲNG lên một đoạn ngắn (chỉ cao hơn miệng bát vài cm, không phải về độ cao an toàn như
+        phase 0), xoay wrist_roll TẠI CHỖ ở độ cao đó, rồi hạ xuống kẹp lại (phase 2). Việc xoay thực hiện ở `_recover_roll`.
 
-        Hộp vuông nên trục kẹp song song mặt hộp đúng với 4 góc roll cách nhau 90°. Đổi sang góc khác đổi phía hàm di động
-        (đang mở rộng) quay về, để nó không quét vào thành bát. Thử lần lượt xoay 180°, +90°, -90° (bỏ phương án ngoài giới hạn khớp)."""
+        Hộp vuông nên trục kẹp song song mặt hộp đúng với 4 góc roll cách nhau 90°. Đổi góc đổi phía hàm di động (đang mở rộng)
+        quay về, để nó không quét vào thành bát. Thử lần lượt xoay 180°, rồi -180°, +90°, -90° (bỏ phương án ngoài giới hạn khớp)."""
         lo, hi = self.model.jnt_range[self._joint_ids[4]]
         r0 = self._roll_hold if self._roll_hold is not None else float(self.data.qpos[self._qpos_adr[4]])
         cands = [r0 + off for off in self.ROLL_FLIP_OFFSETS]
@@ -460,7 +468,48 @@ class ScriptedPolicy(BasePolicy):
         self._roll_hold = None
         self._last_finger = None
         self._bowl_hits = 0
+        self._roll_stage, self._roll_z = "lift", None
         self._phase, self._phase_step = 1, 0
+        self._best_dist, self._stall = 0.0, 0
+
+    def _clear_height(self, xy):
+        """Độ cao đầu tay để xoay roll mà không quét vào bát: cao hơn miệng bát một chút, lấy mức đầu tiên IK với tới được."""
+        rim = self.env.get_bowl_pos()[2] + config.BOWL_HEIGHT
+        for margin in self.ROLL_CLEAR_MARGINS:
+            z = rim + margin
+            target = np.array([xy[0], xy[1], z])
+            self._solve_ik(target, limits=True)
+            if float(np.linalg.norm(self._ik_data.site_xpos[self._ee_site] - target)) < 0.004:
+                return z
+        return self._reachable_z(xy, z_lo=rim + 0.01)
+
+    def _recover_roll(self, ee_pos):
+        """Hai bước sau khi tay chạm bát (xem _flip_roll): "lift" nhấc thẳng lên, "turn" xoay wrist_roll tại chỗ; xong thì sang phase 2."""
+        self._gripper_target = 1.0
+        if self._roll_z is None:
+            self._roll_z = self._clear_height(ee_pos[:2])
+        if self._roll_stage == "lift":
+            target = np.array([ee_pos[0], ee_pos[1], self._roll_z]) if self._phase_step == 0 else self._roll_target
+            self._roll_target = target
+            self._move_toward(target, ee_pos, threshold=0.012)
+            if self._phase != 1:                                   # đã lên tới độ cao: ở lại phase 1 và chuyển sang xoay roll
+                self._phase, self._phase_step = 1, 0
+                self._best_dist, self._stall = 0.0, 0
+                self._roll_stage = "turn"
+                self.last_exit = None
+            return
+        # "turn": giữ nguyên vị trí đầu tay, chỉ xoay wrist_roll tới roll ưu tiên
+        target = np.array(self._roll_target)
+        q = self._solve_ik(target)
+        if self._roll_pref is not None:
+            q[4] = self._roll_pref
+        self._current_joint_targets = q
+        self.motion_target = (target.copy(), 0.02)
+        self._phase_step += 1
+        roll_err = abs(float(self.data.qpos[self._qpos_adr[4]]) - (self._roll_pref if self._roll_pref is not None else 0.0))
+        if self._roll_pref is None or roll_err < 0.06 or self._phase_step > self.ROLL_TURN_STEPS:
+            self._roll_stage, self._roll_z = None, None
+            self._advance_phase()                                  # sang phase 2: hạ xuống kẹp bằng roll mới
 
     def _advance_phase(self):
         """Chuyển sang phase kế tiếp và đặt lại bộ đếm bước của phase."""
