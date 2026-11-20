@@ -30,6 +30,7 @@ import time
 import numpy as np
 
 from .. import config
+from .. import box_sampling
 from ..box_sampling import fixed_seed_name
 from ..env import SO101PickPlaceEnv
 from ..policies.scripted_policy import ScriptedPolicy
@@ -44,6 +45,11 @@ from .make_replay import Recorder, parse_seeds, parallel_map, default_workers
 SHOULDER_XY = (0.0, -0.15)      # trục khớp 1
 MOVE_PHASES = (0, 1, 2, 3, 5, 6, 7, 9)   # các phase kết thúc khi tay tới đích (hoặc quá PHASE_TIMEOUT_STEPS bước)
 PHASE_TIMEOUT = ScriptedPolicy.PHASE_TIMEOUT_STEPS
+
+
+def failed(r):
+    """Hỏng THẬT: không thành công và không phải seed ngoài tầm (ngoài tầm là bỏ qua có chủ ý, không tính là hỏng)."""
+    return (not r["success"]) and not r.get("skip")
 
 
 def evaluate_seed(rec, seed):
@@ -69,7 +75,11 @@ def evaluate_seed(rec, seed):
         kind = "kẹp được nhưng không nhấc lên"
     else:
         kind = "nhấc lên rồi tuột/không vào bát"
+    skip = box_sampling.is_unreachable(frames[0]["box"][:2])
+    if skip:
+        kind = "ngoài tầm (bỏ qua có chủ ý)"
     return {
+        "skip": skip,
         "seed": seed, "success": bool(ep["success"]), "steps": ep["steps"], "timeouts": timeouts, "retries": retries,
         "drops": drops, "regrasps": regrasps, "roll_flips": roll_flips, "bowl_avoid": bowl_avoid,
         "kind": kind, "box0": frames[0]["box"][:2], "bowl": ep["bowl"][:2],
@@ -142,7 +152,7 @@ def select(rows, count, feat, slow_steps):
         return (r["success"], r["kind"], tuple(r["timeouts"]), r["steps"] >= slow_steps,
                 r["retries"] > 0, r["drops"] > 0, r["regrasps"] > 0)
 
-    bad = [i for i in range(n) if (not rows[i]["success"]) or rows[i]["timeouts"] or rows[i]["steps"] >= slow_steps
+    bad = [i for i in range(n) if failed(rows[i]) or rows[i]["timeouts"] or rows[i]["steps"] >= slow_steps
            or rows[i]["retries"] or rows[i]["drops"] or rows[i]["regrasps"]]
     chosen = [i for i in range(n) if rows[i]["seed"] in config.BOX_FIXED_SEEDS]       # seed 1-6: các trường hợp cực biên, luôn có mặt
     # 0) các biên của tầm với (hộp xa/gần trục, xa/gần bát và 4 tổ hợp)
@@ -151,7 +161,7 @@ def select(rows, count, feat, slow_steps):
         if i not in chosen:
             chosen.append(i)
     # 1) MỌI seed hỏng (nếu có chỗ), rồi mỗi chữ ký lỗi (timeout / kẹp lại / làm rớt / gắp lại / chậm) có một đại diện
-    for i in [i for i in range(n) if not rows[i]["success"]]:
+    for i in [i for i in range(n) if failed(rows[i])]:
         if i not in chosen and len(chosen) < count:
             chosen.append(i)
     groups = collections.defaultdict(list)
@@ -188,6 +198,7 @@ def main():
     args = ap.parse_args()
 
     seeds = parse_seeds(args.pool)
+    seeds = seeds + [k for k in sorted(config.BOX_FIXED_SEEDS) if k not in set(seeds)]      # seed cố định nằm ngoài dải chấm cũng được chấm
     t_start = time.time()
     rows = parallel_map(_eval_task, [(s, None) for s in seeds], args.policy, args.box_range, args.bowl_range, args.workers,
                         progress=lambda k, n: print(f"  đã chấm {k}/{n} seed...", flush=True) if k % 25 == 0 else None)
@@ -199,13 +210,18 @@ def main():
     steps = np.array([r["steps"] for r in rows])
     median = float(np.median(steps))
     slow_steps = max(args.slow_min, args.slow_factor * median)
-    fails = [r for r in rows if not r["success"]]
+    fails = [r for r in rows if failed(r)]
+    n_skip = sum(1 for r in rows if r.get("skip"))
     to_count = collections.Counter(p for r in rows for p in r["timeouts"])
     slow = [r["seed"] for r in rows if r["steps"] >= slow_steps]
     kinds = collections.Counter(r["kind"] for r in rows)
 
     print(f"\n=== Chấm {len(rows)} seed (kẹp THẬT) ===")
-    print(f"thành công {len(rows) - len(fails)}/{len(rows)} | bước trung vị {median:.0f} | chậm (>= {slow_steps:.0f} bước): {len(slow)} seed")
+    main_rows = [r for r in rows if r["seed"] < config.FIXED_SEED_FIRST_EXTRA]
+    extra_rows = [r for r in rows if r["seed"] >= config.FIXED_SEED_FIRST_EXTRA]
+    print(f"200 seed chính (0-{config.FIXED_SEED_FIRST_EXTRA - 1}): thành công {sum(1 for r in main_rows if r['success'] and not r.get('skip'))}/{sum(1 for r in main_rows if not r.get('skip'))}")
+    print(f"seed cố định thêm ({len(extra_rows)} seed từ {config.FIXED_SEED_FIRST_EXTRA}): gắp được {sum(1 for r in extra_rows if r['success'])}, ngoài tầm bỏ qua {sum(1 for r in extra_rows if r.get('skip'))}, hỏng {sum(1 for r in extra_rows if failed(r))}")
+    print(f"tổng: thành công {len(rows) - n_skip - len(fails)}/{len(rows) - n_skip} (không tính {n_skip} seed ngoài tầm: về home ngay) | bước trung vị {median:.0f} | chậm (>= {slow_steps:.0f} bước): {len(slow)} seed")
     print("kiểu kết quả:", dict(kinds))
     print("số seed có timeout theo phase:", dict(sorted(to_count.items())))
 
@@ -223,17 +239,17 @@ def main():
     fixed_idx = [i for i, r in enumerate(rows) if r["seed"] in config.BOX_FIXED_SEEDS]
     if not pinned:                                                # lần đầu (hoặc --repin): ghim bộ vừa chọn
         pinned = [rows[i]["seed"] for i in chosen if rows[i]["seed"] not in config.BOX_FIXED_SEEDS]
-    new_fail = [r["seed"] for r in rows if not r["success"] and r["seed"] not in pinned and r["seed"] not in config.BOX_FIXED_SEEDS]
+    new_fail = [r["seed"] for r in rows if failed(r) and r["seed"] not in pinned and r["seed"] not in config.BOX_FIXED_SEEDS]
     pinned = pinned + new_fail
     with open(pins_path, "w", encoding="utf-8") as f:
         json.dump({"pinned": pinned, "note": "seed xem trong replay; thêm seed hỏng mới, không bỏ seed đã xanh. --repin để chọn lại"}, f)
     chosen = fixed_idx + [by_seed[sd] for sd in pinned if sd in by_seed]
-    fail_idx = [i for i, r in enumerate(rows) if not r["success"]]
+    fail_idx = [i for i, r in enumerate(rows) if failed(r)]
     rest = [i for i in fail_idx if i not in chosen] if len(fail_idx) > args.count else []
 
     def tags(r):
         t = []
-        t.append("THÀNH CÔNG" if r["success"] else "HỎNG: " + r["kind"])
+        t.append("NGOÀI TẦM: về home ngay" if r.get("skip") else ("THÀNH CÔNG" if r["success"] else "HỎNG: " + r["kind"]))
         if r["timeouts"]:
             t.append("timeout phase " + ",".join(map(str, r["timeouts"])))
         if r["retries"]:
@@ -267,7 +283,7 @@ def main():
     others = [pack(i, "seed hỏng còn lại") for i in sorted(rest, key=lambda j: rows[j]["seed"])]
 
     dmin = min((np.linalg.norm(feat[a] - feat[b]) for a in chosen for b in chosen if a < b), default=0)
-    print(f"\nNhóm chính {len(chosen)} seed: hỏng {sum(1 for i in chosen if not rows[i]['success'])}, "
+    print(f"\nNhóm chính {len(chosen)} seed: hỏng {sum(1 for i in chosen if failed(rows[i]))}, "
           f"có timeout {sum(1 for i in chosen if rows[i]['timeouts'])}, chậm {sum(1 for i in chosen if rows[i]['steps'] >= slow_steps)}; "
           f"khoảng cách nhỏ nhất giữa hai seed (chuẩn hóa, 2.0 = bề rộng cả ô): {dmin:.2f}")
     print("seed nhóm chính:", [rows[i]["seed"] for i in chosen])
@@ -276,10 +292,10 @@ def main():
 
     data = {
         "pool": args.pool, "count": args.count, "slow_steps": slow_steps,
-        "summary": {"success": len(rows) - len(fails), "total": len(rows), "median_steps": median, "kinds": dict(kinds),
+        "summary": {"success": len(rows) - n_skip - len(fails), "total": len(rows) - n_skip, "skipped_unreachable": n_skip, "median_steps": median, "kinds": dict(kinds),
                     "timeouts_by_phase": {str(k): v for k, v in sorted(to_count.items())}, "slow_seeds": slow},
         "selected": selected, "rest": others,
-        "all": [{"seed": r["seed"], "success": r["success"], "steps": r["steps"], "timeouts": r["timeouts"], "kind": r["kind"],
+        "all": [{"seed": r["seed"], "skip": r.get("skip", False), "success": r["success"], "steps": r["steps"], "timeouts": r["timeouts"], "kind": r["kind"],
                  "retries": r["retries"], "drops": r["drops"], "regrasps": r["regrasps"], "box0": [round(v, 4) for v in r["box0"]]} for r in rows],
     }
     with open(args.out, "w", encoding="utf-8") as f:

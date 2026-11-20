@@ -77,10 +77,13 @@ PICK_REGION = {                       # vùng hộp đặt được: r = khoản
     "r_min": 0.12, "r_max": 0.36,     # đo: r <= 0.10 hay r >= 0.38 chỗ gắp chỗ hỏng; r >= 0.40 hỏng hết
     "angle_min_deg": -110.0, "angle_max_deg": 110.0,   # đo: +-120 hỏng (ngoài giới hạn khớp 1 = +-110); +-100/+-110 gắp được như nhau
 }
+PAN_LIMIT_DEG = 110.0                # giới hạn khớp 1 (pan) trong XML: +-110 độ so với hướng tay
+PAN_UNREACHABLE_MARGIN_DEG = 5.0     # hộp lệch quá PAN_LIMIT_DEG + biên này thì CHẮC CHẮN không với tới: policy về home ngay (đo: +-120 hỏng hết)
 BOX_BOWL_CLEARANCE = 0.10            # hộp cách tâm bát tối thiểu (m)
 BOX_SAMPLING = "sector"              # "sector": 200 seed chia đều các ô góc x bán kính trong hình quạt (phủ đủ vùng gắp); "square": ô ±BOX_RANDOM_RANGE cũ
 BOX_SECTOR_CELLS = (10, 20)          # (số khoảng góc, số vòng bán kính chia đều DIỆN TÍCH): 10 x 20 = 200 ô, mỗi seed 0-199 một ô
 # Seed cố định cho các trường hợp cực biên (thay cho 6 "case" trước đây): seed -> (tên, (x, y) của hộp)
+FIXED_SEED_FIRST_EXTRA = 200          # seed cố định thêm về sau (điểm quét hỏng mới, ngoài vùng, ngoài tầm) đánh số từ đây; 0-199 là 200 seed phủ vùng gắp
 BOX_FIXED_SEEDS = {
     1: ("hộp XA nhất (tay vươn tối đa)", (0.000, 0.230)),
     2: ("hộp GẦN nhất (sát đế, lệch một bên)", (0.060, -0.046)),
@@ -101,6 +104,31 @@ BOX_FIXED_SEEDS = {
     16: ("pan -100°, r = 25 cm (kiểm tra vùng gắp đối xứng)", (-0.2462, -0.1934)),
     17: ("pan -110°, r = 15 cm (kiểm tra vùng gắp đối xứng)", (-0.1410, -0.2013)),
     18: ("pan -110°, r = 25 cm (kiểm tra vùng gắp đối xứng)", (-0.2349, -0.2355)),
+    200: ("quét hỏng: r = 32 cm, góc -70°", (-0.3007, -0.0406)),
+    201: ("ngoài vùng nhưng gắp được: r = 8 cm, góc -90°", (-0.0800, -0.1500)),
+    202: ("ngoài vùng nhưng gắp được: r = 8 cm, góc -50°", (-0.0613, -0.0986)),
+    203: ("ngoài vùng nhưng gắp được: r = 8 cm, góc +0°", (0.0000, -0.0700)),
+    204: ("ngoài vùng nhưng gắp được: r = 8 cm, góc +50°", (0.0613, -0.0986)),
+    205: ("ngoài vùng nhưng gắp được: r = 8 cm, góc +90°", (0.0800, -0.1500)),
+    206: ("ngoài vùng nhưng gắp được: r = 10 cm, góc -90°", (-0.1000, -0.1500)),
+    207: ("ngoài vùng nhưng gắp được: r = 10 cm, góc -50°", (-0.0766, -0.0857)),
+    208: ("ngoài vùng nhưng gắp được: r = 10 cm, góc +0°", (0.0000, -0.0500)),
+    209: ("ngoài vùng nhưng gắp được: r = 10 cm, góc +40°", (0.0643, -0.0734)),
+    210: ("ngoài vùng nhưng gắp được: r = 10 cm, góc +90°", (0.1000, -0.1500)),
+    211: ("ngoài vùng nhưng gắp được: r = 38 cm, góc -90°", (-0.3800, -0.1500)),
+    212: ("ngoài vùng nhưng gắp được: r = 38 cm, góc -40°", (-0.2443, 0.1411)),
+    213: ("ngoài vùng nhưng gắp được: r = 38 cm, góc +0°", (0.0000, 0.2300)),
+    214: ("ngoài vùng nhưng gắp được: r = 38 cm, góc +40°", (0.2443, 0.1411)),
+    215: ("ngoài vùng nhưng gắp được: r = 38 cm, góc +90°", (0.3800, -0.1500)),
+    216: ("ngoài vùng nhưng gắp được: r = 40 cm, góc -90°", (-0.4000, -0.1500)),
+    217: ("ngoài vùng nhưng gắp được: r = 40 cm, góc -50°", (-0.3064, 0.1071)),
+    218: ("ngoài vùng nhưng gắp được: r = 40 cm, góc -40°", (-0.2571, 0.1564)),
+    219: ("ngoài vùng nhưng gắp được: r = 40 cm, góc +40°", (0.2571, 0.1564)),
+    220: ("ngoài vùng nhưng gắp được: r = 40 cm, góc +90°", (0.4000, -0.1500)),
+    221: ("ngoài tầm (khớp 1 không xoay tới): góc -130°, r = 20 cm", (-0.1532, -0.2786)),
+    222: ("ngoài tầm (khớp 1 không xoay tới): góc -120°, r = 30 cm", (-0.2598, -0.3000)),
+    223: ("ngoài tầm (khớp 1 không xoay tới): góc +120°, r = 20 cm", (0.1732, -0.2500)),
+    224: ("ngoài tầm (khớp 1 không xoay tới): góc +130°, r = 30 cm", (0.2298, -0.3428)),
     # <<< SCAN-SEEDS
 }
 SETTLED_SPEED = 0.05        # hộp chuyển động chậm hơn mức này (m/s) mới coi là "đã nằm yên"

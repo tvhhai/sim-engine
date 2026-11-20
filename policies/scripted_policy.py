@@ -14,7 +14,7 @@ import numpy as np
 import mujoco
 
 from .base import BasePolicy
-from .. import config
+from .. import box_sampling, config
 
 
 class ScriptedPolicy(BasePolicy):
@@ -208,6 +208,10 @@ class ScriptedPolicy(BasePolicy):
         self._best_dist, self._stall, self.last_exit, self._p1_z, self._lift_z = 0.0, 0, None, None, None
         self._bowl_hits, self._roll_flips, self._roll_pref, self._roll_stage, self._roll_z = 0, 0, None, None, None
         self._pred_key, self._roll_turn_target, self._pred_changed = None, None, False
+        # Hộp nằm ngoài tầm chắc chắn (khớp 1 không xoay tới): không thử gắp, về home ngay (phase 10) thay vì chờ hết hạn từng phase
+        self.unreachable = bool(box_sampling.is_unreachable(self.env.get_box_pos()[:2]))
+        if self.unreachable:
+            self._phase = 10
 
     def select_action(self, observation: dict) -> np.ndarray:
         """Hàm chính: nhìn tình hình hiện tại, trả về action (7 số trong [-1, 1]).
@@ -449,7 +453,8 @@ class ScriptedPolicy(BasePolicy):
         phase: phase hiện tại; recovery: 0 bình thường, 1 đang nhấc lên khỏi bát, 2 đang xoay roll tại chỗ (đều là PHỤC HỒI sau khi chạm bát);
         roll_flips: đã đổi roll vì chạm bát bao nhiêu lần; bowl_avoid: 1 nếu roll được chọn sẵn từ đầu để tránh bát (không có va chạm xảy ra)."""
         stage = {None: 0, "lift": 1, "turn": 2}[self._roll_stage]
-        return {"phase": int(self._phase), "recovery": stage, "roll_flips": int(self._roll_flips), "bowl_avoid": int(self._pred_changed)}
+        return {"phase": int(self._phase), "recovery": stage, "roll_flips": int(self._roll_flips), "bowl_avoid": int(self._pred_changed),
+                "unreachable": int(self.unreachable)}
 
     def _arm_touches_bowl(self):
         """True nếu có khâu tay (kể cả hàm kẹp) đang chạm bát."""
