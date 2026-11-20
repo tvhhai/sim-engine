@@ -28,6 +28,8 @@ import os
 
 import numpy as np
 
+from .. import config
+from ..box_sampling import fixed_seed_name
 from ..env import SO101PickPlaceEnv
 from ..policies.scripted_policy import ScriptedPolicy
 from .make_replay import Recorder, parse_seeds
@@ -35,19 +37,8 @@ from .make_replay import Recorder, parse_seeds
 
 # Hai trường hợp cực biên luôn đứng đầu danh sách replay: hộp XA nhất và GẦN nhất mà cánh tay phải xử lý.
 # (đặt tay vị trí hộp qua env.reset(options=...), nên không phụ thuộc vùng random ±3 cm)
-# Các trường hợp cực biên, đặt tay vị trí hộp qua env.reset(options=...) (không phụ thuộc vùng random ±3 cm).
-# Vị trí lấy từ bản đồ vùng gắp được (quét theo cực quanh trục khớp 1, góc đo từ hướng tay): gắp ổn tới r ≈ 0.38 m
-# (r = 0.40 trở lên hỏng), tới góc ±80° (±100° hỏng), và r ≥ 0.10 m. Bát cố định ở (-0.15, 0).
-EXTREME_CASES = [
-    {"name": "CASE 1: hộp XA nhất (tay vươn tối đa)", "seed": 0, "box_xy": (0.000, 0.230)},
-    {"name": "CASE 2: hộp GẦN nhất (sát đế, lệch một bên)", "seed": 0, "box_xy": (0.060, -0.046)},
-    {"name": "CASE 3: hộp XA bát nhất + tay vươn xa (chéo)", "seed": 0, "box_xy": (0.355, -0.087)},
-    {"name": "CASE 4: hộp XA bát + tay vươn gần", "seed": 0, "box_xy": (0.118, -0.129)},
-    {"name": "CASE 5: hộp SÁT bát + tay vươn xa", "seed": 0, "box_xy": (-0.260, 0.000)},
-    {"name": "CASE 6: hộp SÁT bát + tay vươn gần", "seed": 0, "box_xy": (-0.118, -0.129)},
-]
-for _c in EXTREME_CASES:
-    _c["options"] = {"box_xy": list(_c["box_xy"])}
+# Các trường hợp cực biên là SEED 1-6 (config.BOX_FIXED_SEEDS): env.reset(seed=k) đặt hộp đúng vị trí đã định, nên chúng được chấm
+# cùng 200 seed như mọi seed khác và luôn có mặt trong replay.
 SHOULDER_XY = (0.0, -0.15)      # trục khớp 1
 MOVE_PHASES = (0, 1, 2, 3, 5, 6, 7, 9)   # các phase kết thúc khi tay tới đích (hoặc quá PHASE_TIMEOUT_STEPS bước)
 PHASE_TIMEOUT = ScriptedPolicy.PHASE_TIMEOUT_STEPS
@@ -82,10 +73,10 @@ def evaluate_seed(rec, seed):
 
 
 def features(rows, box_range, bowl_range, box_center=(0.15, 0.0)):
-    """Vị trí chuẩn hóa về [-1, 1] để đo "xa nhau" công bằng giữa hộp và bát."""
+    """Toạ độ hộp (và bát nếu bát random) chuẩn hoá về cỡ [-1, 1] để đo "xa nhau" giữa các seed."""
     out = []
     for r in rows:
-        f = [(r["box0"][0] - box_center[0]) / box_range, (r["box0"][1] - box_center[1]) / box_range]
+        f = [r["box0"][0] / 0.40, r["box0"][1] / 0.40]
         if bowl_range > 0:
             f += [(r["bowl"][0] + 0.15) / bowl_range, (r["bowl"][1] - 0.0) / bowl_range]
         out.append(np.array(f))
@@ -143,7 +134,7 @@ def select(rows, count, feat, slow_steps):
 
     bad = [i for i in range(n) if (not rows[i]["success"]) or rows[i]["timeouts"] or rows[i]["steps"] >= slow_steps
            or rows[i]["retries"] or rows[i]["drops"] or rows[i]["regrasps"]]
-    chosen = []
+    chosen = [i for i in range(n) if rows[i]["seed"] in config.BOX_FIXED_SEEDS]       # seed 1-6: các trường hợp cực biên, luôn có mặt
     # 0) các biên của tầm với (hộp xa/gần trục, xa/gần bát và 4 tổ hợp)
     picks = reach_picks(rows)
     for i in picks:
@@ -237,17 +228,15 @@ def main():
         box_r, _, gap = reach(r)
         t = picks.get(i, []) + tags(r)
         t.append(f"hộp cách trục khớp 1 {box_r * 100:.1f} cm, cách bát {gap * 100:.1f} cm")
-        return {"seed": r["seed"], "group": group if i not in picks else "biên tầm với (xa/gần trục, xa/gần bát)", "tags": t,
-                "steps": r["steps"], "box0": [round(v, 4) for v in r["box0"]]}
+        fixed = fixed_seed_name(r["seed"])
+        e = {"seed": r["seed"], "group": group if i not in picks else "biên tầm với (xa/gần trục, xa/gần bát)", "tags": t,
+             "steps": r["steps"], "box0": [round(v, 4) for v in r["box0"]]}
+        if fixed:
+            e["name"] = f"seed {r['seed']} · {fixed}"
+            e["group"] = f"{len(config.BOX_FIXED_SEEDS)} seed cố định (trường hợp cực biên)"
+        return e
 
-    extremes = []
-    for c in EXTREME_CASES:
-        r = math.hypot(c["box_xy"][0] - SHOULDER_XY[0], c["box_xy"][1] - SHOULDER_XY[1])
-        gap = math.hypot(c["box_xy"][0] + 0.15, c["box_xy"][1])
-        extremes.append({"seed": c["seed"], "name": c["name"], "options": c["options"], "group": f"{len(EXTREME_CASES)} trường hợp cực biên (xa/gần trục, xa/sát bát)",
-                         "tags": [f"hộp ({c['box_xy'][0]:.3f}, {c['box_xy'][1]:.3f}), cách trục khớp 1 {r * 100:.1f} cm, cách bát {gap * 100:.1f} cm"], "steps": 0,
-                         "box0": list(c["box_xy"])})
-    selected = extremes + [pack(i, f"{args.count} seed chọn (đa dạng, ưu tiên hỏng/timeout/chậm)") for i in chosen]
+    selected = [pack(i, f"{args.count} seed chọn (đa dạng, ưu tiên hỏng/timeout/chậm)") for i in chosen]
     others = [pack(i, "seed hỏng còn lại") for i in sorted(rest, key=lambda j: rows[j]["seed"])]
 
     dmin = min((np.linalg.norm(feat[a] - feat[b]) for a in chosen for b in chosen if a < b), default=0)
