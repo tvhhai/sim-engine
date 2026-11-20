@@ -65,6 +65,8 @@ class ScriptedPolicy(BasePolicy):
     # chỉ phản ứng 180° -> 193/200; dự đoán + phản ứng 180° đầy đủ -> 194/200 nhưng chậm (seed 7: 238); 90° đầy đủ -> seed 7 hỏng.
     ROLL_CLEAR_MARGINS = (0.035, 0.025, 0.015)   # nhấc lên cao hơn miệng bát chừng này (m) trước khi xoay roll; lấy mức đầu tiên với tới được
     ROLL_TURN_STEPS = 60       # tối đa chừng này bước để xoay roll tại chỗ
+    FAR_ROLL_R = 0.33          # hộp xa khớp 1 hơn mức này (m): kẹp với roll FAR_ROLL_DEG thay vì roll gần tư thế nghỉ (kẹp ổn hơn khi hộp trượt/ma sát thấp)
+    FAR_ROLL_DEG = -87.0       # -87 (không phải +93): +93 làm cụm cam đâm xuống bàn (-11 mm) ở 7/43 hộp xa; -87 luôn cách bàn >= 30 mm
     MAX_ROLL_FLIPS = 3         # số lần đổi roll tối đa trong một ván (thử lần lượt: xoay 180°, +90°, -90° so với roll đang giữ)
     STALL_STEPS = 20           # đầu tay không tiến gần đích thêm STALL_PROGRESS trong chừng này bước liền thì coi là KẸT, sang phase kế
     STALL_PROGRESS = 0.001     # mét
@@ -213,6 +215,9 @@ class ScriptedPolicy(BasePolicy):
         self._pred_key, self._roll_turn_target, self._pred_changed, self._preturn_key = None, None, False, None
         # Hộp nằm ngoài tầm chắc chắn (khớp 1 không xoay tới): không thử gắp, về home ngay (phase 10) thay vì chờ hết hạn từng phase
         self.unreachable = bool(box_sampling.is_unreachable(self.env.get_box_pos()[:2]))
+        bx = self.env.get_box_pos()
+        if self.FAR_ROLL_R and math.hypot(bx[0] - config.PICK_PAN_XY[0], bx[1] - config.PICK_PAN_XY[1]) >= self.FAR_ROLL_R:
+            self._roll_pref = math.radians(self.FAR_ROLL_DEG)
         if self.unreachable:
             self._phase = 10
 
