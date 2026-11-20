@@ -39,6 +39,24 @@ def quat_to_mat(q):
                      [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)]])
 
 
+def outward(tris, mid):
+    """Đổi chiều các tam giác sao cho pháp tuyến hướng RA NGOÀI vật liệu. `mid(P)` trả về điểm nằm trong vật liệu gần tam giác có
+    tâm P. MuJoCo/OpenGL tô theo pháp tuyến nên mặt bị ngược sẽ tối hoặc lủng; hình dựng bằng tay phải đảm bảo chiều đúng."""
+    tris = np.array(tris, float)
+    n = np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
+    cen = tris.mean(axis=1)
+    inner = np.array([mid(P) for P in cen])
+    bad = ((cen - inner) * n).sum(axis=1) < 0
+    tris[bad] = tris[bad][:, [0, 2, 1]]
+    return tris
+
+
+def convex(tris):
+    """Vật lồi (hộp bo góc, trụ, tấm): mặt nào hướng vào tâm thì đảo lại."""
+    c = np.array(tris, float).reshape(-1, 3).mean(axis=0)
+    return outward(tris, lambda P: c)
+
+
 def rounded_rect(w, h, r, seg=5):
     r = min(r, w / 2 - 1e-6, h / 2 - 1e-6)
     pts = []
@@ -60,7 +78,7 @@ def loft(c0, c1, axes, size0, size1, radius, seg=5):
     for k in range(n):
         j = (k + 1) % n
         tris += [[a[k], a[j], b[j]], [a[k], b[j], b[k]], [c0, a[j], a[k]], [c1, b[k], b[j]]]
-    return np.array(tris)
+    return convex(tris)
 
 
 def frame_from_z(z):
@@ -83,7 +101,7 @@ def cylinder(center, axis, radius, length, n=32):
     for k in range(n):
         p, q = ring[k], ring[(k + 1) % n]
         tris += [[bot + p, top + p, top + q], [bot + p, top + q, bot + q], [top, top + p, top + q], [bot, bot + q, bot + p]]
-    return np.array(tris)
+    return convex(tris)
 
 
 def c_ring(center, axis, opening, r_out, r_in, length, gap_deg=110.0, n=22):
@@ -114,7 +132,17 @@ def c_ring(center, axis, opening, r_out, r_in, length, gap_deg=110.0, n=22):
         for a in (a0, a1):
             q = [pt(r_in, a, -1), pt(r_out, a, -1), pt(r_out, a, 1), pt(r_in, a, 1)]
             tris += [[q[0], q[1], q[2]], [q[0], q[2], q[3]]]
-    return np.array(tris)
+
+    rmid, amin, amax = (r_out + r_in) / 2, angs[0], angs[-1]
+
+    def mid(P):                      # điểm trong vật liệu gần P: cùng góc (kẹp cách mép khe một chút) và cùng độ cao dọc trục
+        v = P - center
+        s = np.clip(np.dot(v, axis), -length / 2, length / 2)
+        a = np.arctan2(np.dot(v, p), np.dot(v, o)) % (2 * np.pi)
+        if not full:
+            a = np.clip(a, amin + 0.25, amax - 0.25)
+        return center + rmid * (np.cos(a) * o + np.sin(a) * p) + s * axis
+    return outward(tris, mid)
 
 
 def slab(center, axes, w, h, thickness, radius):
@@ -150,7 +178,7 @@ def build():
     ln = np.linalg.norm(to_tray)
     arm = loft(np.zeros(3), to_tray, frame_from_z(to_tray), (0.0098, 0.0062), (0.0098, 0.0050), 0.0026)
     tray = slab(tray_c, axes, 0.036, 0.036, 0.0030, 0.006)
-    lip = slab(tray_c + 0.0022 * look, axes, 0.0345, 0.0345, 0.0016, 0.0055)
+    lip = slab(tray_c + 0.0031 * look, axes, 0.0345, 0.0345, 0.0020, 0.0055)
     link = np.concatenate([knuckle, arm, tray, lip])
 
     cam_local = CAM_POS - H
