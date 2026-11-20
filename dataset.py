@@ -35,10 +35,20 @@ class DatasetRecorder:
             "images_webcam": [],
             "images_arm_cam": [],
             "actions": [],
+            "ann_phase": [],
+            "ann_recovery": [],
+            "ann_roll_flips": 0,
+            "ann_bowl_avoid": 0,
         }
 
-    def record_step(self, obs: dict, action: np.ndarray):
+    def record_step(self, obs: dict, action: np.ndarray, annotation: dict = None):
+        """annotation (tùy chọn, từ policy.annotation()): chú thích từng bước, lưu ở nhóm `annotations`, không đổi action."""
         assert self._buffers is not None, "Call start_episode() first"
+        if annotation is not None:
+            self._buffers["ann_phase"].append(annotation["phase"])
+            self._buffers["ann_recovery"].append(annotation["recovery"])
+            self._buffers["ann_roll_flips"] = max(self._buffers["ann_roll_flips"], annotation["roll_flips"])
+            self._buffers["ann_bowl_avoid"] = max(self._buffers["ann_bowl_avoid"], annotation["bowl_avoid"])
         self._buffers["states"].append(obs["state"].copy())
         self._buffers["actions"].append(action.copy())
         if "images" in obs:
@@ -70,6 +80,13 @@ class DatasetRecorder:
                     )
 
                 f.create_dataset("actions", data=np.array(self._buffers["actions"], dtype=np.float32))
+                if self._buffers["ann_phase"]:
+                    ann = f.create_group("annotations")
+                    ann.create_dataset("phase", data=np.array(self._buffers["ann_phase"], dtype=np.int8))
+                    ann.create_dataset("recovery", data=np.array(self._buffers["ann_recovery"], dtype=np.int8))
+                    ann.attrs["layout"] = "phase 0-11; recovery 0 normal / 1 lifting off the bowl / 2 turning wrist_roll (steps to filter or down-weight)"
+                    f.attrs["roll_flips"] = self._buffers["ann_roll_flips"]
+                    f.attrs["bowl_avoid"] = self._buffers["ann_bowl_avoid"]
                 f.attrs["contract_version"] = 1
                 f.attrs["source"] = "mujoco"
                 f.attrs["scene_sha256"] = hashlib.sha256(Path(config.SCENE_XML).read_bytes()).hexdigest()

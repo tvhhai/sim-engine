@@ -16,7 +16,7 @@ def record_policy_step(env, policy, recorder, observation, task):
         "images": observation.get("images", {}),
         "task": task,
     })
-    recorder.record_step(observation, action)
+    recorder.record_step(observation, action, annotation=getattr(policy, "annotation", lambda: None)())
     return env.step(action)
 
 

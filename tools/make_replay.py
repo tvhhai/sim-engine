@@ -282,6 +282,9 @@ class Recorder:
             "fo": self.finger_open(),                    # góc hàm kẹp di động (rad): lớn = mở
             "gr": bool(self.env._grasped),               # hộp đang dính vào tay
             "ag": round(float(action_grip), 2),          # lệnh kẹp: +1 mở, -1 đóng
+            "rc": getattr(self.policy, "_roll_stage", None),             # phục hồi sau khi chạm bát: lift / turn / None
+            "rf": getattr(self.policy, "_roll_flips", 0),               # số lần đã đổi roll vì chạm bát
+            "ba": bool(getattr(self.policy, "_pred_changed", False)),   # roll đã được DỰ ĐOÁN đổi để tránh bát
             "ex": getattr(self.policy, "last_exit", None),   # lý do phase kết thúc ở bước này: arrived / stall / timeout
             "hd": round(float(info["box_to_bowl_dist"]), 3),   # khoảng cách ngang hộp-bát
             "ok": bool(info["success"]),

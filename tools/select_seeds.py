@@ -57,6 +57,8 @@ def evaluate_seed(rec, seed):
     drops = sum(1 for f in frames if f["ph"] in (5, 6, 7) and f["phn"] == 1)           # làm rớt hộp khi đang mang, quay lại gắp
     regrasps = sum(1 for f in frames if f["ph"] == 9 and f["phn"] == 1)                # rút lên rồi thấy hộp ngoài bát, gắp lại
     z0 = frames[0]["box"][2]
+    roll_flips = max((f.get("rf", 0) for f in frames), default=0)          # đổi roll vì chạm bát
+    bowl_avoid = any(f.get("ba") for f in frames)                         # roll chọn sẵn để tránh bát
     ever_grasped = any(f["gr"] for f in frames)
     lifted = max(f["box"][2] for f in frames) > z0 + 0.03
     if ep["success"]:
@@ -69,7 +71,7 @@ def evaluate_seed(rec, seed):
         kind = "nhấc lên rồi tuột/không vào bát"
     return {
         "seed": seed, "success": bool(ep["success"]), "steps": ep["steps"], "timeouts": timeouts, "retries": retries,
-        "drops": drops, "regrasps": regrasps,
+        "drops": drops, "regrasps": regrasps, "roll_flips": roll_flips, "bowl_avoid": bowl_avoid,
         "kind": kind, "box0": frames[0]["box"][:2], "bowl": ep["bowl"][:2],
     }
 
@@ -236,6 +238,10 @@ def main():
             t.append("timeout phase " + ",".join(map(str, r["timeouts"])))
         if r["retries"]:
             t.append(f"thử kẹp lại {r['retries']} lần")
+        if r.get("roll_flips"):
+            t.append(f"chạm bát, đổi roll {r['roll_flips']} lần")
+        if r.get("bowl_avoid"):
+            t.append("roll chọn sẵn tránh bát")
         if r["drops"]:
             t.append(f"làm rớt hộp {r['drops']} lần")
         if r["regrasps"]:
