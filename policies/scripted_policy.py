@@ -60,6 +60,7 @@ class ScriptedPolicy(BasePolicy):
     PREDICT_PRETURN = True     # roll dự đoán khác roll hiện tại nhiều thì xoay TẠI CHỖ ở độ cao lơ lửng (cuối phase 1) rồi mới hạ, không xoay lúc đang hạ gần bát
     CAM_AVOID = True           # hộp sát chân (r < CAM_AVOID_R): chọn roll để camera cổ tay không chạm vai/cánh tay/đế/bàn (xem _cam_geom_distance)
     CAM_AVOID_R = 0.16         # chỉ xét hộp cách trục khớp 1 gần hơn chừng này (m); xa hơn thì camera không thể chạm vai
+    JAW_BOX_MARGIN = 0.0008    # hộp sát chân: hàm kẹp (mở hết cỡ) phải không chạm hộp ở tư thế kẹp (>= chừng này, m); chạm = đẩy hộp vào đế. Đo seed 205: roll chạm hộp -3..-9 mm đều hỏng
     CAM_CLEARANCE_MARGIN = 0.010    # camera phải cách vai/cánh tay/đế/bàn tối thiểu chừng này (m)
     BOWL_CLEARANCE_MARGIN = 0.010   # hàm kẹp (mở hết cỡ) phải cách bát tối thiểu chừng này (m) ở tư thế chuẩn bị kẹp và tư thế kẹp
     BOWL_HIT_STEPS = 3         # tay chạm bát liền chừng này bước khi hạ xuống kẹp (phase 2-4) thì nhấc lên, xoay wrist_roll rồi kẹp lại
@@ -722,6 +723,20 @@ class ScriptedPolicy(BasePolicy):
         fromto = np.zeros(6)
         return min(mujoco.mj_geomDistance(self.model, ik, a, w, 0.06, fromto) for a, w in self._cam_pairs)
 
+    def _jaw_box_distance(self, q5):
+        """Khoảng cách nhỏ nhất (m) từ các khâu tay + hàm kẹp mở hết cỡ tới HỘP ở tư thế q5 (trên bản sao IK); âm = hàm cắm vào hộp, tức là khi hạ sẽ đẩy hộp."""
+        ik = self._ik_data
+        ik.qpos[:] = self.data.qpos[:]
+        ik.qpos[self._qpos_adr] = q5
+        ik.qpos[self.model.jnt_qposadr[self.env._gripper_jnt]] = config.GRIPPER_OPEN_RAD
+        self._fk(ik)
+        if not hasattr(self, "_jawbox_pairs"):
+            box = [g for g in range(self.model.ngeom) if self.model.geom_bodyid[g] == self.env._box_body]
+            arm = [g for g in range(self.model.ngeom) if self.model.geom_bodyid[g] in self._arm_body_ids and self.model.geom_contype[g] != 0]
+            self._jawbox_pairs = [(a, b) for a in arm for b in box]
+        fromto = np.zeros(6)
+        return min(mujoco.mj_geomDistance(self.model, ik, a, b, 0.06, fromto) for a, b in self._jawbox_pairs)
+
     def _predict_roll(self, roll, q5):
         """Bước 1 (trước khi hạ): với bốn góc roll song song mặt hộp (cách nhau 90°), tính khoảng cách hàm kẹp mở hết cỡ tới bát ở tư thế
         chuẩn bị kẹp và tư thế kẹp; chọn góc đủ xa bát (>= BOWL_CLEARANCE_MARGIN) và gần roll hiện tại nhất; nếu không góc nào đủ xa thì
@@ -747,7 +762,7 @@ class ScriptedPolicy(BasePolicy):
                 r = roll + k * math.pi / 2
                 if not lo + 0.05 <= r <= hi - 0.05:
                     continue
-                clear, cam_clear = 1e9, 1e9
+                clear, cam_clear, jaw_clear = 1e9, 1e9, 1e9
                 for z in (self._pre_grasp_z, self._grasp_z):
                     above = np.array([box[0], box[1], z])
                     q = self._solve_ik(above, roll=r)
@@ -760,6 +775,7 @@ class ScriptedPolicy(BasePolicy):
                         clear = min(clear, self._bowl_geom_distance(q, config.GRIPPER_OPEN_RAD))
                     if need_cam:
                         cam_clear = min(cam_clear, self._cam_geom_distance(q))
+                        jaw_clear = min(jaw_clear, self._jaw_box_distance(q))
                 if self.PREDICT_PATH:                                  # đường xoay: từ roll hiện tại tới r, ở độ cao lơ lửng phía trên hộp
                     hover = self._p1_z if self._p1_z is not None else self._pre_grasp_z + 0.02
                     for f in (0.25, 0.5, 0.75, 1.0):
@@ -772,7 +788,8 @@ class ScriptedPolicy(BasePolicy):
                         if need_cam:
                             cam_clear = min(cam_clear, self._cam_geom_distance(q))
                 # điểm chung: đạt cả hai mức an toàn thì >= 1 (đơn vị = mức tối thiểu); lấy mức tệ hơn trong hai
-                score = min(clear / self.BOWL_CLEARANCE_MARGIN if need_bowl else 1e9, cam_clear / self.CAM_CLEARANCE_MARGIN if need_cam else 1e9)
+                score = min(clear / self.BOWL_CLEARANCE_MARGIN if need_bowl else 1e9, cam_clear / self.CAM_CLEARANCE_MARGIN if need_cam else 1e9,
+                            jaw_clear / self.JAW_BOX_MARGIN if need_cam else 1e9)
                 results.append((r, score))
         finally:
             self._phase = saved_phase
