@@ -58,6 +58,9 @@ class ScriptedPolicy(BasePolicy):
     ROLL_TURN_MODE = "half"    # "full": xoay tại chỗ tới roll mới rồi hạ; "half": xoay tại chỗ nửa đường, nửa còn lại xoay trong lúc hạ xuống
     PREDICT_PATH = True        # dự đoán xét cả quãng xoay roll (ở độ cao lơ lửng), không chỉ hai tư thế cuối
     PREDICT_PRETURN = True     # roll dự đoán khác roll hiện tại nhiều thì xoay TẠI CHỖ ở độ cao lơ lửng (cuối phase 1) rồi mới hạ, không xoay lúc đang hạ gần bát
+    CAM_AVOID = True           # hộp sát chân (r < CAM_AVOID_R): chọn roll để camera cổ tay không chạm vai/cánh tay/đế/bàn (xem _cam_geom_distance)
+    CAM_AVOID_R = 0.16         # chỉ xét hộp cách trục khớp 1 gần hơn chừng này (m); xa hơn thì camera không thể chạm vai
+    CAM_CLEARANCE_MARGIN = 0.010    # camera phải cách vai/cánh tay/đế/bàn tối thiểu chừng này (m)
     BOWL_CLEARANCE_MARGIN = 0.010   # hàm kẹp (mở hết cỡ) phải cách bát tối thiểu chừng này (m) ở tư thế chuẩn bị kẹp và tư thế kẹp
     BOWL_HIT_STEPS = 3         # tay chạm bát liền chừng này bước khi hạ xuống kẹp (phase 2-4) thì nhấc lên, xoay wrist_roll rồi kẹp lại
     ROLL_FLIP_OFFSETS = (math.pi / 2, -math.pi / 2, math.pi, -math.pi)   # thứ tự thử khi đổi roll (rad so với roll đang giữ): 90° trước, 180° sau
@@ -670,13 +673,31 @@ class ScriptedPolicy(BasePolicy):
         fromto = np.zeros(6)
         return min(mujoco.mj_geomDistance(self.model, ik, a, w, 0.06, fromto) for a, w in self._clear_pairs)
 
+    def _cam_geom_distance(self, q5):
+        """Khoảng cách nhỏ nhất (m) từ camera cổ tay (wrist_cam_arm) tới vai, cánh tay trên, đế và mặt bàn khi tay ở tư thế q5 (trên bản sao IK).
+        Camera không có va chạm trong mô phỏng nên đây là phép đo hình học; âm = camera xuyên vào khâu đó."""
+        ik = self._ik_data
+        ik.qpos[:] = self.data.qpos[:]
+        ik.qpos[self._qpos_adr] = q5
+        self._fk(ik)
+        if not hasattr(self, "_cam_pairs"):
+            bid = lambda n: mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, n)
+            geoms = lambda b: [g for g in range(self.model.ngeom) if self.model.geom_bodyid[g] == b]
+            cam = geoms(bid("wrist_cam_arm"))
+            walls = [g for n in ("base", "shoulder", "upper_arm", "table") for g in geoms(bid(n))]
+            self._cam_pairs = [(a, w) for a in cam for w in walls]
+        fromto = np.zeros(6)
+        return min(mujoco.mj_geomDistance(self.model, ik, a, w, 0.06, fromto) for a, w in self._cam_pairs)
+
     def _predict_roll(self, roll, q5):
         """Bước 1 (trước khi hạ): với bốn góc roll song song mặt hộp (cách nhau 90°), tính khoảng cách hàm kẹp mở hết cỡ tới bát ở tư thế
         chuẩn bị kẹp và tư thế kẹp; chọn góc đủ xa bát (>= BOWL_CLEARANCE_MARGIN) và gần roll hiện tại nhất; nếu không góc nào đủ xa thì
         lấy góc xa nhất. Chỉ tính khi hộp nằm gần bát (< 20 cm); tính lại khi hộp bị đẩy đi. Trả về None nếu không cần đổi."""
         box = self.env.get_box_pos()
         bowl = self.env.get_bowl_pos()
-        if np.linalg.norm(box[:2] - bowl[:2]) > 0.20:
+        need_bowl = np.linalg.norm(box[:2] - bowl[:2]) <= 0.20
+        need_cam = self.CAM_AVOID and np.linalg.norm(box[:2] - np.array(config.PICK_PAN_XY)) < self.CAM_AVOID_R
+        if not need_bowl and not need_cam:
             return None
         key = (round(float(box[0]), 3), round(float(box[1]), 3))
         if self._pred_key == key and self._roll_pref is not None:
@@ -691,7 +712,7 @@ class ScriptedPolicy(BasePolicy):
                 r = roll + k * math.pi / 2
                 if not lo + 0.05 <= r <= hi - 0.05:
                     continue
-                clear = 1e9
+                clear, cam_clear = 1e9, 1e9
                 for z in (self._pre_grasp_z, self._grasp_z):
                     above = np.array([box[0], box[1], z])
                     q = self._solve_ik(above, roll=r)
@@ -700,7 +721,10 @@ class ScriptedPolicy(BasePolicy):
                     tgt = above - self.GRASP_SIDE_OFFSET * np.append(c[:2], 0.0)
                     q = self._solve_ik(tgt, roll=r)
                     q[4] = r
-                    clear = min(clear, self._bowl_geom_distance(q, config.GRIPPER_OPEN_RAD))
+                    if need_bowl:
+                        clear = min(clear, self._bowl_geom_distance(q, config.GRIPPER_OPEN_RAD))
+                    if need_cam:
+                        cam_clear = min(cam_clear, self._cam_geom_distance(q))
                 if self.PREDICT_PATH:                                  # đường xoay: từ roll hiện tại tới r, ở độ cao lơ lửng phía trên hộp
                     hover = self._p1_z if self._p1_z is not None else self._pre_grasp_z + 0.02
                     for f in (0.25, 0.5, 0.75, 1.0):
@@ -708,13 +732,18 @@ class ScriptedPolicy(BasePolicy):
                         above = np.array([box[0], box[1], hover])
                         q = self._solve_ik(above, roll=ri)
                         q[4] = ri
-                        clear = min(clear, self._bowl_geom_distance(q, config.GRIPPER_OPEN_RAD))
-                results.append((r, clear))
+                        if need_bowl:
+                            clear = min(clear, self._bowl_geom_distance(q, config.GRIPPER_OPEN_RAD))
+                        if need_cam:
+                            cam_clear = min(cam_clear, self._cam_geom_distance(q))
+                # điểm chung: đạt cả hai mức an toàn thì >= 1 (đơn vị = mức tối thiểu); lấy mức tệ hơn trong hai
+                score = min(clear / self.BOWL_CLEARANCE_MARGIN if need_bowl else 1e9, cam_clear / self.CAM_CLEARANCE_MARGIN if need_cam else 1e9)
+                results.append((r, score))
         finally:
             self._phase = saved_phase
         if not results:
             return None
-        ok = [x for x in results if x[1] >= self.BOWL_CLEARANCE_MARGIN]
+        ok = [x for x in results if x[1] >= 1.0]
         pick = min(ok, key=lambda x: abs(x[0] - cur)) if ok else max(results, key=lambda x: x[1])
         self._pred_key = key
         self._roll_pref = pick[0]
