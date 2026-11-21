@@ -82,8 +82,10 @@ class ScriptedPolicy(BasePolicy):
     SETTLE_STEPS = 3
     HOLD_OFFSET = False        # B (đã thử: -1 seed, tắt): đo độ lệch hộp-đầu tay MỘT lần khi bắt đầu phase 6 rồi giữ cho phase 6-7 (thay vì tính lại mỗi bước)
     VIA_ANGLE_DEG = 165.0      # mang hộp tới bát cách tay quá chừng này độ (quanh khớp 1): đi qua điểm trung gian ở giữa (IK một bước sẽ chọn chiều xoay pan ngược và kẹt ở giới hạn)
-    SLIDE_EXTRA = 0.0          # (đã thử, TẮT: +1,2 cm -> 229/252, +2 cm -> 217/252, -1,2 cm -> 39/252; không seed hỏng nào xanh thêm, hộp vòng ngoài bị kéo ra khi trượt vào) != 0: hạ xuống kẹp với đầu tay lệch THÊM chừng này (m, theo trục kẹp; dấu + = xa hộp hơn) để hàm cố định không chạm hộp, tới sát đáy (z < GRASP_Z + SLIDE_Z) mới trượt vào vị trí kẹp
+    SLIDE_EXTRA = 0.0          # (đã thử đúng cách: hạ tới đáy rồi trượt vào rồi mới kẹp; TẮT: +1,2 cm -> 249/252 (mất 178, 189, 245), +2 cm -> 249/252, -1,2 cm -> 200/252; mốc không có hàm này là 252/252, thêm ~10 bước mỗi ván) != 0: hạ xuống kẹp với đầu tay lệch THÊM chừng này (m, theo trục kẹp; dấu + = xa hộp hơn) để hàm cố định không chạm hộp, tới sát đáy (z < GRASP_Z + SLIDE_Z) mới trượt vào vị trí kẹp
     SLIDE_Z = 0.006
+    SLIDE_THR = 0.008          # trượt vào xong (cách đích kẹp danh nghĩa dưới mức này, m) mới sang phase 4 đóng kẹp
+    SLIDE_MAX_STEPS = 40       # quá chừng này bước ở phase 3 mà chưa xuống tới đáy thì coi như đã xuống (tránh kẹt)
     TCP1_R = 0.38              # chỉ áp TCP_STEP1 cho hộp xa hơn mức này (m); đo: áp cho r >= 33 cm làm hỏng seed 55 và 63
     TCP_STEP1 = 0.02           # >0: hộp XA (có _far_roll) cũng giới hạn bước đích đầu tay ở phase 1 (đi thẳng ở độ cao lơ lửng, không võng xuống quét hộp)
     TCP_STEP = 0.02            # C: >0: ở phase 2-3 giới hạn mỗi tick đích đầu tay tiến tối đa chừng này (m) trước khi giải IK
@@ -181,6 +183,7 @@ class ScriptedPolicy(BasePolicy):
         self._pred_changed = False      # roll được DỰ ĐOÁN đổi để tránh bát (khác roll gần nhất)
         self._preturn_key = None        # vị trí hộp đã xoay-trước-khi-hạ cho
         self._far_roll = None           # roll cho hộp xa (đặt ở reset)
+        self._slide_still = 0           # số bước liên tiếp đầu tay đứng yên ở đáy khi trượt vào (SLIDE_EXTRA)
         self._far_fix_key, self._far_fix_roll = None, None   # roll cố định cho hộp r >= FAR_FIXED_R (xem _far_fixed_roll)
         self._via_done = False          # phase 6 đã đi qua điểm trung gian (bát lệch quá VIA_ANGLE_DEG)
         self._tcp1_on = False           # hộp đủ xa để giới hạn bước đích ở phase 1
@@ -246,6 +249,7 @@ class ScriptedPolicy(BasePolicy):
         self._tcp1_on = False
         self._via_done = False
         self._far_fix_key, self._far_fix_roll = None, None
+        self._slide_still = 0
         self._prev_ee, self._still_ee, self._carry_off, self._tcp_goal = None, 0, None, None
         # Hộp nằm ngoài giới hạn góc hoặc bán kính gắp: không thử gắp, về home ngay (phase 10) thay vì chờ hết hạn từng phase
         self.unreachable = bool(box_sampling.is_unreachable(self.env.get_box_pos()[:2]))
@@ -350,7 +354,13 @@ class ScriptedPolicy(BasePolicy):
     def _lower_to_box(self, ee_pos, height):
         target = self._grasp_target(height, ee_pos)
         self._gripper_target = 1.0
-        self._move_toward(target, ee_pos, threshold=0.025)
+        thr = 0.025
+        if self.SLIDE_EXTRA and self._phase == 3:               # hạ thẳng xuống (lệch thêm) tới đáy, rồi trượt vào vị trí kẹp, rồi mới đóng kẹp
+            low = ee_pos[2] <= self._grasp_z + self.SLIDE_Z or self._phase_step > self.SLIDE_MAX_STEPS
+            moved = 9.0 if self._prev_ee is None else float(np.linalg.norm(np.asarray(ee_pos) - self._prev_ee))
+            self._slide_still = self._slide_still + 1 if (low and moved < 0.0006) else 0      # đã trượt hết cỡ (sát giới hạn tầm với) và đứng yên
+            thr = (1e9 if self._slide_still >= 4 else self.SLIDE_THR) if low else 1e-6
+        self._move_toward(target, ee_pos, threshold=thr)
 
     def _close_gripper(self):
         # Đóng kẹp. Kết thúc SỚM khi env báo hộp đã được kẹp VÀ ngón đã ngừng khép.
@@ -643,7 +653,7 @@ class ScriptedPolicy(BasePolicy):
         roll, clamp = self._choose_roll(self._solve_ik(above))
         self._roll_hold, self._clamp_dir = roll, clamp
         off = self.GRASP_SIDE_OFFSET
-        if self.SLIDE_EXTRA and ee_pos is not None and ee_pos[2] > self._grasp_z + self.SLIDE_Z:
+        if self.SLIDE_EXTRA and ee_pos is not None and ee_pos[2] > self._grasp_z + self.SLIDE_Z and self._phase_step <= self.SLIDE_MAX_STEPS:
             off += self.SLIDE_EXTRA
         return above - off * np.append(clamp[:2], 0.0)
 
