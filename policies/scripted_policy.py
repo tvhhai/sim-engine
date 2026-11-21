@@ -69,6 +69,7 @@ class ScriptedPolicy(BasePolicy):
     FAR_FIXED_CAM = 0.003      # camera cổ tay phải cách bàn/vai tối thiểu chừng này (m) ở tư thế chuẩn bị kẹp và kẹp: không cắm vào bàn (roll +93° cắm 27 mm)
     CAM_CLEARANCE_MARGIN = 0.010    # camera phải cách vai/cánh tay/đế/bàn tối thiểu chừng này (m)
     BOWL_CLEARANCE_MARGIN = 0.010   # hàm kẹp (mở hết cỡ) phải cách bát tối thiểu chừng này (m) ở tư thế chuẩn bị kẹp và tư thế kẹp
+    JAW_STUCK_STEPS = 6        # hàm CỐ ĐỊNH nằm trên đỉnh hộp (chạm hộp, đầu tay còn cao hơn đáy > 1,2 cm) liền chừng này bước ở phase 3 thì nhấc lên, đổi roll rồi hạ lại (như khi chạm bát). Seed 1001/1003: hàm đè lên hộp, phase 3 hết hạn
     BOWL_HIT_STEPS = 3         # tay chạm bát liền chừng này bước khi hạ xuống kẹp (phase 2-4) thì nhấc lên, xoay wrist_roll rồi kẹp lại
     ROLL_FLIP_OFFSETS = (math.pi / 2, -math.pi / 2, math.pi, -math.pi)   # thứ tự thử khi đổi roll (rad so với roll đang giữ): 90° trước, 180° sau
     # Đo 200 seed + 57 vị trí quanh bát: dự đoán + phản ứng (90°, 45° tại chỗ + 45° lúc hạ) -> 194/200 (seed 7: 157 bước, 198: 102, 99: 126);
@@ -167,6 +168,7 @@ class ScriptedPolicy(BasePolicy):
         self._p1_z = None               # độ cao đích của phase 1 (hạ thấp nếu độ cao an toàn nằm ngoài tầm với)
         self._lift_z = None             # độ cao đích của phase 5 (nhấc hộp), cũng hạ thấp khi hộp sát đế
         self._bowl_hits = 0             # số bước liền tay đang chạm bát khi hạ xuống kẹp
+        self._jaw_stuck = 0             # số bước liền hàm cố định đè lên hộp khi hạ xuống kẹp
         self._roll_flips = 0            # đã đổi roll bao nhiêu lần vì tay chạm bát
         self._roll_pref = None          # roll ưu tiên sau khi đổi (None = chọn roll gần roll hiện tại nhất)
         self._cam_ok_key = None         # vị trí hộp đã kiểm camera và roll mặc định đủ xa
@@ -233,6 +235,7 @@ class ScriptedPolicy(BasePolicy):
         self._still = 0
         self._best_dist, self._stall, self.last_exit, self._p1_z, self._lift_z = 0.0, 0, None, None, None
         self._bowl_hits, self._roll_flips, self._roll_pref, self._roll_stage, self._roll_z = 0, 0, None, None, None
+        self._jaw_stuck = 0
         self._pred_key, self._roll_turn_target, self._pred_changed, self._preturn_key, self._cam_ok_key = None, None, False, None, None
         self._far_roll = None
         self._tcp1_on = False
@@ -285,6 +288,12 @@ class ScriptedPolicy(BasePolicy):
             # chỉ đếm khi tay chạm bát MÀ hàm kẹp chưa chạm hộp: hàm đã chạm hộp nghĩa là việc kẹp đang tiến triển, đừng cắt ngang
             self._bowl_hits = self._bowl_hits + 1 if (self._arm_touches_bowl() and not self._jaw_touches_box()) else 0
             if self._bowl_hits >= self.BOWL_HIT_STEPS and self._roll_flips < self.MAX_ROLL_FLIPS:
+                self._flip_roll()
+            # hàm cố định đè lên đỉnh hộp: đầu tay không hạ tới đáy được (phase 3 chờ hết hạn). Đổi roll để hàm lệch sang bên khác
+            stuck = self._phase == 3 and ee_pos[2] > self._grasp_z + 0.012 and self._fixed_jaw_on_box()
+            self._jaw_stuck = self._jaw_stuck + 1 if stuck else 0
+            if self._jaw_stuck >= self.JAW_STUCK_STEPS and self._roll_flips < self.MAX_ROLL_FLIPS:
+                self._jaw_stuck = 0
                 self._flip_roll()
 
         match self._phase:
@@ -545,6 +554,16 @@ class ScriptedPolicy(BasePolicy):
                 return True
         return False
 
+    def _fixed_jaw_on_box(self):
+        """True nếu hàm CỐ ĐỊNH (thân gripper) đang chạm hộp."""
+        box = self.env._box_body
+        jaw = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "gripper")
+        for c in self.data.contact[:self.data.ncon]:
+            b1, b2 = self.model.geom_bodyid[c.geom1], self.model.geom_bodyid[c.geom2]
+            if (b1 == box and b2 == jaw) or (b2 == box and b1 == jaw):
+                return True
+        return False
+
     def _jaw_touches_box(self):
         """True nếu hàm kẹp (cố định hoặc di động) đang chạm hộp."""
         box = self.env._box_body
@@ -643,7 +662,7 @@ class ScriptedPolicy(BasePolicy):
 
         Quét roll trong giới hạn khớp; với mỗi góc tính hướng trục kẹp rồi lệch của nó so với mặt hộp (mod 90 độ).
         """
-        if self.FAR_FIXED_ROLL and self._roll_stage is None:
+        if self.FAR_FIXED_ROLL and self._roll_stage is None and self._roll_flips == 0:      # đã phải đổi roll (hàm đè hộp/chạm bát) thì theo roll mới, không ép lại roll cố định
             fixed = self._far_fixed_roll(q5)
             if fixed is not None:
                 return fixed
