@@ -82,6 +82,8 @@ class ScriptedPolicy(BasePolicy):
     SETTLE_STEPS = 3
     HOLD_OFFSET = False        # B (đã thử: -1 seed, tắt): đo độ lệch hộp-đầu tay MỘT lần khi bắt đầu phase 6 rồi giữ cho phase 6-7 (thay vì tính lại mỗi bước)
     VIA_ANGLE_DEG = 165.0      # mang hộp tới bát cách tay quá chừng này độ (quanh khớp 1): đi qua điểm trung gian ở giữa (IK một bước sẽ chọn chiều xoay pan ngược và kẹt ở giới hạn)
+    SLIDE_EXTRA = 0.0          # (đã thử, TẮT: +1,2 cm -> 229/252, +2 cm -> 217/252, -1,2 cm -> 39/252; không seed hỏng nào xanh thêm, hộp vòng ngoài bị kéo ra khi trượt vào) != 0: hạ xuống kẹp với đầu tay lệch THÊM chừng này (m, theo trục kẹp; dấu + = xa hộp hơn) để hàm cố định không chạm hộp, tới sát đáy (z < GRASP_Z + SLIDE_Z) mới trượt vào vị trí kẹp
+    SLIDE_Z = 0.006
     TCP1_R = 0.38              # chỉ áp TCP_STEP1 cho hộp xa hơn mức này (m); đo: áp cho r >= 33 cm làm hỏng seed 55 và 63
     TCP_STEP1 = 0.02           # >0: hộp XA (có _far_roll) cũng giới hạn bước đích đầu tay ở phase 1 (đi thẳng ở độ cao lơ lửng, không võng xuống quét hộp)
     TCP_STEP = 0.02            # C: >0: ở phase 2-3 giới hạn mỗi tick đích đầu tay tiến tối đa chừng này (m) trước khi giải IK
@@ -346,7 +348,7 @@ class ScriptedPolicy(BasePolicy):
             self._maybe_preturn(box_pos, ee_pos)
 
     def _lower_to_box(self, ee_pos, height):
-        target = self._grasp_target(height)
+        target = self._grasp_target(height, ee_pos)
         self._gripper_target = 1.0
         self._move_toward(target, ee_pos, threshold=0.025)
 
@@ -633,13 +635,17 @@ class ScriptedPolicy(BasePolicy):
         self._phase_step = 0
         self._best_dist, self._stall = 0.0, 0
 
-    def _grasp_target(self, z):
-        """Đích của ee khi hạ xuống hộp: chọn roll theo mặt hộp, rồi lệch khỏi tâm hộp GRASP_SIDE_OFFSET theo trục kẹp."""
+    def _grasp_target(self, z, ee_pos=None):
+        """Đích của ee khi hạ xuống hộp: chọn roll theo mặt hộp, rồi lệch khỏi tâm hộp GRASP_SIDE_OFFSET theo trục kẹp.
+        SLIDE_EXTRA != 0: trên đường hạ (ee còn cao hơn đáy SLIDE_Z) lệch thêm SLIDE_EXTRA để hàm cố định không chạm hộp, tới đáy mới trượt vào."""
         box = self.env.get_box_pos()
         above = np.array([box[0], box[1], z])
         roll, clamp = self._choose_roll(self._solve_ik(above))
         self._roll_hold, self._clamp_dir = roll, clamp
-        return above - self.GRASP_SIDE_OFFSET * np.append(clamp[:2], 0.0)
+        off = self.GRASP_SIDE_OFFSET
+        if self.SLIDE_EXTRA and ee_pos is not None and ee_pos[2] > self._grasp_z + self.SLIDE_Z:
+            off += self.SLIDE_EXTRA
+        return above - off * np.append(clamp[:2], 0.0)
 
     def _clamp_direction(self, q5):
         """Hướng trục kẹp (ngang, vector đơn vị) ở tư thế khớp q5: hàm di động xoay quanh trục bản lề a, trục kẹp = a × xuống."""
