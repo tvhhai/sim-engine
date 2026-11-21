@@ -247,6 +247,13 @@ def main():
     fail_idx = [i for i, r in enumerate(rows) if failed(r)]
     rest = [i for i in fail_idx if i not in chosen] if len(fail_idx) > args.count else []
 
+    base_path = os.path.join(os.path.dirname(args.out), "replay_baseline.json")
+    base_failed, base_label = None, ""
+    if os.path.exists(base_path):
+        with open(base_path, encoding="utf-8") as f:
+            bj = json.load(f)
+        base_failed, base_label = set(bj["failed"]), bj.get("label", "mốc trước")
+
     def tags(r):
         t = []
         t.append("NGOÀI TẦM: về home ngay" if r.get("skip") else ("THÀNH CÔNG" if r["success"] else "HỎNG: " + r["kind"]))
@@ -264,6 +271,11 @@ def main():
             t.append(f"gắp lại sau khi rút {r['regrasps']} lần")
         if r["steps"] >= slow_steps:
             t.append(f"chậm ({r['steps']} bước)")
+        if base_failed is not None and not r.get("skip"):                     # so với mốc trước khi tối ưu
+            if r["success"] and r["seed"] in base_failed:
+                t.insert(0, "ĐÃ CẢI THIỆN: trước hỏng, nay xanh (" + base_label + ")")
+            elif not r["success"] and r["seed"] not in base_failed:
+                t.insert(0, "MỚI HỎNG so với " + base_label)
         return t
 
     def pack(i, group):
