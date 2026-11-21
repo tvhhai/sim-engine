@@ -160,6 +160,28 @@ BOX_FIXED_SEEDS = {
     # <<< SCAN-SEEDS
     # Seed đặt tay (ngoài khối SCAN-SEEDS, công cụ quét không ghi đè): hộp ở chỗ seed 83 nhưng bát đối xứng qua mặt phẳng x = 0 (xem BOWL_FIXED_SEEDS)
     1000: ("hộp như seed 83 (góc +107°, r 35 cm), bát đối xứng bên kia (góc -107°): tay xoay 214°", (0.3360, -0.2550)),
+    1001: ("quét hỏng vùng xanh: r = 12 cm, góc -110°", (-0.1128, -0.1910)),
+    1002: ("quét hỏng vùng xanh: r = 12 cm, góc +40°", (0.0771, -0.0581)),
+    1003: ("quét hỏng vùng xanh: r = 12 cm, góc +110°", (0.1128, -0.1910)),
+    1004: ("quét hỏng vùng xanh: r = 34 cm, góc -110°", (-0.3195, -0.2663)),
+    1005: ("quét hỏng vùng xanh: r = 34 cm, góc +40°", (0.2185, 0.1105)),
+    1006: ("quét hỏng vùng xanh: r = 36 cm, góc -110°", (-0.3383, -0.2731)),
+    1007: ("quét hỏng vùng xanh: r = 36 cm, góc +30°", (0.1800, 0.1618)),
+    1008: ("quét hỏng vùng xanh: r = 37 cm, góc -110°", (-0.3477, -0.2765)),
+    1009: ("quét hỏng vùng xanh: r = 37 cm, góc -80°", (-0.3644, -0.0858)),
+    1010: ("quét hỏng vùng xanh: r = 37 cm, góc -25°", (-0.1564, 0.1853)),
+    1011: ("quét hỏng vùng xanh: r = 37 cm, góc -20°", (-0.1265, 0.1977)),
+    1012: ("quét hỏng vùng xanh: r = 37 cm, góc +55°", (0.3031, 0.0622)),
+    1013: ("quét hỏng vùng xanh: r = 37 cm, góc +60°", (0.3204, 0.0350)),
+    1014: ("quét hỏng vùng xanh: r = 38 cm, góc -110°", (-0.3571, -0.2800)),
+    1015: ("quét hỏng vùng xanh: r = 38 cm, góc +45°", (0.2687, 0.1187)),
+    1016: ("quét hỏng vùng xanh: r = 39 cm, góc -110°", (-0.3665, -0.2834)),
+    1017: ("quét hỏng vùng xanh: r = 40 cm, góc +45°", (0.2828, 0.1328)),
+    1018: ("quét hỏng vùng xanh: r = 41 cm, góc -110°", (-0.3853, -0.2902)),
+    1019: ("quét hỏng vùng xanh: r = 41 cm, góc -55°", (-0.3359, 0.0852)),
+    1020: ("quét hỏng vùng xanh: r = 41 cm, góc +45°", (0.2899, 0.1399)),
+    1021: ("quét hỏng vùng xanh: r = 41 cm, góc +50°", (0.3141, 0.1135)),
+    1022: ("quét hỏng vùng xanh: r = 42 cm, góc -110°", (-0.3947, -0.2936)),
 }
 # Seed có BÁT đặt tay (mặc định bát đứng yên ở BOWL_DEFAULT_POS): seed -> (x, y) của bát. env.reset(options={"bowl_xy": ...}) vẫn thắng.
 BOWL_FIXED_SEEDS = {

@@ -196,6 +196,7 @@
   .keys-pop { max-width:min(460px,92vw); } .keys-pop kbd { display:inline-block; min-width:1.4em; text-align:center; margin:0 2px; padding:0 4px; border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; font:600 11px ui-monospace,monospace; background:var(--card); }
   .pick-zone-legend { display:flex; flex-wrap:wrap; gap:3px 10px; font-size:11px; margin-bottom:3px; }
   .pick-zone-legend span::before, .seed-summary [class^="zone-"]::before { content:""; display:inline-block; width:.65em; height:.65em; margin-right:.35em; border-radius:50%; background:var(--zone); }
+  .pick-zone-legend .scan-note::before { display:none; }
   .zone-green { --zone:#16834f; }
   .zone-red { --zone:#d14049; }
   .zone-mixed { --zone:#8b55bd; }
