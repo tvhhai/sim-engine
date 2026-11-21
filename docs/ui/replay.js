@@ -354,7 +354,7 @@ function pickZone(x, y) {
   if (!region) return "mixed";
   const dx = x - region.pan[0], dy = y - region.pan[1];
   const r = Math.hypot(dx, dy), angle = Math.atan2(dx, dy) * 180 / Math.PI;
-  if (stop && (r > stop.radius_m || Math.abs(angle) > stop.angle_deg)) return "red";
+  if (stop && (r > stop.radius_m || r < (stop.inner_radius_m || 0) || Math.abs(angle) > stop.angle_deg)) return "red";
   if (r < region.r_min - 1e-9 || r > region.r_max + 1e-9 ||
       angle < region.angle_min_deg - 1e-9 || angle > region.angle_max_deg + 1e-9) return "mixed";
   return "green";
@@ -376,13 +376,13 @@ function pickZonePolygons() {
   const R = S.pick_region, U = S.unreachable_region;
   if (!R || !U) return [];
   const {pan, r_min:lo, r_max:hi, angle_min_deg:left, angle_max_deg:right} = R;
-  const edge = U.angle_deg, limit = U.radius_m;
+  const edge = U.angle_deg, limit = U.radius_m, inner = U.inner_radius_m || 0;
   const sector = (zone, ...args) => [zone, sectorPts(pan, ...args)];
   return [
     sector("green",lo,hi,left,right),
-    sector("mixed",0,lo,-edge,edge), sector("mixed",hi,limit,-edge,edge),
+    sector("mixed",inner,lo,-edge,edge), sector("mixed",hi,limit,-edge,edge),
     sector("mixed",lo,hi,-edge,left), sector("mixed",lo,hi,right,edge),
-    sector("red",0,limit,edge,360-edge), sector("red",limit,1.2,-180,180,144),
+    sector("red",0,limit,edge,360-edge), ...(inner ? [sector("red",0,inner,-180,180,144)] : []), sector("red",limit,1.2,-180,180,144),
   ];
 }
 const zonePolygons = pickZonePolygons();

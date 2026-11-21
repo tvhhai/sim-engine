@@ -428,7 +428,7 @@ def main():
         "bowl_inner": config.BOWL_INNER_RADIUS,      # lòng bát: tâm hộp phải cách tâm bát ít hơn mức này
         "settled_speed": config.SETTLED_SPEED,       # hộp phải chậm hơn mức này (m/s) mới tính là nằm yên
         "box_half": config.BOX_HALF,
-        "unreachable_region": {"pan": list(config.PICK_PAN_XY), "angle_deg": config.PAN_LIMIT_DEG + config.PAN_UNREACHABLE_MARGIN_DEG, "radius_m": config.PICK_UNREACHABLE_RADIUS},   # giới hạn đỏ dùng chung với policy
+        "unreachable_region": {"pan": list(config.PICK_PAN_XY), "angle_deg": config.PAN_LIMIT_DEG + config.PAN_UNREACHABLE_MARGIN_DEG, "radius_m": config.PICK_UNREACHABLE_RADIUS, "inner_radius_m": config.PICK_UNREACHABLE_INNER_RADIUS},   # giới hạn đỏ dùng chung với policy
         "bowl_z_margin": config.BOX_IN_BOWL_MARGIN,   # tâm hộp phải thấp hơn miệng bát chừng này mới tính trong bát
         "table": list(config.TABLE_HALF),            # nửa kích thước bàn (x, y)
         "max_steps": config.MAX_EPISODE_STEPS,

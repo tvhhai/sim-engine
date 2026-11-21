@@ -87,4 +87,5 @@ def is_unreachable(xy):
     return (
         abs(ang) > config.PAN_LIMIT_DEG + config.PAN_UNREACHABLE_MARGIN_DEG
         or math.hypot(dx, dy) > config.PICK_UNREACHABLE_RADIUS
+        or math.hypot(dx, dy) < config.PICK_UNREACHABLE_INNER_RADIUS
     )

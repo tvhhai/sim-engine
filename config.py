@@ -79,6 +79,7 @@ PICK_REGION = {                       # vùng hộp đặt được: r = khoản
 }
 PAN_LIMIT_DEG = 110.0                # giới hạn khớp 1 (pan) trong XML: +-110 độ so với hướng tay
 PAN_UNREACHABLE_MARGIN_DEG = 5.0     # hộp lệch quá PAN_LIMIT_DEG + biên này thì CHẮC CHẮN không với tới: policy về home ngay (đo: +-120 hỏng hết)
+PICK_UNREACHABLE_INNER_RADIUS = 0.04  # m: hộp cách trục khớp 1 gần hơn mức này nằm chồng lên ĐẾ (đế ±5,5 cm x, -7..+2,6 cm y; quét r 2-4 cm: 0/69 gắp được) -> chắc chắn không gắp
 PICK_UNREACHABLE_RADIUS = 0.44      # m: outer scan still finds successes at 0.43 m. Keep 0.44 m as the cutoff.
 BOX_BOWL_CLEARANCE = 0.10            # hộp cách tâm bát tối thiểu (m)
 BOX_SAMPLING = "sector"              # "sector": 200 seed chia đều các ô góc x bán kính trong hình quạt (phủ đủ vùng gắp); "square": ô ±BOX_RANDOM_RANGE cũ
