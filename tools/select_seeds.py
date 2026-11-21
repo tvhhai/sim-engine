@@ -265,7 +265,7 @@ def main():
         if r["retries"]:
             t.append(f"thử kẹp lại {r['retries']} lần")
         if r.get("roll_flips"):
-            t.append(f"chạm bát, đổi roll {r['roll_flips']} lần")
+            t.append(f"đổi roll {r['roll_flips']} lần (chạm bát hoặc hàm cố định đè lên hộp)")
         if r.get("bowl_avoid"):
             t.append("roll chọn sẵn tránh bát")
         if r["drops"]:
