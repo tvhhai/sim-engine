@@ -165,6 +165,7 @@ class ScriptedPolicy(BasePolicy):
         self._bowl_hits = 0             # số bước liền tay đang chạm bát khi hạ xuống kẹp
         self._roll_flips = 0            # đã đổi roll bao nhiêu lần vì tay chạm bát
         self._roll_pref = None          # roll ưu tiên sau khi đổi (None = chọn roll gần roll hiện tại nhất)
+        self._cam_ok_key = None         # vị trí hộp đã kiểm camera và roll mặc định đủ xa
         self._pred_changed = False      # roll được DỰ ĐOÁN đổi để tránh bát (khác roll gần nhất)
         self._preturn_key = None        # vị trí hộp đã xoay-trước-khi-hạ cho
         self._far_roll = None           # roll cho hộp xa (đặt ở reset)
@@ -226,7 +227,7 @@ class ScriptedPolicy(BasePolicy):
         self._still = 0
         self._best_dist, self._stall, self.last_exit, self._p1_z, self._lift_z = 0.0, 0, None, None, None
         self._bowl_hits, self._roll_flips, self._roll_pref, self._roll_stage, self._roll_z = 0, 0, None, None, None
-        self._pred_key, self._roll_turn_target, self._pred_changed, self._preturn_key = None, None, False, None
+        self._pred_key, self._roll_turn_target, self._pred_changed, self._preturn_key, self._cam_ok_key = None, None, False, None, None
         self._far_roll = None
         self._tcp1_on = False
         self._prev_ee, self._still_ee, self._carry_off, self._tcp_goal = None, 0, None, None
@@ -707,6 +708,8 @@ class ScriptedPolicy(BasePolicy):
         key = (round(float(box[0]), 3), round(float(box[1]), 3))
         if self._pred_key == key and self._roll_pref is not None:
             return self._roll_pref
+        if not need_bowl and self._cam_ok_key == key:
+            return None
         lo, hi = self.model.jnt_range[self._joint_ids[4]]
         cur = float(self.data.qpos[self._qpos_adr[4]])
         saved_phase = self._phase
@@ -749,6 +752,9 @@ class ScriptedPolicy(BasePolicy):
         if not results:
             return None
         ok = [x for x in results if x[1] >= 1.0]
+        if not need_bowl and any(abs(x[0] - roll) < 1e-6 for x in ok):   # chỉ vướng camera mà roll song song mặt hộp đã đủ xa: giữ nguyên, không ghi _roll_pref
+            self._cam_ok_key = key                                        # (đổi roll không cần thiết làm hộp rơi nghiêng; ghi _roll_pref còn đổi cả logic xoay-trước)
+            return None
         pick = min(ok, key=lambda x: abs(x[0] - cur)) if ok else max(results, key=lambda x: x[1])
         self._pred_key = key
         self._roll_pref = pick[0]
