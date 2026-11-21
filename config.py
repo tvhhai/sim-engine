@@ -74,7 +74,7 @@ BOWL_RANDOM_RANGE = 0.0     # bát đứng yên; đặt > 0 để bát cũng ng�
 # ---- Vị trí hộp ngẫu nhiên: HÌNH QUẠT quanh trục khớp 1, đo thật bằng quét gắp (tools/scan_pick_region.py -> docs/pick_scan.json) ----
 PICK_PAN_XY = (0.0, -0.15)           # trục khớp 1 (x, y) trong world
 PICK_REGION = {                       # vùng hộp đặt được: r = khoảng cách tới trục khớp 1; góc đo từ hướng tay (+y) về phía +x
-    "r_min": 0.12, "r_max": 0.36,     # đo: r <= 0.10 hay r >= 0.38 chỗ gắp chỗ hỏng; r >= 0.40 hỏng hết
+    "r_min": 0.12, "r_max": 0.42,     # đo (quét lại sau khi sửa roll hộp xa): r 14-32 cm gắp hết; r 37-42 cm gắp 94-98% mỗi vòng; r 43 cm 71%; r 44 cm gần như hỏng hết
     "angle_min_deg": -110.0, "angle_max_deg": 110.0,   # đo: +-120 hỏng (ngoài giới hạn khớp 1 = +-110); +-100/+-110 gắp được như nhau
 }
 PAN_LIMIT_DEG = 110.0                # giới hạn khớp 1 (pan) trong XML: +-110 độ so với hướng tay
