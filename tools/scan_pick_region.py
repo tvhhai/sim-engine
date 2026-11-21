@@ -54,6 +54,7 @@ def run_points(pts):
             obs, _, _, trunc, info = env.step(act)
             if trunc or policy._phase > 10:
                 break
+        _, info, _ = env.settle(act, info)                       # hộp còn lắc trong bát thì chờ nằm yên rồi mới chấm
         rows.append({"r": r, "a": a, "xy": [round(float(xy[0]), 4), round(float(xy[1]), 4)], "ok": bool(info["success"]), "steps": t})
     env.close()
     return rows

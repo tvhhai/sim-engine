@@ -51,6 +51,7 @@ def run_one(p):
         zmax = max(zmax, float(env.get_box_pos()[2]))
         if trunc or pol._phase > 10:
             break
+    _, info, _ = env.settle(act, info)                       # hộp còn lắc trong bát thì chờ nằm yên rồi mới chấm
     ok = bool(info.get("success"))
     if ok:
         kind = "ok"

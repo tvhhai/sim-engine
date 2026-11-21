@@ -158,6 +158,7 @@ BOX_FIXED_SEEDS = {
     254: ("cặp đối xứng r = 42 cm, góc -105° (gắp được; đối xứng hỏng)", (-0.4057, -0.2587)),
     # <<< SCAN-SEEDS
 }
+SETTLE_WAIT_STEPS = 60       # policy xong (phase 11) mà hộp đã trong bát, đã thả nhưng còn đang trượt/lắc: chờ tối đa chừng này bước cho hộp nằm yên rồi mới chấm (xem env.box_settling)
 SETTLED_SPEED = 0.05        # hộp chuyển động chậm hơn mức này (m/s) mới coi là "đã nằm yên"
 
 # Đường dẫn Python (dùng cho phím 3 Train trong giao diện).

@@ -288,6 +288,19 @@ class SO101PickPlaceEnv(gym.Env):
             }
         return obs
 
+    def box_settling(self, info):
+        """True nếu hộp đã trong bát và đã được thả nhưng chưa nằm yên (đang trượt/lắc nốt). Dùng ở cuối ván: policy xong (phase 11) mà hộp còn đang
+        chuyển động thì chờ thêm (tối đa config.SETTLE_WAIT_STEPS bước) rồi mới chấm, tránh chấm hỏng oan đúng lúc hộp đang lắc trong bát."""
+        return bool(info["in_bowl_xy"] and info["in_bowl_z"] and not self._grasped and not info["success"])
+
+    def settle(self, action, info):
+        """Giữ nguyên `action` cho tới khi hộp nằm yên (hoặc hết SETTLE_WAIT_STEPS). Trả (obs, info, số bước đã chờ); obs None nếu không chờ."""
+        obs, n = None, 0
+        while n < config.SETTLE_WAIT_STEPS and self.box_settling(info):
+            obs, _, _, _, info = self.step(action)
+            n += 1
+        return obs, info, n
+
     def _get_info(self):
         """Thông tin phụ (không đưa vào policy AI): vị trí vật thể và cờ THÀNH CÔNG.
 

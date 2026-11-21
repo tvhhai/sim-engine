@@ -316,6 +316,13 @@ class Recorder:
                 ps = 0
             if terminated or truncated or after > 10:
                 break
+        if not (terminated or truncated):                                    # policy xong mà hộp còn lắc trong bát: chờ nằm yên (có ghi khung)
+            n_wait = 0
+            while n_wait < config.SETTLE_WAIT_STEPS and env.box_settling(info):
+                obs, reward, terminated, truncated, info = env.step(action)
+                n_wait += 1
+                step += 1
+                frames.append(self.frame(step, after, after, 0, info, action[5]))
         return {
             "seed": seed,
             "bowl": r3(self.env.get_bowl_pos()),               # vị trí bát của ván này (có thể khác nhau giữa các seed)
