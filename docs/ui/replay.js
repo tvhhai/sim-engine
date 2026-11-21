@@ -52,15 +52,22 @@ app.innerHTML = `
     </div>
   </header>
   <main class="main">
-    <div class="card c-small"><h2>Nhìn từ trên · XY từ khớp 1 (m)<label class="pick-zone-toggle"><input type="checkbox" id="showReach" checked> Vùng gắp</label></h2>
+    <div class="card c-small"><div id="topWrap" class="fs-wrap"><h2>Nhìn từ trên · XY từ khớp 1 (m)<span class="pick-zone-toggle"><label><input type="checkbox" id="showReach" checked> Vùng gắp</label> <button type="button" class="fs-btn" id="topFs" title="Xem toàn màn hình (phím F, Esc để thoát)" aria-label="Toàn màn hình hình nhìn từ trên">⛶ Toàn màn hình</button></span></h2>
       <div class="pick-zone-legend"><span class="zone-green">Gắp được</span><span class="zone-red">Không gắp · về home</span><span class="zone-mixed">Hỗn hợp · cần tối ưu</span></div><svg id="top" role="img" aria-label="Hình chiếu XY cố định" viewBox="0 0 520 340"></svg>
+      <div class="fs-only fs-bar"><button type="button" id="fsPrev" title="Lùi 1 bước (←)">◀</button><button type="button" id="fsPlay" title="Phát / tạm dừng (Space)">▶ / ❚❚</button><button type="button" id="fsNext" title="Tiến 1 bước (→)">▶</button><input type="range" id="fsRng" min="0" value="0" aria-label="Bước"><output id="fsInfo"></output></div></div>
       <h2>Nhìn từ cạnh · Y ngang, Z cao (m)</h2><svg id="side" role="img" aria-label="Hình chiếu YZ cố định" viewBox="0 18 520 202"></svg></div>
-    <div class="card c-3d"><h2><span>3D (VIEW CHÍNH)</span><span class="hint">kéo = xoay · lăn = zoom · nhấp đúp = về mặc định</span></h2>
+    <div class="card c-3d"><h2><span>3D (VIEW CHÍNH)</span><span class="hint">kéo trái xoay · kéo phải dịch · lăn zoom · R mặc định · ⌨ xem phím</span><button type="button" class="fs-btn" id="c3Fs" title="Xem toàn màn hình (phím G, Esc để thoát)" aria-label="Toàn màn hình hình 3D" style="margin-left:auto">⛶ Toàn màn hình</button></h2>
       <div class="cv"><canvas id="c3"></canvas>
         <div class="viewbar" role="group" aria-label="Góc nhìn 3D">
           <button id="v1" title="Góc chéo mặc định">Chéo</button><button id="v2" title="Nhìn từ phía +Y về đế">Trước</button><button id="vSide" title="Chiếu vuông góc từ +X lên mặt phẳng YZ">Hông</button><button id="v3" title="Nhìn thẳng từ trên xuống">Trên</button><button id="vCams" title="Xem vị trí camera bên hông cổ tay">Vị trí cam</button>
-          <span class="sep"></span><button id="bCam" aria-pressed="true" title="Bật hoặc tắt ảnh camera cổ tay">Ảnh cam</button><label class="tilt" title="Gập giá đỡ camera quanh chốt để đổi góc nhìn; giá trị ưng ý thì ghi vào config.WRIST_CAM_TILT_DEG">Gập cam <input type="range" id="camTilt" min="-45" max="45" step="1" value="0"><output id="camTiltV">0°</output></label>
+          <span class="sep"></span><button id="bFollow" aria-pressed="false" title="Camera bám theo đầu tay (phím T)">Bám tay</button><button id="bCenter" title="Đưa đầu tay về giữa khung (phím C)">Giữa tay</button><button id="zIn" title="Zoom gần (phím Z hoặc +)">＋</button><button id="zOut" title="Zoom xa (phím X hoặc -)">－</button><button type="button" popovertarget="keysPop" title="Phím điều khiển camera 3D">⌨</button><span class="sep"></span><button id="bCam" aria-pressed="true" title="Bật hoặc tắt ảnh camera cổ tay">Ảnh cam</button><label class="tilt" title="Gập giá đỡ camera quanh chốt để đổi góc nhìn; giá trị ưng ý thì ghi vào config.WRIST_CAM_TILT_DEG">Gập cam <input type="range" id="camTilt" min="-45" max="45" step="1" value="0"><output id="camTiltV">0°</output></label>
         </div>
+        <div id="keysPop" popover class="legend-pop keys-pop"><b>Điều khiển camera 3D</b>
+          <span><kbd>W</kbd><kbd>S</kbd> tiến / lùi · <kbd>A</kbd><kbd>D</kbd> trái / phải · <kbd>Q</kbd><kbd>E</kbd> xuống / lên (dịch điểm nhìn)</span>
+          <span><kbd>J</kbd><kbd>L</kbd> xoay ngang · <kbd>I</kbd><kbd>K</kbd> xoay dọc · <kbd>Z</kbd><kbd>X</kbd> hoặc <kbd>+</kbd><kbd>-</kbd> zoom</span>
+          <span>Giữ <kbd>Shift</kbd> = nhanh gấp 3 · <kbd>R</kbd> về mặc định · <kbd>T</kbd> bám đầu tay · <kbd>C</kbd> đưa tay về giữa</span>
+          <span>Chuột: kéo trái = xoay · kéo phải hoặc Shift+kéo = dịch · lăn = zoom · nhấp đúp = về mặc định</span>
+          <span><kbd>F</kbd> toàn màn hình hình nhìn từ trên · <kbd>G</kbd> toàn màn hình hình 3D</span></div>
         <div id="cameraFeeds"><canvas id="camA" width="320" height="240" aria-label="Ảnh dựng lại từ camera cổ tay"></canvas></div>
       </div>
       <div class="ctl">
@@ -673,7 +680,8 @@ function stepAtX(clientX) {                           // ngược lại của tl
 
 /* ---------- 3D: tự vẽ bằng canvas 2D, không cần thư viện ---------- */
 const CAM0 = { yaw:-0.95, pitch:0.5, dist:0.95, orthographic:false };
-const CAM = { ...CAM0, t:[0.02, -0.03, 0.5] };
+const T0 = [0.02, -0.03, 0.5];
+const CAM = { ...CAM0, t:[...T0], follow:false };
 const JN = ["pan", "lift", "elbow", "wflex", "wroll"];
 const css = n => getComputedStyle(document.documentElement).getPropertyValue("--" + n).trim();
 function makeProj(w, h) {
@@ -692,6 +700,7 @@ function makeProj(w, h) {
 }
 function draw3d(fr, fs) {
   const cv = $("c3"), w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return;
+  if (CAM.follow && fr && fr.ee) CAM.t = [fr.ee[0], fr.ee[1], fr.ee[2]];             // camera bám đầu tay
   const dpr = window.devicePixelRatio || 1;
   if (cv.width !== Math.round(w*dpr) || cv.height !== Math.round(h*dpr)) { cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr); }
   const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
@@ -904,11 +913,33 @@ function drawCams(fr) {
   renderCam($("camA"), "arm_cam", fr);
 }
 
+/* ---------- toàn màn hình (Fullscreen API; không hỗ trợ thì phóng to bằng CSS) ---------- */
+function fsEl() { return document.fullscreenElement || document.querySelector(".fs-fallback"); }
+function toggleFs(el) {
+  if (!el) return;
+  const cur = fsEl();
+  if (cur) {
+    if (document.fullscreenElement) document.exitFullscreen?.(); else cur.classList.remove("fs-fallback");
+    if (cur === el) { fsLabels(); setTimeout(render, 50); return; }
+  }
+  const fallback = () => { if (!document.fullscreenElement && !el.classList.contains("fs-fallback")) { el.classList.add("fs-fallback"); fsLabels(); render(); } };
+  if (el.requestFullscreen) { el.requestFullscreen().catch(fallback); setTimeout(fallback, 400); }   // trình duyệt nhúng không cho Fullscreen API thì phóng to bằng CSS
+  else fallback();
+  setTimeout(fsLabels, 450);
+}
+function fsLabels() {
+  const cur = fsEl();
+  [["topFs", $("topWrap")], ["c3Fs", $("c3").closest(".card")]].forEach(([id, el]) => { const b = $(id); if (b) b.textContent = cur === el ? "✕ Thoát (Esc)" : "⛶ Toàn màn hình"; });
+}
+document.addEventListener("fullscreenchange", () => { fsLabels(); setTimeout(render, 50); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") { const f = document.querySelector(".fs-fallback"); if (f) { f.classList.remove("fs-fallback"); fsLabels(); render(); } } });
+
 /* ---------- điều khiển ---------- */
 function render() {
   const fs = F(), fr = fs[i];
   drawTop(fr, fs); drawSide(fr, fs); draw3d(fr, fs); drawCams(fr); drawInfo(fr, fs); drawChk(fr);
   $("rng").value = i;
+  if ($("fsRng")) { $("fsRng").max = fs.length - 1; $("fsRng").value = i; $("fsInfo").textContent = ` bước ${i}/${fs.length - 1} · phase ${fr.ph} ${PHASE_NAME[fr.ph] || ""}`; }
   $("stepCount").value = `${i} / ${fs.length - 1} · ${(i * STEP_DT).toFixed(2)} / ${((fs.length - 1) * STEP_DT).toFixed(2)} s thực tế`;
   updatePlayhead();
   const cur = $("logw").querySelector("tr.cur"); if (cur) cur.classList.remove("cur");
@@ -988,9 +1019,56 @@ $("oEv").onchange = e => { OPT.every = +e.target.value; render(); };
 // điều khiển camera 3D
 const redraw3 = () => draw3d(F()[i], F());
 const setCam = (yaw, pitch, dist = CAM0.dist, orthographic = false) => {
-  Object.assign(CAM, { yaw, pitch, dist, orthographic });
-  redraw3();
+  Object.assign(CAM, { yaw, pitch, dist, orthographic, t: [...T0], follow: false });
+  syncFollow(); redraw3();
 };
+const syncFollow = () => { const b = $("bFollow"); if (b) b.setAttribute("aria-pressed", String(CAM.follow)); };
+// hệ trục theo camera (đồng bộ với makeProj): r = phải, u = lên, fh = hướng nhìn nằm ngang
+function camAxes() {
+  const cp = Math.cos(CAM.pitch), sp = Math.sin(CAM.pitch), cy = Math.cos(CAM.yaw), sy = Math.sin(CAM.yaw);
+  const f = [-cp*cy, -cp*sy, -sp]; let r = [f[1], -f[0], 0]; const rl = Math.hypot(r[0], r[1]) || 1; r = [r[0]/rl, r[1]/rl, 0];
+  const u = [r[1]*f[2] - r[2]*f[1], r[2]*f[0] - r[0]*f[2], r[0]*f[1] - r[1]*f[0]];
+  const hl = Math.hypot(f[0], f[1]) || 1;
+  return { r, u, fh: [f[0]/hl, f[1]/hl, 0] };
+}
+const clampT = () => { CAM.t[0] = Math.max(-1.2, Math.min(1.2, CAM.t[0])); CAM.t[1] = Math.max(-1.2, Math.min(1.2, CAM.t[1])); CAM.t[2] = Math.max(0, Math.min(1.4, CAM.t[2])); };
+const panCam = (dr, du, dfw = 0) => {                       // dịch điểm nhìn: dr sang phải, du lên (trục z thế giới), dfw tiến theo hướng nhìn nằm ngang (mét)
+  const a = camAxes();
+  CAM.t = [CAM.t[0] + a.r[0]*dr + a.fh[0]*dfw, CAM.t[1] + a.r[1]*dr + a.fh[1]*dfw, CAM.t[2] + du];
+  CAM.follow = false; syncFollow(); clampT();
+};
+const zoomCam = k => { CAM.dist = Math.max(0.1, Math.min(5, CAM.dist * k)); };
+const centerOnHand = () => { const fr = F()[i]; if (fr && fr.ee) { CAM.t = [fr.ee[0], fr.ee[1], fr.ee[2]]; CAM.follow = false; syncFollow(); redraw3(); } };
+$("bFollow").onclick = () => { CAM.follow = !CAM.follow; syncFollow(); redraw3(); };
+$("bCenter").onclick = centerOnHand;
+$("zIn").onclick = () => { zoomCam(0.8); redraw3(); };
+$("zOut").onclick = () => { zoomCam(1.25); redraw3(); };
+// phím giữ liên tục: vòng lặp theo khung hình, dt-based nên mượt và không phụ thuộc tốc độ lặp phím của hệ điều hành
+const CAMKEYS = new Set(), camMap = { w:"fw", s:"bk", a:"lf", d:"rt", q:"dn", e:"up", j:"yl", l:"yr", i:"pu", k:"pd", z:"zi", x:"zo", "+":"zi", "=":"zi", "-":"zo", "_":"zo" };
+let camRaf = 0, camLast = 0;
+function camLoop(ts) {
+  const dt = Math.min(0.05, (ts - camLast) / 1000 || 0.016); camLast = ts;
+  if (!CAMKEYS.size) { camRaf = 0; return; }
+  camApply(dt); camRaf = requestAnimationFrame(camLoop);
+}
+function camApply(dt) {
+  const fast = CAMKEYS.has("shift") ? 3 : 1, sp = 0.35 * CAM.dist * fast * dt;     // tốc độ dịch tỉ lệ khoảng cách camera
+  let dr = 0, du = 0, dfw = 0;
+  if (CAMKEYS.has("rt")) dr += sp; if (CAMKEYS.has("lf")) dr -= sp;
+  if (CAMKEYS.has("up")) du += sp; if (CAMKEYS.has("dn")) du -= sp;
+  if (CAMKEYS.has("fw")) dfw += sp; if (CAMKEYS.has("bk")) dfw -= sp;
+  if (dr || du || dfw) panCam(dr, du, dfw);
+  if (CAMKEYS.has("yl")) CAM.yaw += 1.4 * fast * dt; if (CAMKEYS.has("yr")) CAM.yaw -= 1.4 * fast * dt;
+  if (CAMKEYS.has("pu")) CAM.pitch = Math.min(1.55, CAM.pitch + 1.0 * fast * dt); if (CAMKEYS.has("pd")) CAM.pitch = Math.max(-0.3, CAM.pitch - 1.0 * fast * dt);
+  if (CAMKEYS.has("zi")) zoomCam(Math.exp(-1.2 * fast * dt)); if (CAMKEYS.has("zo")) zoomCam(Math.exp(1.2 * fast * dt));
+  redraw3();
+}
+const camKick = () => { if (!camRaf) { camLast = performance.now(); camRaf = requestAnimationFrame(camLoop); } };
+
+$("topFs").onclick = () => toggleFs($("topWrap"));
+$("c3Fs").onclick = () => toggleFs($("c3").closest(".card"));
+$("fsPrev").onclick = () => go(i - 1); $("fsNext").onclick = () => go(i + 1); $("fsPlay").onclick = () => play();
+$("fsRng").oninput = e => go(+e.target.value);
 $("v1").onclick = () => setCam(CAM0.yaw, CAM0.pitch, CAM0.dist);
 $("v2").onclick = () => setCam(Math.PI / 2, 0, CAM0.dist, true);
 $("vSide").onclick = () => setCam(0, 0, CAM0.dist, true);
@@ -1013,22 +1091,39 @@ $("bCam").onclick = () => { SHOW_CAM = !SHOW_CAM; try { localStorage.setItem("sh
 applyCamToggle();
 {
   const cv = $("c3"); let drag = null;
-  cv.onpointerdown = e => { drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); cv.style.cursor = "grabbing"; };
+  cv.oncontextmenu = e => e.preventDefault();
+  cv.onpointerdown = e => { drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.button === 1 || e.shiftKey }; cv.setPointerCapture(e.pointerId); cv.style.cursor = drag.pan ? "move" : "grabbing"; e.preventDefault(); };
   cv.onpointerup = () => { drag = null; cv.style.cursor = "grab"; };
   cv.onpointermove = e => {
     if (!drag) return;
+    if (drag.pan) {                                          // kéo phải / Shift+kéo: dịch điểm nhìn trong mặt phẳng màn hình
+      const k = CAM.dist / (Math.min(cv.clientWidth, cv.clientHeight) * 1.45), a = camAxes();
+      const dx = (e.clientX - drag.x) * k, dy = (e.clientY - drag.y) * k;
+      CAM.t = [CAM.t[0] - a.r[0]*dx + a.u[0]*dy, CAM.t[1] - a.r[1]*dx + a.u[1]*dy, CAM.t[2] + a.u[2]*dy];
+      CAM.follow = false; syncFollow(); clampT();
+      drag = { x: e.clientX, y: e.clientY, pan: true }; redraw3(); return;
+    }
     CAM.yaw -= (e.clientX - drag.x) * 0.008;
-    CAM.pitch = Math.max(-0.2, Math.min(1.5, CAM.pitch + (e.clientY - drag.y) * 0.008));
-    drag = { x: e.clientX, y: e.clientY }; redraw3();
+    CAM.pitch = Math.max(-0.3, Math.min(1.55, CAM.pitch + (e.clientY - drag.y) * 0.008));
+    drag = { x: e.clientX, y: e.clientY, pan: false }; redraw3();
   };
-  cv.onwheel = e => { e.preventDefault(); CAM.dist = Math.max(0.3, Math.min(2.5, CAM.dist * Math.exp(e.deltaY * 0.001))); redraw3(); };
+  cv.onwheel = e => { e.preventDefault(); zoomCam(Math.exp(e.deltaY * 0.001)); redraw3(); };
   cv.ondblclick = () => setCam(CAM0.yaw, CAM0.pitch, CAM0.dist);
   new ResizeObserver(redraw3).observe(cv);
   new ResizeObserver(updatePlayhead).observe($("tl"));
 }
+document.addEventListener("keyup", e => { CAMKEYS.delete(camMap[e.key.toLowerCase()]); if (e.key === "Shift") CAMKEYS.delete("shift"); });
+window.addEventListener("blur", () => CAMKEYS.clear());
 document.addEventListener("keydown", e => {
   if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey ||
       e.target.closest?.("input, select, textarea, button, summary, a, [contenteditable]")) return;
+  const ck = camMap[e.key.toLowerCase()];
+  if (ck) { CAMKEYS.add(ck); if (e.shiftKey) CAMKEYS.add("shift"); else CAMKEYS.delete("shift"); if (!e.repeat) camApply(0.06); camKick(); e.preventDefault(); return; }   // chạm phím = một nhích nhỏ ngay; giữ phím = chuyển động liên tục
+  if (e.key.toLowerCase() === "r") { setCam(CAM0.yaw, CAM0.pitch, CAM0.dist); e.preventDefault(); return; }
+  if (e.key.toLowerCase() === "t") { $("bFollow").click(); e.preventDefault(); return; }
+  if (e.key.toLowerCase() === "c") { centerOnHand(); e.preventDefault(); return; }
+  if (e.key.toLowerCase() === "f") { toggleFs($("topWrap")); e.preventDefault(); return; }
+  if (e.key.toLowerCase() === "g") { toggleFs($("c3").closest(".card")); e.preventDefault(); return; }
   if (e.key === "[") $("sPrev").click();
   else if (e.key === "]") $("sNext").click();
   else if (e.key === "ArrowRight") go(i + 1);

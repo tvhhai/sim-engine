@@ -168,7 +168,8 @@
     .ctl .media-speed input { min-height:34px; }
   }
 
-  .c-small #top { flex:1.55 1 0; }
+  .c-small #topWrap { flex:1.55 1 0; min-height:0; display:flex; flex-direction:column; }
+  .c-small #top { flex:1 1 0; }
   .c-small #side { flex:.88 1 0; }
   @media (max-width:899px) {
     .c-small #top, .c-small #side { flex:none; height:auto; }
@@ -178,6 +179,21 @@
 
   .seed-controls label[hidden] { display:none; }
   .pick-zone-toggle { float:right; font-weight:400; }
+  .fs-btn { font-size:11px; padding:1px 7px; }
+  .c-3d h2 .fs-btn { font-weight:400; }
+  .fs-only { display:none; }
+  .fs-wrap:fullscreen, .fs-wrap.fs-fallback { background:var(--bg); padding:14px 18px; display:flex; flex-direction:column; gap:8px; }
+  .fs-wrap.fs-fallback { position:fixed; inset:0; z-index:9999; }
+  .fs-wrap:fullscreen h2, .fs-wrap.fs-fallback h2 { font-size:15px; }
+  .fs-wrap:fullscreen .pick-zone-legend, .fs-wrap.fs-fallback .pick-zone-legend { font-size:14px; }
+  .fs-wrap:fullscreen svg, .fs-wrap.fs-fallback svg { flex:1 1 0; min-height:0; width:100%; height:100%; }
+  .fs-wrap:fullscreen .fs-only, .fs-wrap.fs-fallback .fs-only { display:flex; }
+  .fs-bar { align-items:center; gap:8px; font-size:13px; }
+  .fs-bar input[type=range] { flex:1; }
+  .fs-bar output { min-width:18em; font-variant-numeric:tabular-nums; }
+  .c-3d:fullscreen, .c-3d.fs-fallback { background:var(--bg); padding:10px 14px; display:flex; flex-direction:column; }
+  .c-3d.fs-fallback { position:fixed; inset:0; z-index:9999; }
+  .keys-pop { max-width:min(460px,92vw); } .keys-pop kbd { display:inline-block; min-width:1.4em; text-align:center; margin:0 2px; padding:0 4px; border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; font:600 11px ui-monospace,monospace; background:var(--card); }
   .pick-zone-legend { display:flex; flex-wrap:wrap; gap:3px 10px; font-size:11px; margin-bottom:3px; }
   .pick-zone-legend span::before, .seed-summary [class^="zone-"]::before { content:""; display:inline-block; width:.65em; height:.65em; margin-right:.35em; border-radius:50%; background:var(--zone); }
   .zone-green { --zone:#16834f; }

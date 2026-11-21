@@ -72,6 +72,7 @@ class ScriptedPolicy(BasePolicy):
     SETTLE_DIST = 0.0015
     SETTLE_STEPS = 3
     HOLD_OFFSET = False        # B (đã thử: -1 seed, tắt): đo độ lệch hộp-đầu tay MỘT lần khi bắt đầu phase 6 rồi giữ cho phase 6-7 (thay vì tính lại mỗi bước)
+    VIA_ANGLE_DEG = 165.0      # mang hộp tới bát cách tay quá chừng này độ (quanh khớp 1): đi qua điểm trung gian ở giữa (IK một bước sẽ chọn chiều xoay pan ngược và kẹt ở giới hạn)
     TCP1_R = 0.38              # chỉ áp TCP_STEP1 cho hộp xa hơn mức này (m); đo: áp cho r >= 33 cm làm hỏng seed 55 và 63
     TCP_STEP1 = 0.02           # >0: hộp XA (có _far_roll) cũng giới hạn bước đích đầu tay ở phase 1 (đi thẳng ở độ cao lơ lửng, không võng xuống quét hộp)
     TCP_STEP = 0.02            # C: >0: ở phase 2-3 giới hạn mỗi tick đích đầu tay tiến tối đa chừng này (m) trước khi giải IK
@@ -169,6 +170,7 @@ class ScriptedPolicy(BasePolicy):
         self._pred_changed = False      # roll được DỰ ĐOÁN đổi để tránh bát (khác roll gần nhất)
         self._preturn_key = None        # vị trí hộp đã xoay-trước-khi-hạ cho
         self._far_roll = None           # roll cho hộp xa (đặt ở reset)
+        self._via_done = False          # phase 6 đã đi qua điểm trung gian (bát lệch quá VIA_ANGLE_DEG)
         self._tcp1_on = False           # hộp đủ xa để giới hạn bước đích ở phase 1
         self._prev_ee, self._still_ee, self._carry_off, self._tcp_goal = None, 0, None, None
         self._pred_key = None           # vị trí hộp đã dự đoán roll cho (để dự đoán lại khi hộp bị đẩy đi)
@@ -230,6 +232,7 @@ class ScriptedPolicy(BasePolicy):
         self._pred_key, self._roll_turn_target, self._pred_changed, self._preturn_key, self._cam_ok_key = None, None, False, None, None
         self._far_roll = None
         self._tcp1_on = False
+        self._via_done = False
         self._prev_ee, self._still_ee, self._carry_off, self._tcp_goal = None, 0, None, None
         # Hộp nằm ngoài giới hạn góc hoặc bán kính gắp: không thử gắp, về home ngay (phase 10) thay vì chờ hết hạn từng phase
         self.unreachable = bool(box_sampling.is_unreachable(self.env.get_box_pos()[:2]))
@@ -293,7 +296,8 @@ class ScriptedPolicy(BasePolicy):
             case 5:
                 self._lift_box(ee_pos)
             case 6:
-                self._move_box_to_bowl(box_pos, bowl_pos, ee_pos, self._safe_z, 0.02)
+                if not self._carry_via(bowl_pos, ee_pos):
+                    self._move_box_to_bowl(box_pos, bowl_pos, ee_pos, self._safe_z, 0.02)
             case 7:
                 self._lower_into_bowl(box_pos, bowl_pos, ee_pos)
                 if self._place_hold_action is not None:
@@ -364,6 +368,29 @@ class ScriptedPolicy(BasePolicy):
         self._gripper_target = -1.0
         self._carry_off = None                      # đo lại độ lệch hộp-tay sau khi nhấc (HOLD_OFFSET)
         self._move_toward(target, ee_pos, threshold=0.02)
+
+    def _carry_via(self, bowl_pos, ee_pos):
+        """Phase 6: bát nằm lệch quá VIA_ANGLE_DEG so với tay (quanh khớp 1) thì trước hết đi tới điểm trung gian ở độ cao an toàn, nằm giữa hai góc
+        (đi qua hướng thẳng phía trước, trong giới hạn khớp 1). Trả True nếu bước này dành cho điểm trung gian."""
+        if self._via_done:
+            return False
+        pan = np.array(config.PICK_PAN_XY)
+        a_ee = math.degrees(math.atan2(ee_pos[0] - pan[0], ee_pos[1] - pan[1]))
+        a_bw = math.degrees(math.atan2(bowl_pos[0] - pan[0], bowl_pos[1] - pan[1]))
+        if abs(a_ee - a_bw) <= self.VIA_ANGLE_DEG:
+            self._via_done = True
+            return False
+        mid = math.radians((a_ee + a_bw) / 2)
+        r = float(np.clip((np.linalg.norm(ee_pos[:2] - pan) + np.linalg.norm(bowl_pos[:2] - pan)) / 2, 0.20, 0.30))
+        via = np.array([pan[0] + r * math.sin(mid), pan[1] + r * math.cos(mid), self._safe_z])
+        self._gripper_target = -1.0
+        self._move_toward(via, ee_pos, threshold=0.04)
+        if self._phase != 6:                                       # tới nơi hoặc hết hạn: ở lại phase 6, đi tiếp tới bát
+            self._phase, self._phase_step = 6, 0
+            self._best_dist, self._stall = 0.0, 0
+            self.last_exit = None
+            self._via_done = True
+        return True
 
     def _move_box_to_bowl(self, box_pos, bowl_pos, ee_pos, height, threshold, *, advance_on_failure=True):
         target = np.array([bowl_pos[0], bowl_pos[1], height])

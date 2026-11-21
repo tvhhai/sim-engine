@@ -166,6 +166,8 @@ class SO101PickPlaceEnv(gym.Env):
         self.model.body_pos[self._bowl_body][:2] = self._bowl_default_xy
         if self.bowl_range > 0:
             self.model.body_pos[self._bowl_body][:2] += self.np_random.uniform(-self.bowl_range, self.bowl_range, 2)
+        if seed is not None and int(seed) in config.BOWL_FIXED_SEEDS:      # seed có bát đặt tay (vd. bát đối xứng hộp)
+            self.model.body_pos[self._bowl_body][:2] = config.BOWL_FIXED_SEEDS[int(seed)]
         if "bowl_xy" in (options or {}):
             self.model.body_pos[self._bowl_body][:2] = options["bowl_xy"]
         opts = options or {}

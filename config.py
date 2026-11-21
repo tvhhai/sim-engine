@@ -158,6 +158,12 @@ BOX_FIXED_SEEDS = {
     253: ("cặp đối xứng r = 42 cm, góc +105° (hỏng; đối xứng gắp được)", (0.4057, -0.2587)),
     254: ("cặp đối xứng r = 42 cm, góc -105° (gắp được; đối xứng hỏng)", (-0.4057, -0.2587)),
     # <<< SCAN-SEEDS
+    # Seed đặt tay (ngoài khối SCAN-SEEDS, công cụ quét không ghi đè): hộp ở chỗ seed 83 nhưng bát đối xứng qua mặt phẳng x = 0 (xem BOWL_FIXED_SEEDS)
+    1000: ("hộp như seed 83 (góc +107°, r 35 cm), bát đối xứng bên kia (góc -107°): tay xoay 214°", (0.3360, -0.2550)),
+}
+# Seed có BÁT đặt tay (mặc định bát đứng yên ở BOWL_DEFAULT_POS): seed -> (x, y) của bát. env.reset(options={"bowl_xy": ...}) vẫn thắng.
+BOWL_FIXED_SEEDS = {
+    1000: (-0.3360, -0.2550),
 }
 SETTLE_WAIT_STEPS = 60       # policy xong (phase 11) mà hộp đã trong bát, đã thả nhưng còn đang trượt/lắc: chờ tối đa chừng này bước cho hộp nằm yên rồi mới chấm (xem env.box_settling)
 SETTLED_SPEED = 0.05        # hộp chuyển động chậm hơn mức này (m/s) mới coi là "đã nằm yên"
