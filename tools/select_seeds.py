@@ -78,7 +78,9 @@ def evaluate_seed(rec, seed):
     skip = box_sampling.is_unreachable(frames[0]["box"][:2])
     if skip:
         kind = "ngoài tầm (bỏ qua có chủ ý)"
+    cam_min = min((f["cd"] for f in frames if "cd" in f), default=None)          # khoảng cách camera cổ tay nhỏ nhất tới bàn/vai/cánh tay (mm)
     return {
+        "cam_min": cam_min,
         "skip": skip,
         "seed": seed, "success": bool(ep["success"]), "steps": ep["steps"], "timeouts": timeouts, "retries": retries,
         "drops": drops, "regrasps": regrasps, "roll_flips": roll_flips, "bowl_avoid": bowl_avoid,
@@ -271,6 +273,9 @@ def main():
             t.append(f"gắp lại sau khi rút {r['regrasps']} lần")
         if r["steps"] >= slow_steps:
             t.append(f"chậm ({r['steps']} bước)")
+        cm = r.get("cam_min")
+        if cm is not None and cm < 3.0:
+            t.append(f"CAMERA XUYÊN bàn/vai {cm:.1f} mm" if cm < 0 else f"camera sát bàn/vai ({cm:.1f} mm)")
         if base_failed is not None and not r.get("skip"):                     # so với mốc trước khi tối ưu
             if r["success"] and r["seed"] in base_failed:
                 t.insert(0, "ĐÃ CẢI THIỆN: trước hỏng, nay xanh (" + base_label + ")")

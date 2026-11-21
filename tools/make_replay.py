@@ -203,6 +203,15 @@ class Recorder:
             mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "table"),
             mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "world"),
         }
+        bid = lambda n: mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, n)
+        geoms = lambda b: [g for g in range(self.model.ngeom) if self.model.geom_bodyid[g] == b]
+        self._cam_pairs = [(a, w) for a in geoms(bid("wrist_cam_arm")) for n in ("base", "shoulder", "upper_arm", "table") for w in geoms(bid(n))]
+
+    def cam_clearance_mm(self):
+        """Khoảng cách nhỏ nhất (mm) từ camera cổ tay tới đế, vai, cánh tay trên và mặt bàn; âm = camera xuyên vào. Camera không có va chạm trong mô phỏng,
+        nên đây là phép đo hình học để cảnh báo (xem nhãn "CAMERA" ở select_seeds)."""
+        fromto = np.zeros(6)
+        return min(mujoco.mj_geomDistance(self.model, self.data, a, w, 0.1, fromto) for a, w in self._cam_pairs) * 1000.0
 
     def box_contacts(self):
         """Tên các body (trừ bàn) đang chạm hộp ở thời điểm hiện tại."""
@@ -288,6 +297,7 @@ class Recorder:
             "ex": getattr(self.policy, "last_exit", None),   # lý do phase kết thúc ở bước này: arrived / stall / timeout
             "hd": round(float(info["box_to_bowl_dist"]), 3),   # khoảng cách ngang hộp-bát
             "ok": bool(info["success"]),
+            "cd": round(self.cam_clearance_mm(), 1),     # khoảng cách camera tới bàn/vai/cánh tay (mm), âm = xuyên
             "bs": round(float(info["box_speed"]), 3),    # tốc độ hộp (m/s): chỉ tính thành công khi hộp đã nằm yên
             "arm": [r3(self.data.xpos[i]) for i in self.arm_ids],
             "ct": self.box_contacts(),
