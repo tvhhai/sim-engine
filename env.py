@@ -32,7 +32,7 @@ class SO101PickPlaceEnv(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": config.CONTROL_FREQ}
 
     def __init__(self, render_mode=None, render_images=True, end_on_success=True,
-                 box_range=None, bowl_range=None):
+                 box_range=None, bowl_range=None, lab_objects=None, target_id=None):
         # render_images=False: không render ảnh camera trong obs -> chạy nhanh hơn nhiều
         # (policy viết tay không cần ảnh nên thường tắt đi)
         # Kẹp THẬT: hộp chỉ được giữ bằng va chạm và ma sát thật của hai hàm kẹp (không có kẹp giả / snap-grasp).
@@ -50,7 +50,13 @@ class SO101PickPlaceEnv(gym.Env):
         self.end_on_success = end_on_success
 
         # Nạp mô hình MuJoCo từ file XML (robot, bàn, hộp, bát, camera)
-        self.model = mujoco.MjModel.from_xml_path(config.SCENE_XML)
+        self.lab_objects = []
+        if lab_objects is not None:
+            from .lab_scene import normalize_objects, scene_model
+            self.lab_objects = normalize_objects(lab_objects, target_id)
+            self.model = scene_model(self.lab_objects)
+        else:
+            self.model = mujoco.MjModel.from_xml_path(config.SCENE_XML)
         # Độ gập của giá đỡ camera cổ tay (body wrist_cam_arm gập quanh trục x của chốt): đặt theo config
         cam_arm = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "wrist_cam_arm")
         if cam_arm >= 0:
@@ -134,6 +140,8 @@ class SO101PickPlaceEnv(gym.Env):
 
         seed: cùng seed => cùng vị trí hộp => kết quả lặp lại được (rất hữu ích khi debug).
         options (tùy chọn): {"box_xy": [x, y], "bowl_xy": [x, y]} đặt thẳng vị trí hộp / bát, thay cho vị trí ngẫu nhiên.
+        Joint Lab: arm_qpos (5 góc rad), gripper_qpos (rad), box_yaw (rad).
+        Các tư thế đặt tay vẫn được ổn định vật lý 50 bước trước khi trả observation.
         Trả về (obs, info).
         """
         super().reset(seed=seed)
@@ -189,9 +197,37 @@ class SO101PickPlaceEnv(gym.Env):
             self.data.ctrl[i] = self.data.qpos[qadr]
         self.data.ctrl[5] = config.GRIPPER_REST_RAD  # hàm di động khép
 
-        # Cho vật lý "lắng xuống" 50 bước (hộp chạm bàn, tay ổn định)
-        for _ in range(50):
+        # Joint Lab can start a rollout from the exact pose edited in its UI.
+        if "arm_qpos" in opts:
+            angles = np.asarray(opts["arm_qpos"], dtype=float)
+            if angles.shape != (5,) or not np.all(np.isfinite(angles)):
+                raise ValueError("arm_qpos must contain five finite angles in radians")
+            for i, jid in enumerate(self._arm_joint_ids):
+                lo, hi = self.model.jnt_range[jid]
+                angle = np.clip(angles[i], lo, hi)
+                self.data.qpos[self.model.jnt_qposadr[jid]] = angle
+                self.data.ctrl[i] = angle
+        if "gripper_qpos" in opts:
+            angle = float(opts["gripper_qpos"])
+            lo, hi = self.model.jnt_range[self._gripper_jnt]
+            self.data.qpos[fl_qadr] = np.clip(angle, lo, hi)
+            self.data.ctrl[5] = self.data.qpos[fl_qadr]
+        if "box_yaw" in opts:
+            half = float(opts["box_yaw"]) / 2
+            self.data.qpos[box_qpos_adr + 3:box_qpos_adr + 7] = [np.cos(half), 0, 0, np.sin(half)]
+
+        for obj in self.lab_objects:
+            body = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, obj["body"])
+            joint = self.model.body_jntadr[body]
+            adr = self.model.jnt_qposadr[joint]
+            half = np.radians(obj["yaw"]) / 2
+            self.data.qpos[adr:adr + 7] = [obj["x"], obj["y"], 0.42 + config.BOX_HALF, np.cos(half), 0, 0, np.sin(half)]
+
+        # Lab preview/blocked trials can skip settling to preserve the exact edited pose.
+        for _ in range(0 if opts.get("skip_settle") else 50):
             mujoco.mj_step(self.model, self.data)
+
+        mujoco.mj_forward(self.model, self.data)
 
         self._step_count = 0
         obs = self._get_obs()

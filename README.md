@@ -50,6 +50,48 @@ python -m sim_engine
 
 That's it. The UI will open.
 
+### Sim Studio: replay, Lab, run history and settings
+
+```bash
+python -m sim_engine.joint_lab
+```
+
+Open http://127.0.0.1:8765. The React Studio uses Mantine UI and Three.js,
+with a shared 3D component for editing and replay. Drag objects/bowl in the XY
+view, or select them in 3D to use transform handles. Drag the end-effector or use
+joint sliders to adjust the arm. The redundant side-view card is removed.
+Add up to five boxes/balls with individual colors and select one as the grasp
+target. All objects participate in MuJoCo physics. Card visibility is configurable
+and saved in the browser. Bowl placement stays inside the configured workspace;
+objects may be placed outside for tests. Out-of-region bowl/target runs hold the
+arm still and record zero steps.
+
+Click **Chạy mô phỏng** to run the scripted policy from the edited pose.
+MuJoCo first settles the initial pose for 50 physics steps, then runs the policy.
+The result opens in the dedicated Replay screen by default. Its full-analysis
+view reuses the original controls and diagnostics with Three.js/WebGL for the
+main 3D viewport and calibrated wrist camera: XY/YZ, timeline, phase
+navigation, contact diagnostics and clickable step logs. Both full and focused
+3D views share the Lab renderer and show all recorded objects. Bookmark steps
+and reopen them through the URL. Lab and Studio Replay display coordinates
+relative to the fixed base origin; saved scenes and physics retain world coordinates.
+
+Each click runs exactly one trial named `lab`, replacing `docs/replay_lab.json`
+and the compatibility `docs/replay_lab.html`.
+Every run also receives a unique ID and an immutable archive under
+`docs/studio_runs/`. The History screen supports search, result filters,
+favorites, names/notes, comparison, scene export, loading a scene into Lab,
+and rerunning just that scene.
+The latest submitted setup is saved in `docs/lab_case.json` and restored when you reopen
+the lab. The browser separately saves the working draft across navigation and
+reloads. Settings controls theme, navigation, visible Lab cards and playback
+defaults, with validated JSON import/export. Batch seeds and `docs/replay.html`
+are left untouched. Keep the Python server
+running while editing, starting trials, or viewing the React replay. The older
+compatibility replay can also be opened offline. The previous lab UI remains at `/legacy`.
+Frontend source/build instructions and technology review are in
+[`web/joint-lab/README.md`](web/joint-lab/README.md).
+
 ![Scene Overview](docs/image/scene_overview.png)
 
 ### 3. First run (5 minutes)

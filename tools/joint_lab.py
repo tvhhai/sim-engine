@@ -21,6 +21,9 @@ import argparse
 import json
 import math
 import os
+import sys
+import mimetypes
+from pathlib import Path
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -31,7 +34,10 @@ import numpy as np
 
 from .. import config
 from ..env import SO101PickPlaceEnv
-from .make_replay import arm_model_export
+from .make_replay import arm_model_export, bowl_geom_list
+from ..lab_scene import normalize_objects
+from .studio_api import handle_get as studio_get, handle_post as studio_post
+from .lab_run import LabRun
 
 ARM = ["base", "shoulder", "upper_arm", "lower_arm", "wrist", "gripper"]
 JAW = "moving_jaw_so101_v1"      # hàm kẹp di động (hàm cố định thuộc body "gripper")
@@ -64,8 +70,8 @@ def skew(a):
 
 
 class Lab:
-    def __init__(self):
-        self.env = SO101PickPlaceEnv(render_images=False)
+    def __init__(self, lab_objects=None, target_id=None):
+        self.env = SO101PickPlaceEnv(render_images=False, lab_objects=lab_objects, target_id=target_id)
         self.m, self.d = self.env.model, self.env.data
         m = self.m
         self.lock = threading.Lock()
@@ -80,7 +86,7 @@ class Lab:
         self.site = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_SITE, "ee_site")
         body = lambda n: mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, n)
         self.arm_ids = [body(n) for n in ARM]
-        self.all_ids = [body(n) for n in ARM_ALL]
+        self.all_ids = [body(n) for n in ARM_ALL + ["wrist_cam_arm"]]
         self.wr = body("gripper")
         geom = lambda n: mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, n)
         names = lambda g: mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_GEOM, g) or ""
@@ -93,6 +99,30 @@ class Lab:
         self.reach, self.reach_status = None, "idle"
         self.home = [round(float(np.degrees(v)), 1) for v in config.HOME_QPOS_RAD[:5]]
         self.bowl_default = m.body_pos[self.bowl][:2].copy()
+        self.runner = LabRun()
+        self.exact_model = None
+
+    def set_scene(self, request):
+        objects = normalize_objects(request["objects"], request.get("target_id"))
+        signature = lambda items: [(o["id"], o["type"], o["color"], o["body"]) for o in items]
+        if signature(objects) != signature(self.env.lab_objects):
+            replacement = Lab(objects, request.get("target_id"))
+            old = self.env
+            keep = {key: getattr(self, key) for key in ("lock", "runner", "reach", "reach_status", "exact_model")}
+            self.__dict__.update(replacement.__dict__)
+            self.__dict__.update(keep)
+            old.close()
+        self.env.lab_objects = objects
+        target = next(obj for obj in objects if obj["body"] == "box")
+        self.set_pose(dict(request, bx=target["x"], by=target["y"], byaw=target["yaw"]))
+        for obj in objects:
+            if obj["body"] == "box":
+                continue
+            body = self.m.body(obj["body"]).id
+            adr = self.m.jnt_qposadr[self.m.body_jntadr[body]]
+            half = math.radians(obj["yaw"]) / 2
+            self.d.qpos[adr:adr + 7] = [obj["x"], obj["y"], TABLE_TOP_Z + config.BOX_HALF, math.cos(half), 0, 0, math.sin(half)]
+        mujoco.mj_forward(self.m, self.d)
 
     # ---------- đặt tư thế và đọc số liệu ----------
     def set_pose(self, p):
@@ -431,12 +461,14 @@ button{font:inherit;padding:2px 9px;border:1px solid var(--line);border-radius:6
 .bad{color:var(--bad);font-weight:700}.warn{color:var(--warn);font-weight:700}.good{color:var(--ok);font-weight:700}.muted{color:var(--muted)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px}.grid2 label{display:flex;gap:4px;align-items:center}.grid2 input[type=number]{width:70px;font:inherit}
 </style></head><body>
-<h1>Phòng thí nghiệm khớp</h1><p class="sub">Kéo thanh trượt để chỉnh tay. Tư thế tĩnh (không chạy vật lý); va chạm và độ hở do MuJoCo tính đúng tại tư thế này.</p>
+<h1>Joint Lab · đặt cảnh và chạy thử</h1><p class="sub">Kéo hộp đỏ / bát xanh trong hình nhìn từ trên. Kéo dấu đầu tay màu tím ở hình trên hoặc cạnh để giải IK; thanh trượt chỉnh từng khớp. Bấm Chạy để mô phỏng từ tư thế hiện tại (có 50 bước ổn định vật lý ban đầu).</p>
+<div class="card" style="margin:8px 12px"><button id="bRun">▶ Chạy mô phỏng · seed lab</button> <a id="replayLink" href="/replay-lab" target="_blank" hidden>Mở replay mới nhất ↗</a>
+ <span id="runStatus" role="status" aria-live="polite">Chỉ chạy 1 trường hợp lab; mỗi lần chạy ghi đè kết quả riêng, không chạy các seed cũ.</span></div>
 <div class="wrap">
 <div>
  <div class="card"><h2>3D · kéo chuột = xoay · lăn = zoom · nhấp đúp = mặc định <span style="float:right"><button id="v1">chéo</button> <button id="v2">trước</button> <button id="v3">cạnh</button> <button id="v4">trên</button></span></h2><canvas id="c3" style="width:100%;height:400px;display:block"></canvas></div>
- <div class="views2" style="margin-top:8px">
-  <div class="card"><h2>Từ cạnh (x ngang, z cao)</h2><svg id="side" viewBox="0 0 600 420"></svg></div>
+<div class="views2" style="margin-top:8px">
+  <svg id="side" viewBox="0 0 600 420" style="display:none"></svg>
   <div class="card"><h2>Từ trên xuống (x ngang, y dọc) <label style="float:right;font-weight:400;text-transform:none;letter-spacing:0"><input type="checkbox" id="showReach" checked> vùng với tới</label></h2><svg id="top" viewBox="0 0 600 500"></svg></div>
  </div>
 </div>
@@ -466,6 +498,7 @@ button{font:inherit;padding:2px 9px;border:1px solid var(--line);border-radius:6
  <div class="card"><h2>Số liệu</h2><div id="info"></div></div>
 </div>
 </div>
+<section id="labReplay" class="card" style="margin:8px 12px" hidden><h2>Replay · trường hợp lab mới nhất</h2><iframe id="replayFrame" title="Replay mô phỏng Joint Lab" style="width:100%;height:850px;border:0"></iframe></section>
 <script>
 const NAMES=[["pan","1 pan (xoay thân)"],["lift","2 lift (nâng vai)"],["elbow","3 elbow (gập khuỷu)"],["wflex","4 wflex (gập cổ tay)"],["wroll","5 wroll (xoay cổ tay)"]];
 const S={pan:0,lift:0,elbow:0,wflex:0,wroll:0,grip:1.2,bx:0.15,by:0,byaw:0,wx:-0.15,wy:0};
@@ -506,7 +539,7 @@ const $=id=>document.getElementById(id);
 function row(id,label,lo,hi,step,val,fmt){return `<div class="row"><span>${label}</span><input type="range" id="r_${id}" min="${lo}" max="${hi}" step="${step}" value="${val}"><input type="number" id="n_${id}" min="${lo}" max="${hi}" step="${step}" value="${val}"></div>`}
 function build(){
   $("sl").innerHTML=NAMES.map(([k,l],i)=>row(k,l,LIM[i][0],LIM[i][1],0.5,S[k])).join("")+row("grip","hàm kẹp (°)",-10,100,0.5,S.grip*180/Math.PI);
-  $("ob").innerHTML=row("bx","hộp x",0,30,0.1,S.bx*100)+row("by","hộp y",-25,25,0.1,S.by*100)+row("byaw","hộp xoay °",-90,90,1,S.byaw)+row("wx","bát x",-30,30,0.1,S.wx*100)+row("wy","bát y",-25,25,0.1,S.wy*100);
+  $("ob").innerHTML=row("bx","hộp x",-45,45,0.1,S.bx*100)+row("by","hộp y",-45,30,0.1,S.by*100)+row("byaw","hộp xoay °",-90,90,1,S.byaw)+row("wx","bát x",-45,45,0.1,S.wx*100)+row("wy","bát y",-45,30,0.1,S.wy*100);
   for(const k of ["pan","lift","elbow","wflex","wroll","grip","bx","by","byaw","wx","wy"]){
     const r=$("r_"+k),n=$("n_"+k);
     const set=v=>{v=+v;S[k]=(k==="grip")?v*Math.PI/180:(["bx","by","wx","wy"].includes(k)?v/100:v);r.value=v;n.value=v;go()};
@@ -553,6 +586,7 @@ function render(J){
   for(let k=1;k<=5;k++)s+=`<circle cx="${X(P[k][0])}" cy="${Z(P[k][2])}" r="8" fill="var(--card)" stroke="var(--ink)"/><text x="${X(P[k][0])}" y="${Z(P[k][2])+3.5}" font-size="10" font-weight="700" text-anchor="middle" fill="var(--ink)">${k}</text>`;
   s+=`<path d="M${X(ee[0])-8},${Z(ee[2])}H${X(ee[0])+8}M${X(ee[0])},${Z(ee[2])-8}V${Z(ee[2])+8}" stroke="var(--hand)" stroke-width="2.5"/>`;
   $("side").innerHTML=s;
+  $("side").innerHTML+=dragHandle(X(ee[0]),Z(ee[2]),"arm","Đầu tay · kéo XZ","var(--hand)");
   // trên
   s=grid(true);for(let v=-0.45;v<=0.301;v+=0.05)s+=`<line x1="0" y1="${Y(v)}" x2="600" y2="${Y(v)}" stroke="var(--muted)" stroke-opacity=".15"/><text x="3" y="${Y(v)-2}" font-size="9" fill="var(--muted)">${v.toFixed(2)}</text>`;
   s=`<rect x="0" y="0" width="600" height="500" fill="var(--table)" fill-opacity=".6"/>`+s+reachTop(J);
@@ -561,7 +595,25 @@ function render(J){
   for(let k=1;k<=5;k++)s+=`<circle cx="${X(P[k][0])}" cy="${Y(P[k][1])}" r="8" fill="var(--card)" stroke="var(--ink)"/><text x="${X(P[k][0])}" y="${Y(P[k][1])+3.5}" font-size="10" font-weight="700" text-anchor="middle" fill="var(--ink)">${k}</text>`;
   s+=`<path d="M${X(ee[0])-8},${Y(ee[1])}H${X(ee[0])+8}M${X(ee[0])},${Y(ee[1])-8}V${Y(ee[1])+8}" stroke="var(--hand)" stroke-width="2.5"/>`;
   $("top").innerHTML=s;
+  $("top").innerHTML+=dragHandle(X(J.box[0]),Y(J.box[1]),"box","Hộp · kéo XY","var(--box)")+dragHandle(X(J.bowl[0]),Y(J.bowl[1]),"bowl","Bát · kéo XY","var(--bowl)")+dragHandle(X(ee[0]),Y(ee[1]),"arm","Đầu tay · kéo XY","var(--hand)");
   draw3d(J);info(J);
+}
+function dragHandle(x,y,kind,label,color){return `<circle data-drag="${kind}" cx="${x}" cy="${y}" r="13" fill="${color}" fill-opacity=".2" stroke="${color}" stroke-width="2.5" style="cursor:grab"><title>${label}</title></circle>`}
+// Capture on the SVG, whose identity survives render(), rather than a replaced handle.
+for(const id of ["top","side"]){
+  const svg=$(id);let drag=null,pending=null,solving=false;
+  svg.style.touchAction="none";
+  const solve=async()=>{if(solving)return;solving=true;try{while(pending){const target=pending;pending=null;await doIk(target)}}catch(e){$("ikres").textContent=e.message}finally{solving=false}};
+  const move=e=>{if(!drag)return;const pt=new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());
+    const x=Math.max(-.45,Math.min(.45,pt.x/666.7-.45));
+    const y=Math.max(-.45,Math.min(.30,.30-pt.y/666.7));
+    if(drag.kind==="box"||drag.kind==="bowl"){const k=drag.kind==="box"?"b":"w";S[k+"x"]=x;S[k+"y"]=y;syncUI();go()}
+    else{const target=id==="top"?[x,y,drag.ee[2]]:[x,drag.ee[1],Math.max(.30,Math.min(.88,.88-pt.y/666.7))];setT(...target);pending=target;solve()}
+  };
+  svg.onpointerdown=e=>{const kind=e.target.dataset.drag;if(!kind||!last)return;e.preventDefault();drag={kind,ee:[...last.ee]};svg.setPointerCapture(e.pointerId)};
+  svg.onpointermove=move;
+  svg.onpointerup=e=>{move(e);drag=null;if(svg.hasPointerCapture(e.pointerId))svg.releasePointerCapture(e.pointerId)};
+  svg.onpointercancel=()=>{drag=null;pending=null};
 }
 /* ---------- 3D tự vẽ bằng canvas 2D ---------- */
 const CAM0={yaw:-0.95,pitch:0.5,dist:0.7},CAM={...CAM0,t:[0.0,0.0,0.5]};
@@ -675,7 +727,21 @@ $("bPol").onclick=async()=>{
 };
 $("showReach").onchange=()=>{if(last)render(last)};
 let HOME={};
-(async()=>{const r=await (await fetch("/meta")).json();LIM=r.limits;HOME=r.home;GOPEN=r.gopen;GCLOSE=r.gclose;Object.assign(S,r.home);PICK=r.pick_region;PSCAN=r.pick_scan||[];MODEL=await (await fetch("/model")).json();build();syncUI();go();loadReach()})();
+let polling=false;
+async function pollRun(){
+  if(polling)return;polling=true;
+  try{const r=await (await fetch("/run-status")).json();$("bRun").disabled=r.status==="running";
+    if(r.status==="running"){$("runStatus").textContent="Đang chạy riêng seed lab theo cảnh lúc bấm Chạy…";setTimeout(pollRun,700)}
+    else if(r.status==="done"){$("runStatus").textContent=`Đã chạy ${r.steps} bước · ${r.success?"THÀNH CÔNG":"THẤT BẠI"}. Replay là cảnh lúc bấm Chạy; chỉnh tiếp rồi chạy lại để cập nhật.`;$("replayLink").hidden=false;$("replayLink").href=r.replay;$("labReplay").hidden=false;if($("replayFrame").getAttribute("src")!==r.replay)$("replayFrame").src=r.replay}
+    else if(r.status==="error"){$("runStatus").textContent="Chạy lỗi: "+r.error}
+  }catch(e){$("bRun").disabled=false;$("runStatus").textContent="Không kết nối được máy chủ: "+e.message}finally{polling=false}
+}
+$("bRun").onclick=async()=>{
+  $("bRun").disabled=true;$("runStatus").textContent="Đang gửi cảnh hiện tại…";
+  try{const r=await (await fetch("/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(S)})).json();if(r.error)throw new Error(r.error);pollRun()}
+  catch(e){$("runStatus").textContent="Chạy lỗi: "+e.message;$("bRun").disabled=false}
+};
+(async()=>{const r=await (await fetch("/meta")).json();LIM=r.limits;HOME=r.home;GOPEN=r.gopen;GCLOSE=r.gclose;Object.assign(S,r.home,r.saved_pose||{});PICK=r.pick_region;PSCAN=r.pick_scan||[];MODEL=await (await fetch("/model")).json();build();syncUI();go();loadReach();pollRun()})();
 </script></body></html>"""
 
 
@@ -689,30 +755,96 @@ def make_handler(lab):
             self.send_response(200)
             self.send_header("Content-Type", ctype + "; charset=utf-8")
             self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
             self.end_headers()
-            self.wfile.write(data)
+            try:
+                self.wfile.write(data)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                pass  # The editor cancels stale preview requests during a drag.
+
+        def do_POST(self):
+            if studio_post(self, lab):
+                return
+            if self.path not in ("/run", "/scene-pose"):
+                self.send_error(404)
+                return
+            # Only accept same-origin JSON; a remote site cannot submit a rollout form.
+            if self.headers.get("Content-Type", "").split(";")[0] != "application/json":
+                self.send_error(415)
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if not 0 < length <= 8192:
+                    raise ValueError("Invalid request size")
+                pose = json.loads(self.rfile.read(length))
+                if self.path == "/run":
+                    self._send(json.dumps(lab.runner.start(pose)))
+                else:
+                    with lab.lock:
+                        lab.set_scene(pose)
+                        self._send(json.dumps(lab.snapshot()))
+            except (ValueError, KeyError, TypeError) as exc:
+                self._send(json.dumps({"error": str(exc)}))
 
         def do_GET(self):
             u = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
+            if studio_get(self, lab, u.path, q):
+                return
             fl = lambda k, d=0.0: float(q.get(k, d))
             pose = lambda: dict(pan=fl("pan"), lift=fl("lift"), elbow=fl("elbow"), wflex=fl("wflex"), wroll=fl("wroll"),
                                 grip=fl("grip", config.GRIPPER_OPEN_RAD), bx=fl("bx", 0.15), by=fl("by"), byaw=fl("byaw"),
                                 wx=fl("wx", -0.15), wy=fl("wy"))
             try:
-                if u.path == "/":
+                if u.path == "/" and (Path(__file__).resolve().parents[1] / "docs/lab/index.html").is_file():
+                    self.send_response(302)
+                    self.send_header("Location", "/lab/")
+                    self.end_headers()
+                elif u.path == "/" or u.path == "/legacy":
                     self._send(PAGE, "text/html")
+                elif u.path.startswith("/lab/"):
+                    root = (Path(__file__).resolve().parents[1] / "docs/lab").resolve()
+                    path = (root / (u.path[5:] or "index.html")).resolve()
+                    if path.is_relative_to(root) and path.is_file():
+                        self._send(path.read_bytes(), mimetypes.guess_type(path.name)[0] or "application/octet-stream")
+                    else:
+                        self.send_error(404)
+                elif u.path == "/lab-replay-data":
+                    path = lab.runner.directory / "replay_lab.json"
+                    if path.is_file():
+                        self._send(path.read_bytes())
+                    else:
+                        self._send(json.dumps({"episodes": []}))
+                elif u.path == "/run-status":
+                    self._send(json.dumps(lab.runner.snapshot()))
+                elif u.path == "/replay-lab":
+                    path = lab.runner.directory / "replay_lab.html"
+                    if path.is_file():
+                        self._send(path.read_bytes(), "text/html")
+                    else:
+                        self.send_error(404, "Chua co replay lab")
                 elif u.path == "/meta":
                     h = lab.home
                     self._send(json.dumps({"limits": [[math.degrees(a), math.degrees(b)] for a, b in zip(lab.lo, lab.hi)],
                                            "home": {"pan": h[0], "lift": h[1], "elbow": h[2], "wflex": h[3], "wroll": h[4],
                                                     "grip": config.GRIPPER_OPEN_RAD},
+                                           "saved_pose": lab.runner.saved_pose,
+                                           "table_half": list(config.TABLE_HALF),
+                                           "bowl_geoms": bowl_geom_list(lab.env),
+                                           "bowl_origin": lab.env.get_bowl_pos().tolist(),
                                            "gopen": config.GRIPPER_OPEN_RAD, "gclose": config.GRIPPER_CLOSED_RAD,
                                            "pick_region": dict(config.PICK_REGION, pan=list(config.PICK_PAN_XY)),
                                            "pick_scan": lab.pick_scan(),
                                            "glim": [float(lab.m.jnt_range[lab.m.jnt_qposadr.tolist().index(lab.fl)][0]) if False else -10, 100]}))
                 elif u.path == "/model":
-                    self._send(json.dumps({"kin": lab.kin, "mesh": lab.mesh}))
+                    if q.get("exact") == "1":
+                        with lab.lock:
+                            if lab.exact_model is None:
+                                kin, mesh = arm_model_export(lab.env, exact=True)
+                                lab.exact_model = {"kin": kin, "mesh": mesh}
+                        self._send(json.dumps(lab.exact_model))
+                    else:
+                        self._send(json.dumps({"kin": lab.kin, "mesh": lab.mesh}))
                 elif u.path == "/pose":
                     with lab.lock:
                         lab.set_pose(pose())
@@ -741,6 +873,8 @@ def make_handler(lab):
 
 
 def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description="Phòng thí nghiệm khớp: kéo thanh trượt chỉnh tay robot")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--no-open", action="store_true", help="không tự mở trình duyệt")
@@ -749,7 +883,7 @@ def main():
     lab = Lab()
     threading.Thread(target=lab.ensure_reach, kwargs={"force": args.recompute_reach}, daemon=True).start()
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(lab))
-    url = f"http://localhost:{args.port}"
+    url = f"http://127.0.0.1:{args.port}"
     print(f"Phòng thí nghiệm khớp đang chạy tại {url}  (Ctrl+C để dừng)")
     if not args.no_open:
         webbrowser.open(url)

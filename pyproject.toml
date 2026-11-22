@@ -29,4 +29,4 @@ package-dir = {"sim_engine" = "."}
 packages = ["sim_engine", "sim_engine.policies", "sim_engine.tools", "sim_engine.workflows", "sim_engine.ui"]
 
 [tool.setuptools.package-data]
-sim_engine = ["assets/*.xml", "assets/so101/*.stl", "docs/replay_template.html", "docs/*.json", "docs/ui/*.css", "docs/ui/*.js"]
+sim_engine = ["assets/*.xml", "assets/so101/*.stl", "docs/replay_template.html", "docs/*.json", "docs/ui/*.css", "docs/ui/*.js", "docs/lab/*.html", "docs/lab/assets/*"]

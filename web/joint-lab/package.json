@@ -1,0 +1,30 @@
+{
+  "name": "sim-engine-joint-lab",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "@mantine/core": "^8.3.0",
+    "@mantine/hooks": "^8.3.0",
+    "three": "^0.181.0",
+    "@react-three/fiber": "^9.4.0",
+    "@react-three/drei": "^10.7.0",
+    "lucide-react": "^0.553.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "vite": "^7.2.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/three": "^0.181.0",
+    "vitest": "^4.0.0"
+  }
+}

@@ -15,7 +15,8 @@ if (!DATA?.episodes?.length) {
   throw new Error("no data");
 }
 const S = DATA.scene, EPS = DATA.episodes;
-const f3 = v => v ? "(" + v.map(x => (x >= 0 ? "+" : "") + x.toFixed(3)).join(", ") + ")" : "—";
+const basePoint = v => v && window.STUDIO_WEBGL ? v.map((x,k) => x - [S.pick_region?.pan[0] ?? 0,S.pick_region?.pan[1] ?? -.15,.42][k]) : v;
+const f3 = v => v ? "(" + basePoint(v).map(x => (x >= 0 ? "+" : "") + x.toFixed(3)).join(", ") + ")" : "—";
 const dist = (a, b) => Math.hypot(a[0]-b[0], a[1]-b[1], a[2]-b[2]);
 const cm = v => (v * 100).toFixed(1);
 
@@ -110,6 +111,11 @@ app.innerHTML = `
 <div class="card logcard"><h2>LOG TỪNG BƯỚC (bấm một dòng để nhảy tới)</h2><div class="logwrap" id="logw"></div></div>
 `;
 const $ = id => document.getElementById(id);
+// localStorage có thể bị chặn (file:// ở vài trình duyệt, chế độ riêng tư): lỗi thì coi như không lưu
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
 const epLabel = (e, k) => { const ex = (e.tags || []).filter(x => !/^(THÀNH CÔNG|HỎNG)/.test(x)); return `<option value="${k}">${k + 1}. ${e.name || "seed " + e.seed} — ${e.success ? "OK" : "FAIL"}${ex.length ? " · " + ex.join(" · ") : ""}</option>`; };
 const passFlt = e => {
   const zone = $("flt").value, result = $("mixResult").value;
@@ -447,6 +453,31 @@ function reachInfo(fs) {
   h += `<div class="chk"><span>${mk(inn(p.free, rw))}</span><span>bát cách trục <b>${cm(rw)}</b> cm; thả được ở <span class="mono">${fmt(p.free)}</span>, thả thẳng đứng ở <span class="mono">${fmt(p.vertical)}</span> ${mk(inn(p.vertical, rw))}</span></div>`;
   return h;
 }
+// Recorded objects share one geometry path across all replay views.
+function replayObjects(fr) {
+  return fr.objects?.length ? fr.objects : [{type:"box", color:"#d9363e", pos:fr.box, quat:bq(fr)}];
+}
+function objectFaces(obj) {
+  if (obj.type !== "sphere") {
+    const v = boxV(obj.pos, obj.quat, S.box_half);
+    return [[0,1,3,2],[4,5,7,6],[0,1,5,4],[2,3,7,6],[0,2,6,4],[1,3,7,5]].map(face => face.map(k => v[k]));
+  }
+  const point = (lat, lon) => {
+    const a = lat*Math.PI/12, b = lon*Math.PI/12, r = S.box_half;
+    return [obj.pos[0]+r*Math.sin(a)*Math.cos(b),obj.pos[1]+r*Math.sin(a)*Math.sin(b),obj.pos[2]+r*Math.cos(a)];
+  };
+  return Array.from({length:12*24},(_,k) => {
+    const a=Math.floor(k/24), b=k%24;
+    return [point(a,b),point(a+1,b),point(a+1,b+1),point(a,b+1)];
+  });
+}
+function objectsSvg(fr, fx, fy, a, b) {
+  return replayObjects(fr).map(obj => {
+    const color = /^#[0-9a-f]{6}$/i.test(obj.color) ? obj.color : "#d9363e";
+    const points = hull2(objectFaces(obj).flat().map(v=>[fx(v[a]),fy(v[b])])).map(p=>p.join(",")).join(" ");
+    return `<polygon points="${points}" fill="${color}" stroke="#00000066"/>`;
+  }).join("");
+}
 function drawTop(fr, fs) {
   const pan = S.pick_region?.pan ?? S.reach?.base ?? fr.arm[1];
   const k = scaleX(TOP), b = S.bowl, b0 = fs[0].box, h = S.box_half * k;
@@ -466,7 +497,7 @@ function drawTop(fr, fs) {
   s += trails(topX, topY, 0, 1, "ghost");
   s += armSeg(fr, topX, topY, 0, 1, 7, .85, true);
   s += trails(topX, topY, 0, 1, "path");
-  s += `<polygon points="${boxPoly(fr, topX, topY, 0, 1)}" fill="var(--box)" stroke="#00000066"/>`;
+  s += objectsSvg(fr, topX, topY, 0, 1);
   if (fr.tg) {
     s += `<line x1="${topX(fr.ee[0])}" y1="${topY(fr.ee[1])}" x2="${topX(fr.tg[0])}" y2="${topY(fr.tg[1])}" stroke="var(--warn)" stroke-width="2"/>`;
     s += `<circle cx="${topX(fr.tg[0])}" cy="${topY(fr.tg[1])}" r="7" fill="none" stroke="var(--goal)" stroke-width="2.5"/>`;
@@ -484,9 +515,9 @@ function drawSide(fr, fs) {
   const bm = SM(b);
   const hullPoly = (pts, fx, fy, a, c) => hull2(pts.map(q => { const m = SM(q); return [fx(m[a]), fy(m[c])]; })).map(p => p.join(",")).join(" ");
   let s = `<rect x="10" y="${sideY(0.42)}" width="${W-20}" height="${SIDE_H-10-sideY(0.42)}" fill="var(--table)" opacity=".5"/>`;
-  s += axes(SIDE, sideX, sideY, SIDE.z0, SIDE.z1, 0.05, 0.05, "y (m)", "z (m)");
+  s += axes(SIDE, sideX, sideY, SIDE.z0, SIDE.z1, 0.05, 0.05, "y (m)", "z (m)", window.STUDIO_WEBGL ? S.pick_region?.pan[1] ?? -.15 : 0, window.STUDIO_WEBGL ? .42 : 0);
   s += `<line x1="10" y1="${sideY(0.42)}" x2="${W-10}" y2="${sideY(0.42)}" stroke="var(--muted)" stroke-width="2"/>`;
-  s += `<text x="${W-12}" y="${sideY(0.42) + 12}" font-size="10" text-anchor="end" fill="var(--muted)">mặt bàn z=0.42</text>`;
+  s += `<text x="${W-12}" y="${sideY(0.42) + 12}" font-size="10" text-anchor="end" fill="var(--muted)">mặt bàn z=${window.STUDIO_WEBGL ? '0 (đế)' : '0.42'}</text>`;
   for (const g of S.bowl_geoms) {
     if (g.type === "cylinder") {
       const [, y, z] = g.pos, [r, halfHeight] = g.size;
@@ -498,7 +529,7 @@ function drawSide(fr, fs) {
   s += `<text x="${sideX(bm[0])}" y="${sideY(b[2]+S.bowl_height)-5}" text-anchor="middle" fill="var(--bowl)" font-size="10">bát</text>`;
   const rim = b[2] + S.bowl_height, lim = rim - (S.bowl_z_margin ?? S.box_half);
   s += `<line x1="${sideX(bm[0]-0.09)}" y1="${sideY(rim)}" x2="${sideX(bm[0]+0.09)}" y2="${sideY(rim)}" stroke="var(--bowl)" stroke-width="1.2"/>`;
-  s += `<text x="${sideX(bm[0]+0.095)}" y="${sideY(rim) + 3}" font-size="9" fill="var(--bowl)">miệng bát ${rim.toFixed(2)}</text>`;
+  s += `<text x="${sideX(bm[0]+0.095)}" y="${sideY(rim) + 3}" font-size="9" fill="var(--bowl)">miệng bát ${(rim-(window.STUDIO_WEBGL ? .42 : 0)).toFixed(2)}</text>`;
   s += `<line x1="${sideX(bm[0]-0.09)}" y1="${sideY(lim)}" x2="${sideX(bm[0]+0.09)}" y2="${sideY(lim)}" stroke="var(--bowl)" stroke-width="1" stroke-dasharray="2 3"/>`;
   // hộp ban đầu (nét đứt) và hộp hiện tại
   const b0 = fs[0].box, B0 = SM(b0);
@@ -508,7 +539,7 @@ function drawSide(fr, fs) {
   s += trails(sideX, sideY, 0, 2, "ghost");
   s += armSeg(fr, sideX, sideY, 0, 2, 7, .85, true);
   s += trails(sideX, sideY, 0, 2, "path");
-  s += `<polygon points="${hullPoly(boxV(fr.box, bq(fr), S.box_half), sideX, sideY, 0, 2)}" fill="var(--box)" stroke="#00000066"/>`;
+  s += objectsSvg(fr, sideX, sideY, 1, 2);
   if (fr.tg) {
     const t = SM(fr.tg), e = SM(fr.ee);
     s += `<line x1="${sideX(e[0])}" y1="${sideY(e[2])}" x2="${sideX(t[0])}" y2="${sideY(t[2])}" stroke="var(--warn)" stroke-width="2"/>`;
@@ -550,7 +581,7 @@ function drawInfo(fr, fs) {
   if (r) al += `<div class="alert info">Bước này kết thúc phase ${ph} (<b>${r}</b>) → phase ${fr.phn}: ${PHASE_NAME[fr.phn] || ""}</div>`;
 
   // Bảng toạ độ: mỗi dòng một vật, cột x y z thẳng hàng để đối chiếu
-  const row = (name, c, v) => `<tr style="color:${c}"><td>${name}</td>${v ? v.map(x => `<td class="num">${x.toFixed(3)}</td>`).join("") : '<td class="num">—</td><td class="num">—</td><td class="num">—</td>'}</tr>`;
+  const row = (name, c, v) => `<tr style="color:${c}"><td>${name}</td>${v ? (name === "Tay − đích" ? v : basePoint(v)).map(x => `<td class="num">${x.toFixed(3)}</td>`).join("") : '<td class="num">—</td><td class="num">—</td><td class="num">—</td>'}</tr>`;
   const dv3 = fr.tg ? fr.ee.map((x, k) => x - fr.tg[k]) : null;
   const tl = tiltDeg(fr), tilted = tl > 3;
   let html = al + `<div class="sec">ĐÍCH <em>tay đang nhắm tới đâu (mét)</em></div>
@@ -699,6 +730,7 @@ function makeProj(w, h) {
   };
 }
 function draw3d(fr, fs) {
+  if (window.STUDIO_WEBGL) { window.studioRender?.(fr, fs); return; }
   const cv = $("c3"), w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return;
   if (CAM.follow && fr && fr.ee) CAM.t = [fr.ee[0], fr.ee[1], fr.ee[2]];             // camera bám đầu tay
   const dpr = window.devicePixelRatio || 1;
@@ -778,12 +810,15 @@ function draw3d(fr, fs) {
       }
     }
     // hộp hiện tại cùng được sắp theo độ sâu với cánh tay, để tay che / bị hộp che đúng chỗ
-    { const Vb = boxV(f.box, bq(f), S.box_half), sb = new Float64Array(24);
-      Vb.forEach((v, k) => { const q = P(v); sb[3*k] = q[0]; sb[3*k+1] = q[1]; sb[3*k+2] = q[2]; });
-      [[0,1,3,2],[4,5,7,6],[0,1,5,4],[2,3,7,6],[0,2,6,4],[1,3,7,5]].forEach(([a, b, c, d], k) => {
-        const ctr = (sb[3*a+2] + sb[3*b+2] + sb[3*c+2] + sb[3*d+2]) / 4, sh = [0.55, 1, 0.75, 0.9, 0.65, 0.8][k];
-        tris.push([ctr, a, b, c, sb, [217, 54, 62], sh, 0.95], [ctr, a, c, d, sb, [217, 54, 62], sh, 0.95]);
-      }); }
+    for (const obj of replayObjects(f)) {
+      const col = hexRgbCam(obj.color);
+      objectFaces(obj).forEach((face, k) => {
+        const sb = new Float64Array(face.flatMap(v => P(v)));
+        const ctr = face.reduce((sum,_,n)=>sum+sb[3*n+2],0)/4;
+        const sh = obj.type === "sphere" ? .55+.45*Math.abs(Math.cos(Math.floor(k/24)*Math.PI/12)) : [0.55,1,.75,.9,.65,.8][k];
+        tris.push([ctr,0,1,2,sb,col,sh,.95],[ctr,0,2,3,sb,col,sh,.95]);
+      });
+    }
     tris.sort((p, q) => q[0] - p[0]);
     g.lineJoin = "round"; g.lineWidth = .6;
     for (const [, i0, i1, i2, sc, base, sh, al] of tris) {
@@ -886,7 +921,7 @@ function renderCam(cv, name, fr) {
   const FACES = [[0,1,3,2],[4,5,7,6],[0,1,5,4],[2,3,7,6],[0,2,6,4],[1,3,7,5]], SH = [0.55, 1, 0.75, 0.9, 0.65, 0.8];
   S.bowl_geoms.forEach(gm => { if (gm.type === "cylinder") { const ring = Array.from({length: 18}, (_, q) => { const t = q/18*2*Math.PI; return [gm.pos[0] + gm.size[0]*Math.cos(t), gm.pos[1] + gm.size[0]*Math.sin(t), gm.pos[2] + gm.size[1]]; }); poly(ring, [60,110,210], .9, 50); return; }
     const V = wallCorners3(gm); FACES.forEach((F2, k2) => poly(F2.map(q => V[q]), [60,110,210], SH[k2])); });
-  const Vb = boxV(fr.box, bq(fr), S.box_half); FACES.forEach((F2, k2) => poly(F2.map(q => Vb[q]), [217,54,62], SH[k2]));
+  replayObjects(fr).forEach(obj => objectFaces(obj).forEach((face,k) => poly(face,hexRgbCam(obj.color),obj.type === "sphere" ? .8 : SH[k])));
   const W3 = armWorld(fr), L = [0.35, -0.45, 0.82], ln = Math.hypot(...L);
   for (const nm of Object.keys(S.arm_mesh)) { const wv = W3[nm], Fi = S.arm_mesh[nm].f, n = wv.length / 3, cc = new Array(n);
     for (let k2 = 0; k2 < n; k2++) cc[k2] = toCam([wv[3*k2], wv[3*k2+1], wv[3*k2+2]]);
@@ -909,6 +944,7 @@ let SHOW_CAM = true;
 try { SHOW_CAM = localStorage.getItem("showArmCam") !== "0"; } catch (e) {}
 function applyCamToggle() { $("cameraFeeds").hidden = !SHOW_CAM; $("bCam").setAttribute("aria-pressed", String(SHOW_CAM));  }
 function drawCams(fr) {
+  if (window.STUDIO_WEBGL) return;
   if (!SHOW_CAM) return;
   renderCam($("camA"), "arm_cam", fr);
 }
@@ -935,18 +971,24 @@ document.addEventListener("fullscreenchange", () => { fsLabels(); setTimeout(ren
 document.addEventListener("keydown", e => { if (e.key === "Escape") { const f = document.querySelector(".fs-fallback"); if (f) { f.classList.remove("fs-fallback"); fsLabels(); render(); } } });
 
 /* ---------- điều khiển ---------- */
+let studioProjectionAt = -Infinity;
 function render() {
   const fs = F(), fr = fs[i];
-  drawTop(fr, fs); drawSide(fr, fs); draw3d(fr, fs); drawCams(fr); drawInfo(fr, fs); drawChk(fr);
+  const focus3d=window.STUDIO_WEBGL && document.documentElement.classList.contains('studio-focus3d');
+  const projectionDue=!window.STUDIO_WEBGL || !timer || performance.now()-studioProjectionAt>=66;
+  if(!focus3d && projectionDue){drawTop(fr, fs);drawSide(fr, fs);studioProjectionAt=performance.now();}
+  draw3d(fr, fs); drawCams(fr);
+  if(!focus3d){drawInfo(fr, fs);drawChk(fr);}
   $("rng").value = i;
   if ($("fsRng")) { $("fsRng").max = fs.length - 1; $("fsRng").value = i; $("fsInfo").textContent = ` bước ${i}/${fs.length - 1} · phase ${fr.ph} ${PHASE_NAME[fr.ph] || ""}`; }
   $("stepCount").value = `${i} / ${fs.length - 1} · ${(i * STEP_DT).toFixed(2)} / ${((fs.length - 1) * STEP_DT).toFixed(2)} s thực tế`;
   updatePlayhead();
+  if(focus3d)return;
   const cur = $("logw").querySelector("tr.cur"); if (cur) cur.classList.remove("cur");
   const row = $("logw").querySelector(`tr[data-k="${i}"]`);
   if (row) { row.classList.add("cur"); const w = $("logw"), t = row.offsetTop; if (t < w.scrollTop + 30 || t > w.scrollTop + w.clientHeight - 30) w.scrollTop = t - w.clientHeight / 2; }
 }
-function go(k) { i = Math.max(0, Math.min(F().length - 1, k)); render(); }
+function go(k,playing=false) { if(window.STUDIO_WEBGL && !playing && timer)stop(); i = Math.max(0, Math.min(F().length - 1, k)); render(); }
 function nextPhase() {
   const fs = F(); let k = i + 1;
   while (k < fs.length - 1 && fs[k].ph === fs[k+1].ph) k++;
@@ -958,7 +1000,7 @@ function prevPhase() {
   go(Math.max(0, k - 1));
 }
 const PLAY_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="7 5 19 12 7 19"/></svg>', PAUSE_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="14" y="5" width="3" height="14" rx="1"/><rect x="7" y="5" width="3" height="14" rx="1"/></svg>';
-function stop() { if (timer) { clearInterval(timer); timer = null; } $("bPlay").innerHTML = PLAY_ICON; $("bPlay").setAttribute("aria-label", "Phát"); }
+function stop() { if (timer) { clearInterval(timer); timer = null; } $("bPlay").innerHTML = PLAY_ICON; $("bPlay").setAttribute("aria-label", "Phát"); if(window.STUDIO_WEBGL)window.studioPlaybackChanged?.(); }
 function play() {
   if (timer) return stop();
   if (i >= F().length - 1) i = 0;
@@ -967,9 +1009,10 @@ function play() {
   let t0 = performance.now(), i0 = i;
   timer = setInterval(() => {
     const k = Math.min(F().length - 1, i0 + Math.floor((performance.now() - t0) / 1000 * speed / STEP_DT));
-    if (k !== i) go(k);
+    if (k !== i) go(k,true);
     if (i >= F().length - 1) stop();
   }, 16);
+  if(window.STUDIO_WEBGL)window.studioPlaybackChanged?.();
 }
 function loadEp(k) {
   stop(); ep = k; i = 0;
@@ -1000,8 +1043,12 @@ function applySeedFilters() {
     $("epPos").textContent = `${matches.indexOf(ep)+1}/${matches.length} seed`;
   }
 }
-$("flt").onchange = applySeedFilters;
-$("mixResult").onchange = applySeedFilters;
+// Nhớ bộ lọc Vùng và Kết quả qua F5; giá trị lưu không còn trong danh sách (đổi giao diện) thì bỏ qua
+for (const [id, key] of [["flt", "replayZone"], ["mixResult", "replayResult"]]) {
+  const v = store.get(key);
+  if (v && [...$(id).options].some(o => o.value === v)) $(id).value = v;
+  $(id).onchange = () => { store.set(key, $(id).value); applySeedFilters(); };
+}
 applySeedFilters();
 $("rng").oninput = () => go(+$("rng").value);
 $("bFirst").onclick = () => go(0);
@@ -1139,10 +1186,6 @@ document.addEventListener("keydown", e => {
 // Nhớ ván đang xem và khung hình trong localStorage để F5 không mất. Khoá theo TÊN ván (CASE 1... hoặc seed N),
 // không theo số thứ tự, vì danh sách đổi sau mỗi lần chạy select_seeds.
 const epKey = e => String(e.name || "seed " + e.seed);
-const store = {
-  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
-  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
-};
 const speedSlider = $("spd");
 function syncPlaybackSpeed() {
   speed = Number(speedSlider.value);
@@ -1163,10 +1206,13 @@ speedSlider.oninput = () => {
 const saveView = () => { store.set("replayEp", epKey(EPS[ep])); store.set("replayFrame", String(i)); store.set("replayLen", String(F().length)); };
 {
   const saved = store.get("replayEp");
-  let def = saved ? EPS.findIndex(e => epKey(e) === saved) : -1;
+  const shown = visible();                                                // chỉ khôi phục ván còn nằm trong bộ lọc đã khôi phục
+  let def = saved ? EPS.findIndex((e, k) => epKey(e) === saved && shown.includes(k)) : -1;
   const restored = def >= 0;
-  if (def < 0) def = EPS.findIndex(e => /^CASE 1/.test(e.name || ""));   // mặc định: hộp XA nhất
-  loadEp(def >= 0 ? def : 0);
+  if (def < 0) def = EPS.findIndex((e, k) => /^CASE 1/.test(e.name || "") && shown.includes(k));   // mặc định: hộp XA nhất
+  if (def < 0) def = shown.length ? shown[0] : 0;
+  loadEp(def);
+  if (shown.includes(def)) $("epPos").textContent = `${shown.indexOf(def) + 1}/${shown.length} seed`;
   if (restored && store.get("replayLen") === String(F().length)) go(Math.min(+store.get("replayFrame") || 0, F().length - 1));
 }
 // lưu mỗi khi đổi ván hoặc khung hình

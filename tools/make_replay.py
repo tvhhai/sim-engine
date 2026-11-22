@@ -72,7 +72,7 @@ def cameras_export(env):
     return out
 
 
-def arm_model_export(env):
+def arm_model_export(env, exact=False):
     """Cánh tay THẬT để HTML tự vẽ: cây khung (vị trí/hướng cục bộ + trục khớp) và lưới tam giác đã giản lược của từng
     body, toạ độ trong khung body. Mỗi khung hình chỉ cần góc khớp (jq, fo) rồi HTML tự tính động học thuận.
     """
@@ -100,14 +100,14 @@ def arm_model_export(env):
             v = m.mesh_vert[va:va + vn].astype(float)
             v = v @ _quat_to_mat(m.geom_quat[g]).T + m.geom_pos[g]       # khung body
             small = (mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_MESH, mid) or "").startswith("wrist_cam")   # vật nhỏ (camera): giữ chi tiết
-            nv, nf = decimate(v, m.mesh_face[fa:fa + fn], 0.0015 if small else MESH_CELL)
+            nv, nf = (v, m.mesh_face[fa:fa + fn]) if exact else decimate(v, m.mesh_face[fa:fa + fn], 0.0015 if small else MESH_CELL)
             T.append(nf + sum(len(x) for x in V))
             material_id = m.geom_matid[g]
             rgba = m.mat_rgba[material_id] if material_id >= 0 else m.geom_rgba[g]
             colors.append([len(nf), [round(float(channel) * 255) for channel in rgba[:3]], (2 if "module" in (mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_MESH, mid) or "") else 1) if small else 0])   # phần tử 3: 1 = mesh camera (không đổi màu theo va chạm), 2 = phần ống kính (được ưu tiên vẽ trước mặt hộp camera)
             V.append(nv)
         if V:
-            meshes[n] = {"v": [round(float(x), 4) for x in np.concatenate(V).ravel()],
+            meshes[n] = {"v": [round(float(x), 7 if exact else 4) for x in np.concatenate(V).ravel()],
                          "f": np.concatenate(T).ravel().astype(int).tolist(), "colors": colors}
     return kin, meshes
 
@@ -208,8 +208,8 @@ class Recorder:
         self._cam_pairs = [(a, w) for a in geoms(bid("wrist_cam_arm")) for n in ("base", "shoulder", "upper_arm", "table") for w in geoms(bid(n))]
 
     def cam_clearance_mm(self):
-        """Khoảng cách nhỏ nhất (mm) từ camera cổ tay tới đế, vai, cánh tay trên và mặt bàn; âm = camera xuyên vào. Camera không có va chạm trong mô phỏng,
-        nên đây là phép đo hình học để cảnh báo (xem nhãn "CAMERA" ở select_seeds)."""
+        """Khoảng cách nhỏ nhất (mm) từ camera cổ tay tới đế, vai, cánh tay trên và mặt bàn; âm = camera lún vào. Camera có va chạm (geom wrist_cam_*_col)
+        nên chỉ lún vài mm khi bị ép; đây là phép đo hình học để cảnh báo (xem nhãn "CAMERA" ở select_seeds)."""
         fromto = np.zeros(6)
         return min(mujoco.mj_geomDistance(self.model, self.data, a, w, 0.1, fromto) for a, w in self._cam_pairs) * 1000.0
 
@@ -276,7 +276,7 @@ class Recorder:
 
     def frame(self, step, ph, phn, ps, info, action_grip):
         ik_deg, ik_err = self.ik_info()
-        return {
+        result = {
             "ik": ik_deg,                                # 5 góc khớp đích do IK tính (độ), None nếu phase chờ
             "ie": ik_err,                                # sai số IK (m): tay dự đoán so với đích
             "jq": self.joint_deg(),                      # 5 góc khớp thật (độ)
@@ -303,6 +303,14 @@ class Recorder:
             "ct": self.box_contacts(),
             "bc": self.bowl_contacts(),                  # khúc tay / ngón đang chạm bát
         }
+        if self.env.lab_objects:
+            result["objects"] = [dict(obj, pos=self.data.xpos[self.model.body(obj["body"]).id].tolist(),
+                                      quat=self.data.xquat[self.model.body(obj["body"]).id].tolist())
+                                 for obj in self.env.lab_objects]
+            result["pose"] = {name: {"p": self.data.xpos[self.model.body(name).id].tolist(),
+                                      "R": self.data.xmat[self.model.body(name).id].tolist()}
+                              for name in ARM_BODIES + [JAW_BODY, "wrist_cam_arm"]}
+        return result
 
     def run(self, seed, options=None):
         env, policy = self.env, self.policy
@@ -311,6 +319,10 @@ class Recorder:
         self.target = None
         self.threshold = None
         frames = [self.frame(0, 0, 0, 0, info, 1.0)]     # khung 0: trước khi chạy bước nào
+        blocked = (options or {}).get("blocked_reason")
+        if blocked:
+            return {"seed": seed, "bowl": r3(env.get_bowl_pos()), "bowl_geoms": bowl_geom_list(env),
+                    "success": False, "steps": 0, "frames": frames, "blocked_reason": blocked}
         ps = 0
         for step in range(1, config.MAX_EPISODE_STEPS + 1):
             before = policy._phase
@@ -341,6 +353,70 @@ class Recorder:
             "steps": len(frames) - 1,
             "frames": frames,
         }
+
+
+def write_replay(env, episodes, out, policy_name):
+    """Write existing episodes without running any seeds or updating batch metadata."""
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # Thông tin cố định của cảnh để HTML vẽ đúng tỷ lệ
+    scene = {
+        "bowl": r3(env.get_bowl_pos()),
+        "bowl_radius": config.BOWL_INNER_RADIUS,   # ngưỡng ngang để vào bát = lòng bát (tâm hộp phải nằm trong vòng này)
+        "bowl_height": config.BOWL_HEIGHT,
+        "bowl_inner": config.BOWL_INNER_RADIUS,      # lòng bát: tâm hộp phải cách tâm bát ít hơn mức này
+        "settled_speed": config.SETTLED_SPEED,       # hộp phải chậm hơn mức này (m/s) mới tính là nằm yên
+        "box_half": config.BOX_HALF,
+        "unreachable_region": {"pan": list(config.PICK_PAN_XY), "angle_deg": config.PAN_LIMIT_DEG + config.PAN_UNREACHABLE_MARGIN_DEG, "radius_m": config.PICK_UNREACHABLE_RADIUS, "inner_radius_m": config.PICK_UNREACHABLE_INNER_RADIUS},   # giới hạn đỏ dùng chung với policy
+        "bowl_z_margin": config.BOX_IN_BOWL_MARGIN,   # tâm hộp phải thấp hơn miệng bát chừng này mới tính trong bát
+        "table": list(config.TABLE_HALF),            # nửa kích thước bàn (x, y)
+        "max_steps": config.MAX_EPISODE_STEPS,
+        "cam_tilt_deg": config.WRIST_CAM_TILT_DEG,     # độ gập hiện tại của giá đỡ camera cổ tay (để thanh "Gập cam" trong replay tính độ gập thêm)
+        "step_dt": config.PHYSICS_SUBSTEPS * config.PHYSICS_TIMESTEP,   # giây mô phỏng thật mỗi bước điều khiển (để phát replay đúng thời gian thực)
+        "joints": config.JOINT_NAMES[:5],
+        # Hình học THẬT của bát (đọc từ model): đáy hình trụ + 8 tấm tường hình hộp. Toạ độ tâm tính theo thế giới.
+        "bowl_geoms": bowl_geom_list(env),
+        "arm_bodies": ARM_BODIES,            # đoạn k nằm giữa khớp k và khớp k+1 (xem JS: đánh số khớp 1-5)
+        "policy": policy_name,
+    }
+    scene["kin"], scene["arm_mesh"] = arm_model_export(env)
+    scene["cams"] = cameras_export(env)           # camera trong model, để HTML dựng lại góc nhìn của chúng     # cánh tay THẬT: cây khung + lưới tam giác để HTML tự vẽ
+    # Vùng với tới của cánh tay (do joint_lab tính và lưu); nếu chưa có thì bỏ qua và nhắc cách tạo
+    # Vùng GẮP ĐƯỢC THẬT: hình quạt trong config.PICK_REGION và các điểm đã quét (tools/scan_pick_region.py -> docs/pick_scan.json)
+    scene["pick_region"] = dict(config.PICK_REGION, pan=list(config.PICK_PAN_XY), bowl_clearance=config.BOX_BOWL_CLEARANCE)
+    scan_points = []
+    for filename in ("pick_scan.json", "pick_scan_inner.json", "pick_scan_outer.json"):
+        scan_path = os.path.join(here, "docs", filename)
+        if os.path.isfile(scan_path):
+            with open(scan_path, encoding="utf-8") as f:
+                scan_points.extend([[*point["xy"], int(point["ok"])] for point in json.load(f)["points"]])
+    if scan_points:
+        scene["pick_scan"] = scan_points
+    reach_path = os.path.join(here, "docs", "reach_envelope.json")
+    if os.path.exists(reach_path):
+        with open(reach_path, encoding="utf-8") as f:
+            scene["reach"] = json.load(f)
+    else:
+        print("Chưa có docs/reach_envelope.json nên replay chưa vẽ vùng với tới. Chạy python -m sim_engine.joint_lab một lần để tính.")
+    payload = json.dumps({"scene": scene, "episodes": episodes}, separators=(",", ":"), ensure_ascii=False)
+
+    template_path = os.path.join(here, "docs", "replay_template.html")
+    with open(template_path, encoding="utf-8") as f:
+        template = f.read()
+    asset_dir = os.path.join(here, "docs", "ui")
+    for marker, filename in (
+        ("/*__SHARED_CSS__*/", "accessibility.css"),
+        ("/*__REPLAY_CSS__*/", "replay.css"),
+        ("/*__REPLAY_JS__*/", "replay.js"),
+    ):
+        with open(os.path.join(asset_dir, filename), encoding="utf-8") as asset:
+            template = template.replace(marker, asset.read())
+    marker = "/*__DATA__*/null"
+    if marker not in template:
+        raise SystemExit(f"Không tìm thấy {marker} trong {template_path}")
+    with open(out, "w", encoding="utf-8") as f:
+        f.write(template.replace(marker, payload))
+    return {"scene": scene, "episodes": episodes}
+
 
 
 def main():
@@ -430,63 +506,7 @@ def main():
     with open(prev_path, "w", encoding="utf-8") as f:
         json.dump(prev, f, ensure_ascii=False)
 
-    # Thông tin cố định của cảnh để HTML vẽ đúng tỷ lệ
-    scene = {
-        "bowl": r3(env.get_bowl_pos()),
-        "bowl_radius": config.BOWL_INNER_RADIUS,   # ngưỡng ngang để vào bát = lòng bát (tâm hộp phải nằm trong vòng này)
-        "bowl_height": config.BOWL_HEIGHT,
-        "bowl_inner": config.BOWL_INNER_RADIUS,      # lòng bát: tâm hộp phải cách tâm bát ít hơn mức này
-        "settled_speed": config.SETTLED_SPEED,       # hộp phải chậm hơn mức này (m/s) mới tính là nằm yên
-        "box_half": config.BOX_HALF,
-        "unreachable_region": {"pan": list(config.PICK_PAN_XY), "angle_deg": config.PAN_LIMIT_DEG + config.PAN_UNREACHABLE_MARGIN_DEG, "radius_m": config.PICK_UNREACHABLE_RADIUS, "inner_radius_m": config.PICK_UNREACHABLE_INNER_RADIUS},   # giới hạn đỏ dùng chung với policy
-        "bowl_z_margin": config.BOX_IN_BOWL_MARGIN,   # tâm hộp phải thấp hơn miệng bát chừng này mới tính trong bát
-        "table": list(config.TABLE_HALF),            # nửa kích thước bàn (x, y)
-        "max_steps": config.MAX_EPISODE_STEPS,
-        "cam_tilt_deg": config.WRIST_CAM_TILT_DEG,     # độ gập hiện tại của giá đỡ camera cổ tay (để thanh "Gập cam" trong replay tính độ gập thêm)
-        "step_dt": config.PHYSICS_SUBSTEPS * config.PHYSICS_TIMESTEP,   # giây mô phỏng thật mỗi bước điều khiển (để phát replay đúng thời gian thực)
-        "joints": config.JOINT_NAMES[:5],
-        # Hình học THẬT của bát (đọc từ model): đáy hình trụ + 8 tấm tường hình hộp. Toạ độ tâm tính theo thế giới.
-        "bowl_geoms": bowl_geom_list(env),
-        "arm_bodies": ARM_BODIES,            # đoạn k nằm giữa khớp k và khớp k+1 (xem JS: đánh số khớp 1-5)
-        "policy": args.policy,
-    }
-    scene["kin"], scene["arm_mesh"] = arm_model_export(env)
-    scene["cams"] = cameras_export(env)           # camera trong model, để HTML dựng lại góc nhìn của chúng     # cánh tay THẬT: cây khung + lưới tam giác để HTML tự vẽ
-    # Vùng với tới của cánh tay (do joint_lab tính và lưu); nếu chưa có thì bỏ qua và nhắc cách tạo
-    # Vùng GẮP ĐƯỢC THẬT: hình quạt trong config.PICK_REGION và các điểm đã quét (tools/scan_pick_region.py -> docs/pick_scan.json)
-    scene["pick_region"] = dict(config.PICK_REGION, pan=list(config.PICK_PAN_XY), bowl_clearance=config.BOX_BOWL_CLEARANCE)
-    scan_points = []
-    for filename in ("pick_scan.json", "pick_scan_inner.json", "pick_scan_outer.json"):
-        scan_path = os.path.join(here, "docs", filename)
-        if os.path.isfile(scan_path):
-            with open(scan_path, encoding="utf-8") as f:
-                scan_points.extend([[*point["xy"], int(point["ok"])] for point in json.load(f)["points"]])
-    if scan_points:
-        scene["pick_scan"] = scan_points
-    reach_path = os.path.join(here, "docs", "reach_envelope.json")
-    if os.path.exists(reach_path):
-        with open(reach_path, encoding="utf-8") as f:
-            scene["reach"] = json.load(f)
-    else:
-        print("Chưa có docs/reach_envelope.json nên replay chưa vẽ vùng với tới. Chạy python -m sim_engine.joint_lab một lần để tính.")
-    payload = json.dumps({"scene": scene, "episodes": episodes}, separators=(",", ":"), ensure_ascii=False)
-
-    template_path = os.path.join(here, "docs", "replay_template.html")
-    with open(template_path, encoding="utf-8") as f:
-        template = f.read()
-    asset_dir = os.path.join(here, "docs", "ui")
-    for marker, filename in (
-        ("/*__SHARED_CSS__*/", "accessibility.css"),
-        ("/*__REPLAY_CSS__*/", "replay.css"),
-        ("/*__REPLAY_JS__*/", "replay.js"),
-    ):
-        with open(os.path.join(asset_dir, filename), encoding="utf-8") as asset:
-            template = template.replace(marker, asset.read())
-    marker = "/*__DATA__*/null"
-    if marker not in template:
-        raise SystemExit(f"Không tìm thấy {marker} trong {template_path}")
-    with open(args.out, "w", encoding="utf-8") as f:
-        f.write(template.replace(marker, payload))
+    write_replay(env, episodes, args.out, args.policy)
 
     ok = sum(e["success"] for e in episodes)
     print(f"\nĐã ghi {args.out} ({os.path.getsize(args.out) / 1e6:.1f} MB), {ok}/{len(episodes)} ván thành công.")
