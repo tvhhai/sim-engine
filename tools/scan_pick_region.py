@@ -1,5 +1,5 @@
 """Quét vùng GẮP ĐƯỢC THẬT của cánh tay: đặt hộp ở lưới điểm theo toạ độ cực quanh trục khớp 1, chạy trọn một ván bằng policy
-hiện tại, ghi lại ván nào thành công. Kết quả ghi vào docs/pick_scan.json; replay vẽ vùng gắp được từ đó (không còn vẽ theo
+hiện tại, ghi lại ván nào thành công. Kết quả ghi vào results/pick_scan.json; replay vẽ vùng gắp được từ đó (không còn vẽ theo
 tầm với hình học của IK) và env lấy hình quạt đặt hộp ngẫu nhiên từ config.PICK_REGION (đặt dựa trên bản đồ này).
 
 Cách dùng (đứng ở thư mục chứa sim_engine, đã kích hoạt .venv):
@@ -19,7 +19,7 @@ import os
 
 import numpy as np
 
-from .. import config
+from .. import config, paths
 from ..env import SO101PickPlaceEnv
 
 PAN = np.array(config.PICK_PAN_XY, dtype=float)
@@ -65,10 +65,9 @@ def main():
     ap.add_argument("--r", type=float, nargs=3, default=[0.08, 0.42, 0.02], metavar=("MIN", "MAX", "STEP"))
     ap.add_argument("--angle", type=int, nargs=3, default=[-130, 120, 10], metavar=("MIN", "MAX", "STEP"))
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1))
-    ap.add_argument("--seeds-only", action="store_true", help="không quét lại: đọc docs/pick_scan.json rồi chỉ cập nhật khối SCAN-SEEDS")
+    ap.add_argument("--seeds-only", action="store_true", help="không quét lại: đọc results/pick_scan.json rồi chỉ cập nhật khối SCAN-SEEDS")
     ap.add_argument("--update-seeds", action="store_true", help="ghi lại khối SCAN-SEEDS trong config.py: các điểm quét hỏng trong vùng gắp thành seed cố định 7..")
-    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    ap.add_argument("--out", default=os.path.join(here, "docs", "pick_scan.json"))
+    ap.add_argument("--out", default=str(paths.PICK_SCAN))
     args = ap.parse_args()
     if args.seeds_only:
         with open(args.out, encoding="utf-8") as f:

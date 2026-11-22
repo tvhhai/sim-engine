@@ -1,6 +1,6 @@
 """Nghiên cứu VÙNG HỖN HỢP: chạy lại từng điểm quét nằm ngoài hình quạt gắp được (và các điểm hỏng trong quạt), phân loại NGUYÊN NHÂN hỏng
 (chưa kẹp được / kẹp được nhưng không nhấc / nhấc rồi tuột / hết bước ở phase nào) và gom theo vòng bán kính, bên trái-phải.
-Kết quả: docs/mixed_zone_study.json + bảng in ra.
+Kết quả: results/mixed_zone_study.json + bảng in ra.
 
     python -m sim_engine.tools.mixed_zone_study [--workers N]
 """
@@ -8,12 +8,12 @@ import argparse, collections, contextlib, io, json, math, multiprocessing as mp,
 
 import numpy as np
 
-from .. import box_sampling, config
+from .. import box_sampling, config, paths
 from ..env import SO101PickPlaceEnv
 from ..policies.scripted_policy import ScriptedPolicy
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DOCS = os.path.join(HERE, "docs")
+DOCS = str(paths.RESULTS)
 
 
 def load_points():

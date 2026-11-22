@@ -76,16 +76,16 @@ navigation, contact diagnostics and clickable step logs. Both full and focused
 and reopen them through the URL. Lab and Studio Replay display coordinates
 relative to the fixed base origin; saved scenes and physics retain world coordinates.
 
-Each click runs exactly one trial named `lab`, replacing `docs/replay_lab.json`
-and the compatibility `docs/replay_lab.html`.
+Each click runs exactly one trial named `lab`, replacing `results/studio/replay_lab.json`
+and the compatibility `results/studio/replay_lab.html`.
 Every run also receives a unique ID and an immutable archive under
-`docs/studio_runs/`. The History screen supports search, result filters,
+`results/studio/studio_runs/`. The History screen supports search, result filters,
 favorites, names/notes, comparison, scene export, loading a scene into Lab,
 and rerunning just that scene.
-The latest submitted setup is saved in `docs/lab_case.json` and restored when you reopen
+The latest submitted setup is saved in `results/studio/lab_case.json` and restored when you reopen
 the lab. The browser separately saves the working draft across navigation and
 reloads. Settings controls theme, navigation, visible Lab cards and playback
-defaults, with validated JSON import/export. Batch seeds and `docs/replay.html`
+defaults, with validated JSON import/export. Batch seeds and `results/replay.html`
 are left untouched. Keep the Python server
 running while editing, starting trials, or viewing the React replay. The older
 compatibility replay can also be opened offline. The previous lab UI remains at `/legacy`.
@@ -428,8 +428,13 @@ sim_engine/
         train.py
         evaluate.py
 
-    docs/                      # Guide, generated replay, and replay inputs
-        ui/                    # Shared focus styles and replay-specific CSS/JS
+    paths.py                   # Shared file locations (docs, results, static)
+    docs/                      # Documentation only: guide and images
+    results/                   # Generated data: pick scans, replay seed lists
+                               #   replay.html/.json and studio/ are local, not committed
+    static/
+        replay/                # Canvas replay: template, CSS, JS, Studio bridge
+        studio/                # Built Studio React app (from web/joint-lab)
 
     assets/
         so101_real_scene.xml   # MuJoCo scene (REAL SO-101 meshes + table + objects), meshes in assets/so101/

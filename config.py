@@ -71,7 +71,7 @@ BOX_IN_BOWL_MARGIN = 0.005  # "hộp trong bát": TÂM hộp phải thấp hơn 
 BOX_RANDOM_RANGE = 0.03     # hộp được đặt ngẫu nhiên trong ±3 cm quanh BOX_DEFAULT_POS (theo x, y)
 BOWL_RANDOM_RANGE = 0.0     # bát đứng yên; đặt > 0 để bát cũng ngẫu nhiên trong ±giá trị này
 
-# ---- Vị trí hộp ngẫu nhiên: HÌNH QUẠT quanh trục khớp 1, đo thật bằng quét gắp (tools/scan_pick_region.py -> docs/pick_scan.json) ----
+# ---- Vị trí hộp ngẫu nhiên: HÌNH QUẠT quanh trục khớp 1, đo thật bằng quét gắp (tools/scan_pick_region.py -> results/pick_scan.json) ----
 PICK_PAN_XY = (0.0, -0.15)           # trục khớp 1 (x, y) trong world
 PICK_REGION = {                       # vùng hộp đặt được: r = khoảng cách tới trục khớp 1; góc đo từ hướng tay (+y) về phía +x
     "r_min": 0.12, "r_max": 0.42,     # đo (quét lại sau khi sửa roll hộp xa): r 14-32 cm gắp hết; r 37-42 cm gắp 94-98% mỗi vòng; r 43 cm 71%; r 44 cm gần như hỏng hết

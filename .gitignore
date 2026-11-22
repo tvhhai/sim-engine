@@ -16,15 +16,11 @@ outputs/
 .DS_Store
 Thumbs.db
 
-# Số bước của lần make_replay trước (để in chênh lệch), chỉ là trạng thái cục bộ
-docs/replay_prev_steps.json
-docs/lab_case.json
-docs/lab_case.tmp
-docs/replay_lab.html
-docs/replay_lab.tmp
-docs/replay_lab.json
-docs/replay_lab.json.tmp
-docs/studio_runs/
+# Kết quả sinh lại được (make_replay, Studio), chỉ là trạng thái cục bộ
+results/replay.html
+results/replay.json
+results/replay_prev_steps.json
+results/studio/
 web/joint-lab/node_modules/
 web/joint-lab/*.tsbuildinfo
 web/joint-lab/.npm-cache/

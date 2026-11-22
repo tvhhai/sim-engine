@@ -32,7 +32,7 @@ from urllib.parse import parse_qs, urlparse
 import mujoco
 import numpy as np
 
-from .. import config
+from .. import config, paths
 from ..env import SO101PickPlaceEnv
 from .make_replay import arm_model_export, bowl_geom_list
 from ..lab_scene import normalize_objects
@@ -295,7 +295,7 @@ class Lab:
                 "tilt": round(math.degrees(math.acos(max(-1, min(1, -a[2])))), 1), "iters": used + 1}
 
     # ---------- vùng với tới ----------
-    PICK_SCAN_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "pick_scan.json")
+    PICK_SCAN_FILE = paths.PICK_SCAN
 
     def pick_scan(self):
         """Các điểm đã quét gắp thật (tools/scan_pick_region.py): [[x, y, 1 nếu gắp được], ...]."""
@@ -305,7 +305,7 @@ class Lab:
         except OSError:
             return []
 
-    REACH_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "reach_envelope.json")
+    REACH_FILE = paths.REACH_ENVELOPE
     REACH_BANDS = [(0.455, "gắp (đầu tay z 0.455)"), (0.50, "thả (z 0.50)"), (0.62, "trên cao an toàn (z 0.62)")]
 
     def _reach_solve(self, rd, target, q0, vertical, w=0.3, iters=150):
@@ -796,14 +796,14 @@ def make_handler(lab):
                                 grip=fl("grip", config.GRIPPER_OPEN_RAD), bx=fl("bx", 0.15), by=fl("by"), byaw=fl("byaw"),
                                 wx=fl("wx", -0.15), wy=fl("wy"))
             try:
-                if u.path == "/" and (Path(__file__).resolve().parents[1] / "docs/lab/index.html").is_file():
+                if u.path == "/" and (paths.STUDIO_BUILD / "index.html").is_file():
                     self.send_response(302)
                     self.send_header("Location", "/lab/")
                     self.end_headers()
                 elif u.path == "/" or u.path == "/legacy":
                     self._send(PAGE, "text/html")
                 elif u.path.startswith("/lab/"):
-                    root = (Path(__file__).resolve().parents[1] / "docs/lab").resolve()
+                    root = paths.STUDIO_BUILD.resolve()
                     path = (root / (u.path[5:] or "index.html")).resolve()
                     if path.is_relative_to(root) and path.is_file():
                         self._send(path.read_bytes(), mimetypes.guess_type(path.name)[0] or "application/octet-stream")
@@ -878,7 +878,7 @@ def main():
     ap = argparse.ArgumentParser(description="Phòng thí nghiệm khớp: kéo thanh trượt chỉnh tay robot")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--no-open", action="store_true", help="không tự mở trình duyệt")
-    ap.add_argument("--recompute-reach", action="store_true", help="tính lại vùng với tới (mặc định dùng file docs/reach_envelope.json nếu có)")
+    ap.add_argument("--recompute-reach", action="store_true", help="tính lại vùng với tới (mặc định dùng file results/reach_envelope.json nếu có)")
     args = ap.parse_args()
     lab = Lab()
     threading.Thread(target=lab.ensure_reach, kwargs={"force": args.recompute_reach}, daemon=True).start()

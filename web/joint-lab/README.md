@@ -1,6 +1,6 @@
 # Sim Studio · React edition
 
-This is the source of the local simulator UI, built into `docs/lab/` and served
+This is the source of the local simulator UI, built into `static/studio/` and served
 by `python -m sim_engine.joint_lab`. Open `http://127.0.0.1:8765/lab/`.
 The previous viewer is available at `/legacy`.
 
@@ -20,7 +20,7 @@ Python command after building. All JS/CSS dependencies are bundled locally.
 | Choice | Purpose and assessment |
 | --- | --- |
 | React 19 + TypeScript | Typed scene definitions and reusable panels; editor and replay share the same 3D renderer. React Three Fiber 9 matches React 19. |
-| Vite | Small local SPA build; no Node server needed during normal simulator use. Build outputs are committed under `docs/lab`. |
+| Vite | Small local SPA build; no Node server needed during normal simulator use. Build outputs are committed under `static/studio`. |
 | Mantine 8 | Actual UI library for accessible inputs, sliders, drawers, switches, color selection, and responsive controls. No runtime CSS CDN. |
 | Three.js + React Three Fiber + Drei | WebGL, original robot mesh buffers, lighting, orbit and transform controls. Transforms come from MuJoCo; there is no second JavaScript IK implementation. |
 | Python + MuJoCo | Authoritative geometry, IK, gravity, contact, friction, and trajectories. Three.js displays states; switching rendering libraries does not improve the underlying robot calibration. |
@@ -47,7 +47,7 @@ operates on the selected target; the other objects participate in physics as
 obstacles. Automatic multi-object sequencing and color sorting are future work.
 The existing controller is tuned for boxes, so sphere grasps can fail naturally.
 
-Only one fixed `lab` seed is run; results replace `docs/replay_lab.json` and the
+Only one fixed `lab` seed is run; results replace `results/studio/replay_lab.json` and the
 compatibility HTML. Batch seed lists, batch replay and batch step history are
 never regenerated. `lab_case.json` stores the last submitted scene. Visibility
 settings and the editable draft are versioned in browser localStorage. Both
@@ -70,7 +70,8 @@ replay renderers support all recorded objects, shapes and colors.
   do no playback work in focused 3D mode; SVG projections update at most 15 Hz
   during playback and exactly on pause/seek. A same-origin adapter synchronizes episode
   and step with Studio's URL without reloading during scrubbing. Existing batch
-  replay data is read from `docs/replay.html`; it is never regenerated here.
+  replay data is read from `results/replay.json` (same data as the canvas
+  `results/replay.html`); it is never regenerated here.
   Lab recordings also have a Three.js playback mode. Step bookmarks are local
   to this browser; exported replay JSON contains the episode, not bookmarks.
   Studio owns the single source/episode selector, result summary and fullscreen
@@ -83,7 +84,7 @@ replay renderers support all recorded objects, shapes and colors.
 - **Lab** edits the shared scene and starts exactly one trial. Navigation and
   browser reload preserve the draft. Import/export uses validated JSON.
 - **History** stores each completed result and initial scene at
-  `docs/studio_runs/<run_id>/{case,payload,meta}.json`. Metadata can change while
+  `results/studio/studio_runs/<run_id>/{case,payload,meta}.json`. Metadata can change while
   recorded states stay immutable. Favorites, notes, filtering, sorting,
   pagination and comparison operate on real runs. Rerun uses only that case.
 - **Settings** controls theme, default route/playback, post-run navigation and

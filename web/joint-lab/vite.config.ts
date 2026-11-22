@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   base: "/lab/",
-  build: { outDir: "../../docs/lab", emptyOutDir: true },
+  build: { outDir: "../../static/studio", emptyOutDir: true },
   server: {
     proxy: Object.fromEntries(
       [

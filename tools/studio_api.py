@@ -6,7 +6,7 @@ from pathlib import Path
 
 import mujoco
 
-from .. import config
+from .. import config, paths
 from .studio_store import render_full_replay
 
 
@@ -45,7 +45,7 @@ def handle_get(handler, lab, path, query):
         elif path in ("/studio/replay-data", "/studio/replay-view"):
             payload = store.payload(source)
             if path.endswith("replay-view"):
-                handler._send(render_full_replay(payload, Path(__file__).resolve().parents[1] / "docs"), "text/html")
+                handler._send(render_full_replay(payload, paths.REPLAY_ASSETS), "text/html")
                 return True
             if "episode" in query:
                 index = int(query["episode"])

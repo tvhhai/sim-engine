@@ -7,6 +7,7 @@ from pathlib import Path
 import threading
 import time
 
+from .. import paths
 from ..env import SO101PickPlaceEnv
 from ..lab_scene import in_workspace, normalize_objects
 from ..policies.scripted_policy import ScriptedPolicy
@@ -18,7 +19,7 @@ LAB_SEED = 2147483647
 
 class LabRun:
     def __init__(self, directory=None):
-        self.directory = Path(directory) if directory else Path(__file__).resolve().parents[1] / "docs"
+        self.directory = Path(directory) if directory else paths.STUDIO_DATA
         self.lock = threading.Lock()
         self.state = {"status": "idle"}
         self.store = StudioStore(self.directory)

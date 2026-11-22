@@ -1,8 +1,8 @@
 """Phân tích BIÊN của vùng gắp được: các vòng bán kính mà gắp được và không gắp được XEN KẼ, và các CẶP ĐỐI XỨNG (r, +góc) / (r, -góc)
 cho kết quả khác nhau (một bên gắp được, bên đối xứng thì không).
 
-Dữ liệu vào: các file quét dày ở biên (tools/scan_pick_region.py --r ... --angle ... --out ...), mặc định docs/pick_scan_outer.json (vòng ngoài)
-và docs/pick_scan_inner.json (vòng trong sát đế), cộng docs/pick_scan.json (lưới thường). Kết quả ghi docs/boundary_pairs.json và in bảng.
+Dữ liệu vào: các file quét dày ở biên (tools/scan_pick_region.py --r ... --angle ... --out ...), mặc định results/pick_scan_outer.json (vòng ngoài)
+và results/pick_scan_inner.json (vòng trong sát đế), cộng results/pick_scan.json (lưới thường). Kết quả ghi results/boundary_pairs.json và in bảng.
 
 Cách dùng (đứng ở thư mục chứa sim_engine, đã kích hoạt .venv):
     python -m sim_engine.tools.boundary_pairs                  # chỉ phân tích và in
@@ -16,10 +16,10 @@ import json
 import os
 import re
 
-from .. import config
+from .. import config, paths
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DOCS = os.path.join(HERE, "docs")
+DOCS = str(paths.RESULTS)
 
 
 def load():

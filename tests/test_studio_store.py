@@ -3,6 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from sim_engine import paths
 from sim_engine.tools.studio_store import StudioStore, render_full_replay
 from sim_engine.tools.studio_api import scene_from_source
 
@@ -33,7 +34,7 @@ class StudioStoreTests(unittest.TestCase):
             path = Path(directory) / "replay.html"
             contents = "<script>const DATA = " + json.dumps(payload()) + ";const other=42;</script>"
             path.write_text(contents, encoding="utf-8")
-            store = StudioStore(directory)
+            store = StudioStore(directory, baseline=path)
             catalog = store.catalog()
             self.assertEqual(catalog["sources"][0]["id"], "baseline")
             self.assertEqual(catalog["sources"][0]["episodes"][0]["seed"], 7)
@@ -60,8 +61,7 @@ class StudioStoreTests(unittest.TestCase):
             self.assertEqual(len(store.list_runs()), 1)
 
     def test_full_view_reuses_all_replay_tools_without_cdn(self):
-        root = Path(__file__).resolve().parents[1] / "docs"
-        html = render_full_replay(payload(), root)
+        html = render_full_replay(payload(), paths.REPLAY_ASSETS)
         for item in ("drawTop", "drawSide", "draw3d", "drawCams", "buildTimeline", "buildLog", "drawChk", "studio-replay-command"):
             self.assertIn(item, html)
         self.assertNotIn("cdn.tailwindcss.com", html)

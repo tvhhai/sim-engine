@@ -13,7 +13,7 @@ Cách chọn (để 30 seed trong replay không trùng lặp và đáng xem):
     3. Còn chỗ thì lấp bằng các seed xa nhau nhất.
     4. Nếu số seed hỏng nhiều hơn --count thì đưa TẤT CẢ seed hỏng lên (nhóm "hỏng còn lại" sau 30 seed đầu).
 
-Kết quả ghi vào docs/replay_seeds.json (make_replay đọc file này) và in báo cáo ra màn hình.
+Kết quả ghi vào results/replay_seeds.json (make_replay đọc file này) và in báo cáo ra màn hình.
 Bộ chấm 200 seed (pool) không đổi: cùng seed thì cùng vị trí hộp.
 """
 
@@ -29,7 +29,7 @@ import time
 
 import numpy as np
 
-from .. import config
+from .. import config, paths
 from .. import box_sampling
 from ..box_sampling import fixed_seed_name
 from ..env import SO101PickPlaceEnv
@@ -195,8 +195,7 @@ def main():
     ap.add_argument("--slow-min", type=int, default=100, help="và tối thiểu bằng số bước này")
     ap.add_argument("--repin", action="store_true", help="bỏ danh sách seed đã ghim, chọn lại từ đầu rồi ghim bộ mới")
     ap.add_argument("--workers", type=int, default=default_workers(), help="số tiến trình chạy song song (mặc định: số lõi - 1; 1 = tuần tự)")
-    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    ap.add_argument("--out", default=os.path.join(here, "docs", "replay_seeds.json"))
+    ap.add_argument("--out", default=str(paths.REPLAY_SEEDS))
     args = ap.parse_args()
 
     seeds = parse_seeds(args.pool)
@@ -230,7 +229,7 @@ def main():
     feat = features(rows, box_r, bowl_r)
     chosen, bad, picks = select(rows, args.count, feat, slow_steps)
     # GHIM seed: bộ seed xem trong replay không bị đổi khi một seed hết hỏng (xanh), để còn xem lại quá trình sửa.
-    # docs/replay_pins.json giữ danh sách; mỗi lần chấm: seed cố định + seed đã ghim + MỌI seed hiện đang hỏng chưa có trong danh sách.
+    # results/replay_pins.json giữ danh sách; mỗi lần chấm: seed cố định + seed đã ghim + MỌI seed hiện đang hỏng chưa có trong danh sách.
     # Seed hỏng mới được thêm vào ghim; seed đã ghim không bao giờ bị bỏ (trừ khi chạy --repin).
     pins_path = os.path.join(os.path.dirname(args.out), "replay_pins.json")
     pinned = []

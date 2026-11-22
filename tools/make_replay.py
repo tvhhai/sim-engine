@@ -1,10 +1,11 @@
 """Ghi nhiều ván chạy ra file HTML để xem lại từng bước trên trình duyệt (replay).
 
 Cách dùng (đứng ở thư mục chứa sim_engine, đã kích hoạt .venv):
-    python -m sim_engine.make_replay                    # seed lấy từ docs/replay_seeds.json (xem select_seeds), mặc định 0-29
+    python -m sim_engine.make_replay                    # seed lấy từ results/replay_seeds.json (xem select_seeds), mặc định 0-29
     python -m sim_engine.make_replay --seeds 0,2,3      # chỉ vài seed (file nhỏ hơn, ghi nhanh hơn)
-    python -m sim_engine.make_replay --policy sim_engine.policies.my_policy:MyPolicy --out docs/replay_my.html
+    python -m sim_engine.make_replay --policy sim_engine.policies.my_policy:MyPolicy --out results/replay_my.html
 
+Kết quả: results/replay.html (bản canvas) và results/replay.json (cùng dữ liệu, Studio React đọc file này).
 Sau đó mở file HTML bằng trình duyệt (bấm đúp). File chạy offline, không cần server, không cần mạng.
 Mỗi lần bạn sửa policy, chạy lại lệnh này để có dữ liệu mới.
 
@@ -23,7 +24,7 @@ import time
 import mujoco
 import numpy as np
 
-from .. import config
+from .. import config, paths
 from ..env import SO101PickPlaceEnv
 
 # Các khớp nối của cánh tay, theo thứ tự từ đế tới cổ tay (để vẽ "xương" cánh tay)
@@ -357,7 +358,6 @@ class Recorder:
 
 def write_replay(env, episodes, out, policy_name):
     """Write existing episodes without running any seeds or updating batch metadata."""
-    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     # Thông tin cố định của cảnh để HTML vẽ đúng tỷ lệ
     scene = {
         "bowl": r3(env.get_bowl_pos()),
@@ -381,28 +381,27 @@ def write_replay(env, episodes, out, policy_name):
     scene["kin"], scene["arm_mesh"] = arm_model_export(env)
     scene["cams"] = cameras_export(env)           # camera trong model, để HTML dựng lại góc nhìn của chúng     # cánh tay THẬT: cây khung + lưới tam giác để HTML tự vẽ
     # Vùng với tới của cánh tay (do joint_lab tính và lưu); nếu chưa có thì bỏ qua và nhắc cách tạo
-    # Vùng GẮP ĐƯỢC THẬT: hình quạt trong config.PICK_REGION và các điểm đã quét (tools/scan_pick_region.py -> docs/pick_scan.json)
+    # Vùng GẮP ĐƯỢC THẬT: hình quạt trong config.PICK_REGION và các điểm đã quét (tools/scan_pick_region.py -> results/pick_scan.json)
     scene["pick_region"] = dict(config.PICK_REGION, pan=list(config.PICK_PAN_XY), bowl_clearance=config.BOX_BOWL_CLEARANCE)
     scan_points = []
     for filename in ("pick_scan.json", "pick_scan_inner.json", "pick_scan_outer.json"):
-        scan_path = os.path.join(here, "docs", filename)
-        if os.path.isfile(scan_path):
+        scan_path = paths.result(filename)
+        if scan_path.is_file():
             with open(scan_path, encoding="utf-8") as f:
                 scan_points.extend([[*point["xy"], int(point["ok"])] for point in json.load(f)["points"]])
     if scan_points:
         scene["pick_scan"] = scan_points
-    reach_path = os.path.join(here, "docs", "reach_envelope.json")
-    if os.path.exists(reach_path):
-        with open(reach_path, encoding="utf-8") as f:
+    if paths.REACH_ENVELOPE.exists():
+        with open(paths.REACH_ENVELOPE, encoding="utf-8") as f:
             scene["reach"] = json.load(f)
     else:
-        print("Chưa có docs/reach_envelope.json nên replay chưa vẽ vùng với tới. Chạy python -m sim_engine.joint_lab một lần để tính.")
+        print("Chưa có results/reach_envelope.json nên replay chưa vẽ vùng với tới. Chạy python -m sim_engine.joint_lab một lần để tính.")
     payload = json.dumps({"scene": scene, "episodes": episodes}, separators=(",", ":"), ensure_ascii=False)
 
-    template_path = os.path.join(here, "docs", "replay_template.html")
+    template_path = paths.REPLAY_ASSETS / "template.html"
     with open(template_path, encoding="utf-8") as f:
         template = f.read()
-    asset_dir = os.path.join(here, "docs", "ui")
+    asset_dir = paths.REPLAY_ASSETS
     for marker, filename in (
         ("/*__SHARED_CSS__*/", "accessibility.css"),
         ("/*__REPLAY_CSS__*/", "replay.css"),
@@ -421,19 +420,18 @@ def write_replay(env, episodes, out, policy_name):
 
 def main():
     parser = argparse.ArgumentParser(description="Ghi các ván chạy ra file HTML để xem lại")
-    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     parser.add_argument("--seeds", default=None, help="ví dụ 0-29, hoặc 2,3, hoặc 0-4,10. Mặc định: đọc --seed-file, "
                         "nếu không có thì 0-29")
-    parser.add_argument("--seed-file", default=os.path.join(here, "docs", "replay_seeds.json"),
+    parser.add_argument("--seed-file", default=str(paths.REPLAY_SEEDS),
                         help="file do select_seeds ghi: danh sách seed đã chọn kèm nhãn (hỏng, timeout, chậm...)")
     parser.add_argument("--policy", default="sim_engine.policies.scripted_policy:ScriptedPolicy")
     parser.add_argument("--box-range", type=float, default=None, help="hộp ngẫu nhiên trong ± giá trị này (mét), mặc định theo config")
     parser.add_argument("--bowl-range", type=float, default=None, help="bát ngẫu nhiên trong ± giá trị này (mét), mặc định theo config")
-    parser.add_argument("--out", default=None, help="mặc định docs/replay.html")
+    parser.add_argument("--out", default=None, help="mặc định results/replay.html (kèm results/replay.json cùng dữ liệu)")
     parser.add_argument("--workers", type=int, default=default_workers(), help="số tiến trình chạy song song (mặc định: số lõi - 1; 1 = tuần tự)")
     args = parser.parse_args()
     if args.out is None:
-        args.out = os.path.join(here, "docs", "replay.html")
+        args.out = str(paths.REPLAY_HTML)
 
     module_name, class_name = args.policy.split(":")
     policy_cls = getattr(importlib.import_module(module_name), class_name)
@@ -456,7 +454,7 @@ def main():
         seed_list = parse_seeds("0-29")
 
     # Lần chạy trước (nếu có): để in thêm "(+N)" / "(-N)" bước so với lần đó, biết mình vừa tối ưu hay làm chậm đi
-    prev_path = os.path.join(here, "docs", "replay_prev_steps.json")
+    prev_path = paths.REPLAY_PREV_STEPS
     try:
         with open(prev_path, encoding="utf-8") as f:
             prev = json.load(f)
@@ -506,10 +504,15 @@ def main():
     with open(prev_path, "w", encoding="utf-8") as f:
         json.dump(prev, f, ensure_ascii=False)
 
-    write_replay(env, episodes, args.out, args.policy)
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+    data = write_replay(env, episodes, args.out, args.policy)
+    # Cùng dữ liệu dạng JSON cạnh file HTML: Studio React (và mọi công cụ khác) đọc thẳng, không phải bóc từ HTML
+    json_out = os.path.splitext(args.out)[0] + ".json"
+    with open(json_out, "w", encoding="utf-8") as f:
+        json.dump(data, f, separators=(",", ":"), ensure_ascii=False)
 
     ok = sum(e["success"] for e in episodes)
-    print(f"\nĐã ghi {args.out} ({os.path.getsize(args.out) / 1e6:.1f} MB), {ok}/{len(episodes)} ván thành công.")
+    print(f"\nĐã ghi {args.out} ({os.path.getsize(args.out) / 1e6:.1f} MB) và {json_out}, {ok}/{len(episodes)} ván thành công.")
     print("Mở file đó bằng trình duyệt (bấm đúp).")
     env.close()
 

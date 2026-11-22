@@ -7,6 +7,8 @@ from pathlib import Path
 import re
 import threading
 
+from .. import paths
+
 
 def atomic_json(path, value):
     path = Path(path)
@@ -17,8 +19,10 @@ def atomic_json(path, value):
 
 
 class StudioStore:
-    def __init__(self, directory):
+    def __init__(self, directory, baseline=None):
         self.directory = Path(directory)
+        # Bộ replay chung (make_replay): đọc replay.json; chỉ có replay.html (bản cũ) thì bóc dữ liệu từ HTML
+        self.baseline = Path(baseline) if baseline else paths.REPLAY_JSON
         self.runs = self.directory / "studio_runs"
         self.lock = threading.RLock()
         self.cache = None
@@ -94,15 +98,20 @@ class StudioStore:
 
     def payload(self, source):
         if source == "baseline":
-            path = self.directory / "replay.html"
-            signature = (path.stat().st_mtime_ns, path.stat().st_size)
+            path = self.baseline
+            if path.suffix == ".json" and not path.is_file() and path.with_suffix(".html").is_file():
+                path = path.with_suffix(".html")
+            signature = (path, path.stat().st_mtime_ns, path.stat().st_size)
             with self.lock:
                 if self.cache is None or self.cache[0] != signature:
-                    html = path.read_text(encoding="utf-8")
-                    marker = "const DATA = "
-                    if marker not in html:
-                        raise ValueError("replay.html không chứa dữ liệu replay")
-                    payload = json.JSONDecoder().raw_decode(html.split(marker, 1)[1].lstrip())[0]
+                    text = path.read_text(encoding="utf-8")
+                    if path.suffix == ".json":
+                        payload = json.loads(text)
+                    else:
+                        marker = "const DATA = "
+                        if marker not in text:
+                            raise ValueError("replay.html không chứa dữ liệu replay")
+                        payload = json.JSONDecoder().raw_decode(text.split(marker, 1)[1].lstrip())[0]
                     self.cache = (signature, payload)
                 return self.cache[1]
         if source == "lab":
@@ -129,15 +138,15 @@ class StudioStore:
 def render_full_replay(payload, assets_directory):
     """Reuse the real replay UI, including cameras, diagnostics and phase logs."""
     directory = Path(assets_directory)
-    template = (directory / "replay_template.html").read_text(encoding="utf-8")
+    template = (directory / "template.html").read_text(encoding="utf-8")
     # The replay stylesheet is complete; the optional CDN is unnecessary in Studio.
     template = re.sub(r'<script src="https://cdn\.tailwindcss\.com/[^\"]+"></script>', "", template)
     template = re.sub(r'<script>tailwind\.config.*?</script>', "", template)
     template = template.replace("/*__REPLAY_JS__*/", "window.STUDIO_WEBGL = true;\n/*__REPLAY_JS__*/")
     for marker, name in (("/*__SHARED_CSS__*/", "accessibility.css"),
                          ("/*__REPLAY_CSS__*/", "replay.css"), ("/*__REPLAY_JS__*/", "replay.js")):
-        template = template.replace(marker, (directory / "ui" / name).read_text(encoding="utf-8"))
+        template = template.replace(marker, (directory / name).read_text(encoding="utf-8"))
     data = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
     template = template.replace("/*__DATA__*/null", data)
-    bridge = (directory / "ui" / "studio_bridge.js").read_text(encoding="utf-8")
+    bridge = (directory / "studio_bridge.js").read_text(encoding="utf-8")
     return template.replace("</body>", "<script>" + bridge + "</script></body>")

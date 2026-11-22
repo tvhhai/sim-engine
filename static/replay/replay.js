@@ -11,7 +11,7 @@ const JMEAN = "pan = xoay thân · lift = nâng vai · elbow = gập khuỷu · 
 
 const app = document.getElementById("app");
 if (!DATA?.episodes?.length) {
-  app.innerHTML = '<div class="err"><h1>Chưa có dữ liệu</h1><p>Đây là file mẫu. Hãy chạy <code>python -m sim_engine.make_replay</code> để tạo <code>docs/replay.html</code>.</p></div>';
+  app.innerHTML = '<div class="err"><h1>Chưa có dữ liệu</h1><p>Đây là file mẫu. Hãy chạy <code>python -m sim_engine.make_replay</code> để tạo <code>results/replay.html</code>.</p></div>';
   throw new Error("no data");
 }
 const S = DATA.scene, EPS = DATA.episodes;
