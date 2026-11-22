@@ -3,6 +3,7 @@
 Cách dùng (đứng ở thư mục chứa sim_engine, đã kích hoạt .venv):
     python -m sim_engine.make_replay                    # seed lấy từ results/replay_seeds.json (xem select_seeds), mặc định 0-29
     python -m sim_engine.make_replay --seeds 0,2,3      # chỉ vài seed (file nhỏ hơn, ghi nhanh hơn)
+    python -m sim_engine.make_replay --rebuild          # chỉ dựng lại HTML từ results/replay.json sau khi sửa giao diện
     python -m sim_engine.make_replay --policy sim_engine.policies.my_policy:MyPolicy --out results/replay_my.html
 
 Kết quả: results/replay.html (bản canvas) và results/replay.json (cùng dữ liệu, Studio React đọc file này).
@@ -412,8 +413,14 @@ def write_replay(env, episodes, out, policy_name):
             scene["reach"] = json.load(f)
     else:
         print("Chưa có results/reach_envelope.json nên replay chưa vẽ vùng với tới. Chạy python -m sim_engine.joint_lab một lần để tính.")
-    payload = json.dumps({"scene": scene, "episodes": episodes}, separators=(",", ":"), ensure_ascii=False)
+    data = {"scene": scene, "episodes": episodes}
+    render_html(data, out)
+    return data
 
+
+def render_html(data, out):
+    """Ghép template + css/js của static/replay với dữ liệu replay thành một file HTML mở offline."""
+    payload = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
     template_path = paths.REPLAY_ASSETS / "template.html"
     with open(template_path, encoding="utf-8") as f:
         template = f.read()
@@ -430,7 +437,20 @@ def write_replay(env, episodes, out, policy_name):
         raise SystemExit(f"Không tìm thấy {marker} trong {template_path}")
     with open(out, "w", encoding="utf-8") as f:
         f.write(template.replace(marker, payload))
-    return {"scene": scene, "episodes": episodes}
+
+
+def rebuild(out):
+    """Dựng lại file HTML từ file JSON cùng tên (không chạy lại seed nào): dùng sau khi sửa giao diện static/replay.
+    Cập nhật luôn điểm quét và vùng đỏ trong scene theo results/ hiện tại."""
+    json_path = os.path.splitext(out)[0] + ".json"
+    with open(json_path, encoding="utf-8") as f:
+        data = json.load(f)
+    data["scene"]["pick_scan"] = pick_scan_points()
+    data["scene"]["unreachable_region"] = unreachable_region()
+    render_html(data, out)
+    with open(json_path, "w", encoding="utf-8") as f:            # Studio đọc file JSON: giữ hai bản cùng dữ liệu
+        json.dump(data, f, separators=(",", ":"), ensure_ascii=False)
+    print(f"Đã dựng lại {out} từ {json_path} ({len(data['episodes'])} ván, không chạy lại mô phỏng).")
 
 
 
@@ -445,9 +465,14 @@ def main():
     parser.add_argument("--bowl-range", type=float, default=None, help="bát ngẫu nhiên trong ± giá trị này (mét), mặc định theo config")
     parser.add_argument("--out", default=None, help="mặc định results/replay.html (kèm results/replay.json cùng dữ liệu)")
     parser.add_argument("--workers", type=int, default=default_workers(), help="số tiến trình chạy song song (mặc định: số lõi - 1; 1 = tuần tự)")
+    parser.add_argument("--rebuild", action="store_true",
+                        help="chỉ dựng lại HTML từ file .json cùng tên (vài giây), không chạy lại seed: dùng sau khi sửa static/replay")
     args = parser.parse_args()
     if args.out is None:
         args.out = str(paths.REPLAY_HTML)
+    if args.rebuild:
+        rebuild(args.out)
+        return
 
     module_name, class_name = args.policy.split(":")
     policy_cls = getattr(importlib.import_module(module_name), class_name)
