@@ -632,3 +632,8 @@ html[data-mantine-color-scheme="light"] .global-run-status {
     position: static;
   }
 }
+
+/* Lab: tab Đặt cảnh / Kết quả 3D */
+.lab-tabs .top-view svg {
+  max-height: calc(100vh - 290px);
+}

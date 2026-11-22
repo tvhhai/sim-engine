@@ -10,15 +10,19 @@ import {
   Select,
   Slider,
   Stack,
+  Tabs,
   Text,
   Title,
 } from "@mantine/core";
+import { useLocalStorage } from "@mantine/hooks";
 import {
   RotateCcw,
   SlidersHorizontal,
   Download,
   Upload,
   MonitorPlay,
+  Box,
+  Map as MapIcon,
 } from "lucide-react";
 import { JOINTS } from "../types";
 import { reachable } from "../workspace";
@@ -51,6 +55,7 @@ export default function LabScreen() {
     ikBusy,
     settings,
   } = useStudio();
+  const [labTab, setLabTab] = useLocalStorage({ key: "sim-studio-lab-tab", defaultValue: "scene" });
   if (!scene || !meta || !model)
     return (
       <div className="screen-empty">
@@ -62,6 +67,7 @@ export default function LabScreen() {
   const target = scene.objects.find((o) => o.id === scene.target_id)!;
   const bowlOK = reachable(scene.pose.wx, scene.pose.wy, meta.pick_region),
     targetOK = reachable(target.x, target.y, meta.pick_region);
+  const showScene = visible.map;
   // Vùng gắp xanh / hỗn hợp / đỏ và điểm quét, cùng dữ liệu với replay (server /meta)
   const zones = {
     region: meta.pick_region,
@@ -132,63 +138,85 @@ export default function LabScreen() {
       )}
       <div className="workspace lab-workspace">
         <div className="main-column">
-          <Panel
-            title="Không gian 3D"
-            badge="Lưới gốc MuJoCo"
-            tools={
-              <Select
-                aria-label="Chọn đối tượng điều chỉnh trong 3D"
-                w={155}
-                size="xs"
-                value={selected}
-                onChange={(v) => setSelected(v || "")}
-                data={[
-                  { value: "", label: "Xoay góc nhìn" },
-                  { value: "arm", label: "Đầu tay" },
-                  { value: "bowl", label: "Bát" },
-                  ...scene.objects.map((o, i) => ({
-                    value: o.id,
-                    label: `${o.type === "sphere" ? "Bóng" : "Hộp"} ${i + 1}`,
-                  })),
-                ]}
-              />
-            }
+          {/* Đặt cảnh (XY) là việc chính của Lab nên đứng trước; 3D là tab kết quả để xem tư thế và va chạm */}
+          <Tabs
+            value={showScene ? labTab : "result"}
+            onChange={(v) => v && setLabTab(v)}
+            keepMounted={false}
+            className="lab-tabs"
           >
-            {snapshot ? (
-              <SceneView
-                origin={[...meta.pick_region.pan, 0.42]}
-                region={meta.pick_region}
-                zones={zones}
-                model={model}
-                poses={snapshot.pose}
-                objects={scene.objects}
-                bowl={[scene.pose.wx, scene.pose.wy, 0.42]}
-                bowlGeoms={meta.bowl_geoms}
-                bowlOrigin={meta.bowl_origin}
-                ee={snapshot.ee}
-                selected={selected}
-                onSelect={setSelected}
-                onMove={(id, p) => move(id, p[0], p[1], p[2])}
-              />
-            ) : (
-              <div className="scene-loading">
-                <Loader color="teal" />
-              </div>
+            <Tabs.List>
+              {showScene && (
+                <Tabs.Tab value="scene" leftSection={<MapIcon size={15} />}>
+                  Đặt cảnh · mặt bàn
+                </Tabs.Tab>
+              )}
+              <Tabs.Tab value="result" leftSection={<Box size={15} />}>
+                Kết quả 3D
+              </Tabs.Tab>
+            </Tabs.List>
+            {showScene && (
+              <Tabs.Panel value="scene" pt="sm">
+                <Panel title="Tọa độ XY" badge="Kéo hộp, bóng, bát">
+                  <TopView
+                    scene={scene}
+                    region={meta.pick_region}
+                    zones={zones}
+                    snapshot={snapshot}
+                    selected={selected}
+                    onSelect={setSelected}
+                    onMove={move}
+                  />
+                </Panel>
+              </Tabs.Panel>
             )}
-          </Panel>
-          {visible.map && (
-            <Panel title="Tọa độ XY" badge="Mặt bàn">
-              <TopView
-                scene={scene}
-                region={meta.pick_region}
-                zones={zones}
-                snapshot={snapshot}
-                selected={selected}
-                onSelect={setSelected}
-                onMove={move}
-              />
-            </Panel>
-          )}
+            <Tabs.Panel value="result" pt="sm">
+              <Panel
+                title="Không gian 3D"
+                badge="Lưới gốc MuJoCo"
+                tools={
+                  <Select
+                    aria-label="Chọn đối tượng điều chỉnh trong 3D"
+                    w={155}
+                    size="xs"
+                    value={selected}
+                    onChange={(v) => setSelected(v || "")}
+                    data={[
+                      { value: "", label: "Xoay góc nhìn" },
+                      { value: "arm", label: "Đầu tay" },
+                      { value: "bowl", label: "Bát" },
+                      ...scene.objects.map((o, i) => ({
+                        value: o.id,
+                        label: `${o.type === "sphere" ? "Bóng" : "Hộp"} ${i + 1}`,
+                      })),
+                    ]}
+                  />
+                }
+              >
+                {snapshot ? (
+                  <SceneView
+                    origin={[...meta.pick_region.pan, 0.42]}
+                    region={meta.pick_region}
+                    zones={zones}
+                    model={model}
+                    poses={snapshot.pose}
+                    objects={scene.objects}
+                    bowl={[scene.pose.wx, scene.pose.wy, 0.42]}
+                    bowlGeoms={meta.bowl_geoms}
+                    bowlOrigin={meta.bowl_origin}
+                    ee={snapshot.ee}
+                    selected={selected}
+                    onSelect={setSelected}
+                    onMove={(id, p) => move(id, p[0], p[1], p[2])}
+                  />
+                ) : (
+                  <div className="scene-loading">
+                    <Loader color="teal" />
+                  </div>
+                )}
+              </Panel>
+            </Tabs.Panel>
+          </Tabs>
         </div>
         <aside className="controls-column">
           {visible.objects && (
