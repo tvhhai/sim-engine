@@ -2,12 +2,18 @@ import { useEffect, useMemo, useLayoutEffect, useCallback } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
 import { Line } from "@react-three/drei";
 import {
+  BufferGeometry,
+  Float32BufferAttribute,
   Matrix4,
   Object3D,
+  Path,
+  Shape,
+  ShapeGeometry,
   Quaternion,
   OrthographicCamera,
   PerspectiveCamera,
   TextureLoader,
+  Vector2,
   Vector3,
 } from "three";
 import type {
@@ -20,6 +26,8 @@ import type {
 import { useReplayTransform } from "./useReplayTransform";
 import { composeMount } from "../studio/playback";
 import { sector } from "../workspace";
+import { TABLE_HALF, ZONE_COLORS, visibleScan, zoneShapes } from "../zones";
+import type { PickZones } from "../zones";
 
 function AxisLabel({
   label,
@@ -83,6 +91,78 @@ export function ReachBoundary({ region }: { region: Region }) {
       transparent
       lineWidth={1}
     />
+  );
+}
+const ZONE_Z = 0.4203; // ngay trên mặt bàn (0.42), dưới lưới toạ độ
+// Vùng gắp xanh / hỗn hợp / đỏ trên mặt bàn và các điểm quét (✕ hỏng; chấm chỉ ở vùng hỗn hợp), xem zones.ts.
+export function PickZones3D({ zones }: { zones: PickZones }) {
+  const scanKey = zones.scan?.length ?? 0;
+  const { meshes, cross, dots } = useMemo(() => {
+    const { pieces, outsideHole } = zoneShapes(zones);
+    const meshes = pieces.map(([zone, pts]) => {
+      const shape = new Shape(pts.map(([x, y]) => new Vector2(x, y)));
+      return { zone, geometry: new ShapeGeometry(shape) };
+    });
+    if (outsideHole) {
+      const [hx, hy] = TABLE_HALF;
+      const table = new Shape();
+      table.moveTo(-hx, -hy);
+      table.lineTo(hx, -hy);
+      table.lineTo(hx, hy);
+      table.lineTo(-hx, hy);
+      table.closePath();
+      const hole = new Path();
+      outsideHole.forEach(([x, y], i) => (i ? hole.lineTo(x, y) : hole.moveTo(x, y)));
+      table.holes.push(hole);
+      meshes.push({ zone: "red", geometry: new ShapeGeometry(table, 4) });
+    }
+    const pts = visibleScan(zones), d = 0.0035, z = ZONE_Z + 0.0004;
+    const cross = new BufferGeometry();
+    cross.setAttribute(
+      "position",
+      new Float32BufferAttribute(
+        pts.filter((p) => !p.ok).flatMap(({ x, y }) => [
+          x - d, y - d, z, x + d, y + d, z, x - d, y + d, z, x + d, y - d, z,
+        ]),
+        3,
+      ),
+    );
+    const dots = new BufferGeometry();
+    dots.setAttribute(
+      "position",
+      new Float32BufferAttribute(pts.filter((p) => p.ok).flatMap(({ x, y }) => [x, y, z]), 3),
+    );
+    return { meshes, cross, dots };
+    // scan được gửi lại mỗi khung hình từ replay: so theo nội dung thay vì tham chiếu mảng
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(zones.region), JSON.stringify(zones.stop), scanKey]);
+  useEffect(
+    () => () => {
+      meshes.forEach((m) => m.geometry.dispose());
+      cross.dispose();
+      dots.dispose();
+    },
+    [meshes, cross, dots],
+  );
+  return (
+    <group>
+      {meshes.map((m, i) => (
+        <mesh key={i} geometry={m.geometry} position={[0, 0, ZONE_Z]} renderOrder={1}>
+          <meshBasicMaterial
+            color={ZONE_COLORS[m.zone]}
+            transparent
+            opacity={m.zone === "green" ? 0.16 : 0.2}
+            depthWrite={false}
+          />
+        </mesh>
+      ))}
+      <lineSegments geometry={cross} renderOrder={2}>
+        <lineBasicMaterial color={ZONE_COLORS.red} transparent opacity={0.95} depthWrite={false} />
+      </lineSegments>
+      <points geometry={dots} renderOrder={2}>
+        <pointsMaterial color="#3fcf8e" size={0.004} sizeAttenuation transparent opacity={0.85} depthWrite={false} />
+      </points>
+    </group>
   );
 }
 // External controls and the wrist sensor use the same camera conventions as MuJoCo (+Z back, +Y up).

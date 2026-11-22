@@ -1,3 +1,4 @@
+import type { PickZones, ScanPoint, StopRegion } from "./zones";
 export type Vec3 = [number, number, number];
 export type Item = {
   id: string;
@@ -58,6 +59,7 @@ export type ReplayViewState = {
   ee: Vec3;
   origin: Vec3;
   region?: Region;
+  zones?: PickZones | null;
   showRegion: boolean;
   sensor: SensorCamera | null;
   camera: ViewCamera;
@@ -83,6 +85,8 @@ export type Meta = {
   gclose: number;
   saved_pose: (Pose & { objects?: Item[]; target_id?: string }) | null;
   pick_region: Region;
+  pick_scan?: ScanPoint[];
+  unreachable_region?: StopRegion;
   bowl_geoms: BowlGeom[];
   bowl_origin: Vec3;
 };

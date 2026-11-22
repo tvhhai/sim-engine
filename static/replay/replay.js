@@ -54,7 +54,7 @@ app.innerHTML = `
   </header>
   <main class="main">
     <div class="card c-small"><div id="topWrap" class="fs-wrap"><h2>Nhìn từ trên · XY từ khớp 1 (m)<span class="pick-zone-toggle"><label><input type="checkbox" id="showReach" checked> Vùng gắp</label> <button type="button" class="fs-btn" id="topFs" title="Xem toàn màn hình (phím F, Esc để thoát)" aria-label="Toàn màn hình hình nhìn từ trên">⛶ Toàn màn hình</button></span></h2>
-      <div class="pick-zone-legend"><span class="zone-green">Gắp được</span><span class="zone-red">Không gắp · về home</span><span class="zone-mixed">Hỗn hợp · cần tối ưu</span><span class="scan-note"><b style="color:#16834f">●</b> điểm quét gắp được</span><span class="scan-note"><b style="color:#d14049">✕</b> điểm quét hỏng (vùng xanh còn ít điểm hỏng: mỗi điểm có 1 seed 1001+)</span></div><svg id="top" role="img" aria-label="Hình chiếu XY cố định" viewBox="0 0 520 340"></svg>
+      <div class="pick-zone-legend"><span class="zone-green">Gắp được</span><span class="zone-red">Không gắp · về home</span><span class="zone-mixed">Hỗn hợp · cần tối ưu</span><span class="scan-note"><b style="color:#d14049">✕</b> điểm quét hỏng (vùng xanh còn ít điểm hỏng: mỗi điểm có 1 seed 1001+)</span><span class="scan-note"><b style="color:#16834f">●</b> điểm quét gắp được, chỉ vẽ ở vùng hỗn hợp</span></div><svg id="top" role="img" aria-label="Hình chiếu XY cố định" viewBox="0 0 520 340"></svg>
       <div class="fs-only fs-bar"><button type="button" id="fsPrev" title="Lùi 1 bước (←)">◀</button><button type="button" id="fsPlay" title="Phát / tạm dừng (Space)">▶ / ❚❚</button><button type="button" id="fsNext" title="Tiến 1 bước (→)">▶</button><input type="range" id="fsRng" min="0" value="0" aria-label="Bước"><output id="fsInfo"></output></div></div>
       <h2>Nhìn từ cạnh · Y ngang, Z cao (m)</h2><svg id="side" role="img" aria-label="Hình chiếu YZ cố định" viewBox="0 18 520 202"></svg></div>
     <div class="card c-3d"><h2><span>3D (VIEW CHÍNH)</span><span class="hint">kéo trái xoay · kéo phải dịch · lăn zoom · R mặc định · ⌨ xem phím</span><button type="button" class="fs-btn" id="c3Fs" title="Xem toàn màn hình (phím G, Esc để thoát)" aria-label="Toàn màn hình hình 3D" style="margin-left:auto">⛶ Toàn màn hình</button></h2>
@@ -360,7 +360,10 @@ const BANDC = ["#0e9aa7", "#d97706", "#8b8f98"];
 const reachOn = () => (S.pick_region || S.reach) && $("showReach") && $("showReach").checked;
 const PICK_COLORS = { green:"#16834f", red:"#d14049", mixed:"#8b55bd" };
 const PICK_LABELS = { green:"Vùng gắp được", red:"Vùng không gắp được", mixed:"Vùng hỗn hợp" };
-const scanPts = S.pick_scan || [];          // điểm quét [x, y, ok]; điểm nằm trong vùng đỏ không vẽ (đã chắc chắn không gắp được)
+const scanPts = S.pick_scan || [];          // điểm quét [x, y, ok]
+// Vẽ điểm quét nào: vùng đỏ không vẽ (chắc chắn không gắp); vùng xanh chỉ vẽ ✕ (chấm xanh trùng ý nghĩa với vùng);
+// vùng hỗn hợp vẽ cả hai. Studio dùng cùng quy tắc (web/joint-lab/src/zones.ts: visibleScan).
+const showScan = (x, y, ok) => { const z = pickZone(x, y); return z === "mixed" || (z === "green" && !ok); };
 
 function pickZone(x, y) {
   const region = S.pick_region, stop = S.unreachable_region;
@@ -409,12 +412,12 @@ function pickZoneOverlayTop(k) {
   }
   return s + "</g>";
 }
-function reachTop(k) {                         // vùng gắp được: hình quạt đo thật + các điểm quét (chấm = gắp được, dấu x = hỏng)
+function reachTop(k) {                         // vùng gắp được: hình quạt đo thật + các điểm quét (xem showScan)
   if (!reachOn()) return "";
   if (S.pick_region) {
     let s = pickZoneOverlayTop(k);
-    scanPts.forEach(([x, y, ok]) => {                  // chấm xanh = quét gắp được, ✕ đỏ = quét hỏng; không vẽ trong vùng đỏ
-      if (pickZone(x, y) === "red") return;
+    scanPts.forEach(([x, y, ok]) => {                  // chấm xanh = quét gắp được, ✕ đỏ = quét hỏng
+      if (!showScan(x, y, ok)) return;
       const X = topX(x), Y = topY(y);
       s += ok ? `<circle cx="${X}" cy="${Y}" r="1.6" fill="${PICK_COLORS.green}" opacity=".75"/>`
               : `<path d="M${X - 2.2},${Y - 2.2}l4.4,4.4m0,-4.4l-4.4,4.4" stroke="${PICK_COLORS.red}" stroke-width="1.3" stroke-linecap="round"/>`;
@@ -767,7 +770,7 @@ function draw3d(fr, fs) {
         poly(points.map(([x,y]) => [x,y,TZ+.001]),PICK_COLORS[zone],null,0,.17);
       }
       for (const [x,y,ok] of scanPts) {
-        if (pickZone(x,y) !== "red") poly(ring([x,y],ok ? .003 : .005,TZ+.002,10),ok ? PICK_COLORS.green : PICK_COLORS.red,null,0,ok ? .6 : .9);
+        if (showScan(x,y,ok)) poly(ring([x,y],ok ? .003 : .005,TZ+.002,10),ok ? PICK_COLORS.green : PICK_COLORS.red,null,0,ok ? .6 : .9);
       }
       g.restore();
     } else {

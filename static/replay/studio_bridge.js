@@ -61,7 +61,7 @@
       if(OPT.path && to>from)lines.push({points:fs.slice(from,to+1).filter((_,k)=>k%Math.max(1,Math.ceil((to-from)/150))===0||k===to-from).map(f=>f.ee),color,opacity:.65});
       ghostIdx(i,from===i?to:from).forEach(k=>lines.push({points:[...fs[k].arm,fs[k].ee],color,opacity:.18}));
     }
-    parent.postMessage({type:'studio-replay-scene',source:sourceKey,scene:{poses,objects:replayObjects(fr).map((obj,k)=>({...obj,id:obj.id||`object-${k+1}`,x:obj.pos[0],y:obj.pos[1],yaw:obj.yaw||0})),bowl:S.bowl,bowlGeoms:S.bowl_geoms,ee:fr.ee,origin,region:S.pick_region,showRegion:$('showReach').checked,sensor:SHOW_CAM?camera:null,camera:{...CAM,t:[...CAM.t]},target:fr.tg,lines,contacts:{box:fr.ct,table:fr.tb,bowl:fr.bc||[]},playing:!!timer,sample:{...sample,continuous:!!timer&&sample.continuous}}},location.origin);
+    parent.postMessage({type:'studio-replay-scene',source:sourceKey,scene:{poses,objects:replayObjects(fr).map((obj,k)=>({...obj,id:obj.id||`object-${k+1}`,x:obj.pos[0],y:obj.pos[1],yaw:obj.yaw||0})),bowl:S.bowl,bowlGeoms:S.bowl_geoms,ee:fr.ee,origin,region:S.pick_region,zones:S.pick_region?{region:S.pick_region,stop:S.unreachable_region||null,scan:S.pick_scan||[]}:null,showRegion:$('showReach').checked,sensor:SHOW_CAM?camera:null,camera:{...CAM,t:[...CAM.t]},target:fr.tg,lines,contacts:{box:fr.ct,table:fr.tb,bowl:fr.bc||[]},playing:!!timer,sample:{...sample,continuous:!!timer&&sample.continuous}}},location.origin);
   };
   window.studioRender = publish;
   const notify = () => parent.postMessage({type:'studio-replay-state',source:sourceKey,episode:ep,step:i,playing:!!timer}, location.origin);

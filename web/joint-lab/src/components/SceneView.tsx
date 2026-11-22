@@ -27,7 +27,8 @@ import type {
   Region,
   PlaybackSample,
 } from "../types";
-import { BaseAxes, ReachBoundary, SceneRig, SensorRig } from "./SceneRig";
+import { BaseAxes, PickZones3D, ReachBoundary, SceneRig, SensorRig } from "./SceneRig";
+import type { PickZones } from "../zones";
 import { SmoothPose } from "./SmoothPose";
 import { BASE_ORIGIN } from "../studio/coordinates";
 
@@ -203,6 +204,7 @@ export function SceneView({
   target,
   contacts,
   region,
+  zones,
   showRegion = true,
   animate = false,
   sample,
@@ -225,6 +227,7 @@ export function SceneView({
   target?: Vec3 | null;
   contacts?: ReplayViewState["contacts"];
   region?: Region;
+  zones?: PickZones | null;
   showRegion?: boolean;
   animate?: boolean;
   sample?: PlaybackSample;
@@ -283,6 +286,7 @@ export function SceneView({
           />
         )}
         {!sensor && <BaseAxes origin={origin} />}
+        {!sensor && showRegion && zones && <PickZones3D zones={zones} />}
         {!sensor && region && showRegion && <ReachBoundary region={region} />}
         {!sensor &&
           lines

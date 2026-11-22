@@ -1,12 +1,15 @@
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import type { PointerEvent } from "react";
 import type { Region, Scene, Snapshot } from "../types";
 import { reachable, sector } from "../workspace";
+import { TABLE_HALF, ZONE_COLORS, visibleScan, zoneShapes } from "../zones";
+import type { PickZones } from "../zones";
 const X = (v: number) => (v + 0.45) * 1000,
   Y = (v: number) => (0.4 - v) * 1000;
 export function TopView({
   scene,
   region,
+  zones,
   snapshot,
   selected,
   onSelect,
@@ -14,12 +17,46 @@ export function TopView({
 }: {
   scene: Scene;
   region: Region;
+  zones?: PickZones;
   snapshot: Snapshot | null;
   selected: string;
   onSelect: (id: string) => void;
   onMove: (id: string, x: number, y: number) => void;
 }) {
   const drag = useRef<string | null>(null);
+  // Vùng xanh / hỗn hợp / đỏ và điểm quét (✕ hỏng; chấm chỉ ở vùng hỗn hợp), cùng quy tắc với replay
+  const zoneLayer = useMemo(() => {
+    if (!zones) return null;
+    const { pieces, outsideHole } = zoneShapes(zones);
+    const poly = (pts: [number, number][]) => pts.map(([x, y]) => `${X(x)},${Y(y)}`).join(" ");
+    const [hx, hy] = TABLE_HALF;
+    const outside = outsideHole
+      ? `M${X(-hx)},${Y(hy)}H${X(hx)}V${Y(-hy)}H${X(-hx)}Z M` +
+        outsideHole.map(([x, y]) => `${X(x)},${Y(y)}`).join(" L") + "Z"
+      : null;
+    return (
+      <g aria-hidden="true">
+        {pieces.map(([zone, pts], i) => (
+          <polygon key={i} points={poly(pts)} fill={ZONE_COLORS[zone]} fillOpacity={zone === "green" ? 0.12 : 0.15} />
+        ))}
+        {outside && <path d={outside} fill={ZONE_COLORS.red} fillOpacity={0.15} fillRule="evenodd" />}
+        {visibleScan(zones).map(({ x, y, ok }, i) =>
+          ok ? (
+            <circle key={i} cx={X(x)} cy={Y(y)} r={3} fill="#3fcf8e" opacity={0.8} />
+          ) : (
+            <path
+              key={i}
+              d={`M${X(x) - 4},${Y(y) - 4}l8,8m0,-8l-8,8`}
+              stroke={ZONE_COLORS.red}
+              strokeWidth={2.2}
+              strokeLinecap="round"
+            />
+          ),
+        )}
+      </g>
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(zones?.region), JSON.stringify(zones?.stop), zones?.scan?.length]);
   function move(e: PointerEvent<SVGSVGElement>) {
     if (!drag.current) return;
     const matrix = e.currentTarget.getScreenCTM();
@@ -146,6 +183,7 @@ export function TopView({
             </g>
           );
         })}
+        {zoneLayer}
         <polygon
           points={sector(region)
             .map(([x, y]) => `${X(x)},${Y(y)}`)

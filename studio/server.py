@@ -34,7 +34,7 @@ import numpy as np
 
 from .. import config, paths
 from ..env import SO101PickPlaceEnv
-from ..tools.make_replay import arm_model_export, bowl_geom_list
+from ..tools.make_replay import arm_model_export, bowl_geom_list, pick_scan_points, unreachable_region
 from .api import handle_get as studio_get, handle_post as studio_post
 from .runner import LabRun
 from .scene import normalize_objects
@@ -295,15 +295,9 @@ class Lab:
                 "tilt": round(math.degrees(math.acos(max(-1, min(1, -a[2])))), 1), "iters": used + 1}
 
     # ---------- vùng với tới ----------
-    PICK_SCAN_FILE = paths.PICK_SCAN
-
     def pick_scan(self):
-        """Các điểm đã quét gắp thật (tools/scan_pick_region.py): [[x, y, 1 nếu gắp được], ...]."""
-        try:
-            with open(self.PICK_SCAN_FILE, encoding="utf-8") as f:
-                return [[q["xy"][0], q["xy"][1], 1 if q["ok"] else 0] for q in json.load(f)["points"]]
-        except OSError:
-            return []
+        """Các điểm đã quét gắp thật (cùng bộ điểm với replay): [[x, y, 1 nếu gắp được], ...]."""
+        return pick_scan_points()
 
     REACH_FILE = paths.REACH_ENVELOPE
     REACH_BANDS = [(0.455, "gắp (đầu tay z 0.455)"), (0.50, "thả (z 0.50)"), (0.62, "trên cao an toàn (z 0.62)")]
@@ -835,6 +829,7 @@ def make_handler(lab):
                                            "gopen": config.GRIPPER_OPEN_RAD, "gclose": config.GRIPPER_CLOSED_RAD,
                                            "pick_region": dict(config.PICK_REGION, pan=list(config.PICK_PAN_XY)),
                                            "pick_scan": lab.pick_scan(),
+                                           "unreachable_region": unreachable_region(),
                                            "glim": [float(lab.m.jnt_range[lab.m.jnt_qposadr.tolist().index(lab.fl)][0]) if False else -10, 100]}))
                 elif u.path == "/model":
                     if q.get("exact") == "1":

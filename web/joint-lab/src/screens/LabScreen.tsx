@@ -62,6 +62,12 @@ export default function LabScreen() {
   const target = scene.objects.find((o) => o.id === scene.target_id)!;
   const bowlOK = reachable(scene.pose.wx, scene.pose.wy, meta.pick_region),
     targetOK = reachable(target.x, target.y, meta.pick_region);
+  // Vùng gắp xanh / hỗn hợp / đỏ và điểm quét, cùng dữ liệu với replay (server /meta)
+  const zones = {
+    region: meta.pick_region,
+    stop: meta.unreachable_region ?? null,
+    scan: meta.pick_scan ?? [],
+  };
   return (
     <>
       <div className="screen-toolbar">
@@ -152,6 +158,7 @@ export default function LabScreen() {
               <SceneView
                 origin={[...meta.pick_region.pan, 0.42]}
                 region={meta.pick_region}
+                zones={zones}
                 model={model}
                 poses={snapshot.pose}
                 objects={scene.objects}
@@ -174,6 +181,7 @@ export default function LabScreen() {
               <TopView
                 scene={scene}
                 region={meta.pick_region}
+                zones={zones}
                 snapshot={snapshot}
                 selected={selected}
                 onSelect={setSelected}

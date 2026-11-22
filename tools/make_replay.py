@@ -356,6 +356,27 @@ class Recorder:
         }
 
 
+SCAN_FILES = ("pick_scan.json", "pick_scan_inner.json", "pick_scan_outer.json")
+
+
+def pick_scan_points():
+    """Mọi điểm đã quét gắp thật (tools/scan_pick_region.py, lưới thường + vòng trong + vòng ngoài): [[x, y, 1 nếu gắp được], ...].
+    Replay canvas, Studio Lab và Studio Replay cùng đọc qua hàm này."""
+    points = []
+    for filename in SCAN_FILES:
+        path = paths.result(filename)
+        if path.is_file():
+            with open(path, encoding="utf-8") as f:
+                points.extend([[*point["xy"], int(point["ok"])] for point in json.load(f)["points"]])
+    return points
+
+
+def unreachable_region():
+    """Giới hạn dừng của policy (vùng đỏ): ngoài góc khớp 1 ±(giới hạn + biên), quá xa, quá sát đế thì về home ngay."""
+    return {"pan": list(config.PICK_PAN_XY), "angle_deg": config.PAN_LIMIT_DEG + config.PAN_UNREACHABLE_MARGIN_DEG,
+            "radius_m": config.PICK_UNREACHABLE_RADIUS, "inner_radius_m": config.PICK_UNREACHABLE_INNER_RADIUS}
+
+
 def write_replay(env, episodes, out, policy_name):
     """Write existing episodes without running any seeds or updating batch metadata."""
     # Thông tin cố định của cảnh để HTML vẽ đúng tỷ lệ
@@ -366,7 +387,7 @@ def write_replay(env, episodes, out, policy_name):
         "bowl_inner": config.BOWL_INNER_RADIUS,      # lòng bát: tâm hộp phải cách tâm bát ít hơn mức này
         "settled_speed": config.SETTLED_SPEED,       # hộp phải chậm hơn mức này (m/s) mới tính là nằm yên
         "box_half": config.BOX_HALF,
-        "unreachable_region": {"pan": list(config.PICK_PAN_XY), "angle_deg": config.PAN_LIMIT_DEG + config.PAN_UNREACHABLE_MARGIN_DEG, "radius_m": config.PICK_UNREACHABLE_RADIUS, "inner_radius_m": config.PICK_UNREACHABLE_INNER_RADIUS},   # giới hạn đỏ dùng chung với policy
+        "unreachable_region": unreachable_region(),   # giới hạn đỏ dùng chung với policy
         "bowl_z_margin": config.BOX_IN_BOWL_MARGIN,   # tâm hộp phải thấp hơn miệng bát chừng này mới tính trong bát
         "table": list(config.TABLE_HALF),            # nửa kích thước bàn (x, y)
         "max_steps": config.MAX_EPISODE_STEPS,
@@ -383,12 +404,7 @@ def write_replay(env, episodes, out, policy_name):
     # Vùng với tới của cánh tay (do joint_lab tính và lưu); nếu chưa có thì bỏ qua và nhắc cách tạo
     # Vùng GẮP ĐƯỢC THẬT: hình quạt trong config.PICK_REGION và các điểm đã quét (tools/scan_pick_region.py -> results/pick_scan.json)
     scene["pick_region"] = dict(config.PICK_REGION, pan=list(config.PICK_PAN_XY), bowl_clearance=config.BOX_BOWL_CLEARANCE)
-    scan_points = []
-    for filename in ("pick_scan.json", "pick_scan_inner.json", "pick_scan_outer.json"):
-        scan_path = paths.result(filename)
-        if scan_path.is_file():
-            with open(scan_path, encoding="utf-8") as f:
-                scan_points.extend([[*point["xy"], int(point["ok"])] for point in json.load(f)["points"]])
+    scan_points = pick_scan_points()
     if scan_points:
         scene["pick_scan"] = scan_points
     if paths.REACH_ENVELOPE.exists():

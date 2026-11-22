@@ -51,6 +51,7 @@ export function ReplayWebGL({
             target={scene.target}
             contacts={scene.contacts}
             region={scene.region}
+            zones={scene.zones}
             showRegion={scene.showRegion}
           />,
           slots.main,
