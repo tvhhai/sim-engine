@@ -160,33 +160,26 @@ flowchart TD
 
 File `policies/scripted_policy.py`. Mỗi phase có một điểm đích (x, y, z). IK tính góc khớp để tay tới điểm đó.
 
+[Xem 12 phase của seed 1 trong Replay](studio:replay?seed=1)
+
 *Chú thích màu: Di chuyển tay (dùng IK) · Đóng / mở kẹp (chờ số bước cố định) · Kết thúc*
 
 ```mermaid
-flowchart LR
-  p0["0  Nhấc lên"]
-  p1["1  Tới trên hộp"]
-  p2["2  Hạ pre-grasp"]
-  p3["3  Hạ xuống kẹp"]
-  p4["4  ĐÓNG kẹp<br/>(chờ 30 bước)"]
-  p5["5  Nhấc hộp"]
-  p6["6  Tới trên bát"]
-  p7["7  Hạ vào bát"]
-  p8["8  MỞ kẹp<br/>(chờ 20 bước)"]
-  p9["9  Rút lên"]
-  p10["10  Về home"]
-  p11["11  Xong (giữ nguyên)"]
-  p0 --> p1
-  p1 --> p2
-  p2 --> p3
-  p3 --> p4
-  p4 --> p5
-  p5 --> p6
-  p6 --> p7
-  p7 --> p8
-  p8 --> p9
-  p9 --> p10
-  p10 --> p11
+flowchart TB
+  subgraph r1 ["Tới và kẹp hộp"]
+    direction LR
+    p0["0  Nhấc lên"] --> p1["1  Tới trên hộp"] --> p2["2  Hạ pre-grasp"] --> p3["3  Hạ xuống kẹp"]
+  end
+  subgraph r2 ["Mang hộp tới bát"]
+    direction RL
+    p4["4  ĐÓNG kẹp<br/>(chờ 30 bước)"] --> p5["5  Nhấc hộp"] --> p6["6  Tới trên bát"] --> p7["7  Hạ vào bát"]
+  end
+  subgraph r3 ["Thả và về"]
+    direction LR
+    p8["8  MỞ kẹp<br/>(chờ 20 bước)"] --> p9["9  Rút lên"] --> p10["10  Về home"] --> p11["11  Xong (giữ nguyên)"]
+  end
+  r1 --> r2
+  r2 --> r3
   classDef data fill:#fff4e6,stroke:#f08c00,color:#212529
   classDef default fill:#f1f3f5,stroke:#868e96,color:#212529
   classDef sim fill:#e7f0ff,stroke:#4c6ef5,color:#212529
@@ -467,6 +460,8 @@ Nếu muốn nhìn thấy ngón kẹp rõ hơn, có thể dời hoặc nghiêng 
 ## 10. Chạy một seed: đọc code từng bước, rồi biết sửa chỗ nào
 
 Dùng ván thất bại **seed 2** làm ví dụ. Mục này trả lời ba câu: một ván chạy thế nào, nó hỏng ở đâu, và mình sửa gì để thử.
+
+[Xem seed 2 trong Replay](studio:replay?seed=2) [Mở cảnh seed 2 trong Lab](studio:lab?seed=2)
 
 ### 10.1 Một ván là vòng lặp 4 dòng
 

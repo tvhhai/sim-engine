@@ -2,7 +2,9 @@
 
 import json
 import math
+import mimetypes
 from pathlib import Path
+import re
 
 import mujoco
 
@@ -30,9 +32,40 @@ def scene_from_source(store, source, index=0):
     return {"name": episode.get("name", f"seed {episode['seed']}"), "seed": episode["seed"], "pose": pose}
 
 
+def docs_list():
+    """Các hướng dẫn Markdown trong docs/: tên file (không đuôi) và tiêu đề (dòng "# ..." đầu tiên)."""
+    out = []
+    for path in sorted(paths.DOCS.glob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        title = next((line[2:].strip() for line in text.splitlines() if line.startswith("# ")), path.stem)
+        out.append({"name": path.stem, "title": title})
+    return out
+
+
+def handle_docs(handler, path):
+    """GET /studio/docs (danh sách), /studio/docs/<tên>.md (nội dung), /studio/docs/image/<file> (ảnh trong docs/image)."""
+    if path == "/studio/docs":
+        handler._send(json.dumps({"docs": docs_list()}, ensure_ascii=False))
+        return
+    name = path[len("/studio/docs/"):]
+    if re.fullmatch(r"[A-Za-z0-9_-]+\.md", name) and (paths.DOCS / name).is_file():
+        handler._send((paths.DOCS / name).read_text(encoding="utf-8"), "text/markdown")
+        return
+    if name.startswith("image/"):
+        root = (paths.DOCS / "image").resolve()
+        file = (root / name[len("image/"):]).resolve()
+        if file.is_relative_to(root) and file.is_file():
+            handler._send(file.read_bytes(), mimetypes.guess_type(file.name)[0] or "application/octet-stream")
+            return
+    handler.send_error(404)
+
+
 def handle_get(handler, lab, path, query):
     if not path.startswith("/studio/"):
         return False
+    if path == "/studio/docs" or path.startswith("/studio/docs/"):
+        handle_docs(handler, path)
+        return True
     store = lab.runner.store
     try:
         source = query.get("source", "lab")
@@ -59,7 +92,7 @@ def handle_get(handler, lab, path, query):
                       "physics_dt": config.PHYSICS_TIMESTEP, "max_steps": config.MAX_EPISODE_STEPS,
                       "scene": Path(config.SCENE_XML).name, "run": lab.runner.snapshot(),
                       "workspace": dict(config.PICK_REGION, pan=list(config.PICK_PAN_XY)),
-                      "capabilities": ["lab", "full-replay", "multi-object", "run-history", "scene-import-export"]}
+                      "capabilities": ["lab", "full-replay", "multi-object", "run-history", "scene-import-export", "docs"]}
         else:
             handler.send_error(404)
             return True

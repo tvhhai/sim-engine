@@ -6,12 +6,15 @@ The previous viewer is available at `/legacy`.
 
 ```powershell
 cd web/joint-lab
-npm ci
-npm run build
-npm test
+pnpm install
+pnpm build
+pnpm test
 ```
 
-For frontend development, keep the Python lab on port 8765 and run `npm run dev`.
+The folder has its own `pnpm-workspace.yaml`, so pnpm does not merge it into a workspace
+file found in a parent folder (for example the user's home folder).
+
+For frontend development, keep the Python lab on port 8765 and run `pnpm dev`.
 Vite proxies the simulation endpoints to Python. Production use needs only the
 Python command after building. All JS/CSS dependencies are bundled locally.
 
@@ -87,6 +90,10 @@ replay renderers support all recorded objects, shapes and colors.
   `results/studio/studio_runs/<run_id>/{case,payload,meta}.json`. Metadata can change while
   recorded states stay immutable. Favorites, notes, filtering, sorting,
   pagination and comparison operate on real runs. Rerun uses only that case.
+- **Hướng dẫn (Docs)** renders `docs/*.md` (the same files GitHub shows) with Mantine
+  typography, Mermaid diagrams and a table of contents. Links written as
+  `studio:replay?seed=2&step=40` or `studio:lab?seed=2` become buttons that open Replay
+  or Lab directly; on GitHub they are plain text. Images use paths relative to `docs/`.
 - **Settings** controls theme, default route/playback, post-run navigation and
   Lab card visibility. Engine information comes from `/studio/health`; physical
   simulation settings remain owned by Python/config, rather than cosmetic toggles.
@@ -118,7 +125,7 @@ existing scene or simulation is shifted by this display change.
 - Python tests also cover immutable run archives, source validation, existing
   replay import and full analysis rendering.
 - Vitest checks bowl constraints and the scene/settings import contracts.
-- `npm run build` performs strict TypeScript checking before bundling.
+- `pnpm build` performs strict TypeScript checking before bundling.
 - Review checklist: labeled controls, visible keyboard focus, async status text,
   a skip link, keyboard alternatives for drag, undo for removal, responsive columns,
   reduced-motion styling, cleanup of requests/timers/Three.js buffers.

@@ -563,3 +563,72 @@ html[data-mantine-color-scheme="light"] .global-run-status {
   padding: 2px 4px;
   pointer-events: none;
 }
+
+/* ---- Hướng dẫn (docs/*.md) ---- */
+.docs-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+.docs-toc {
+  position: sticky;
+  top: 12px;
+  font-size: 13px;
+}
+.docs-toc a {
+  display: block;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: var(--mantine-color-dimmed);
+  text-decoration: none;
+}
+.docs-toc a:hover,
+.docs-toc a:focus-visible {
+  background: var(--mantine-color-default-hover);
+  color: var(--mantine-color-text);
+}
+.docs-toc a.toc-sub {
+  padding-left: 20px;
+}
+.docs-body {
+  max-width: 880px;
+}
+.docs-body h2,
+.docs-body h3 {
+  scroll-margin-top: 12px;
+}
+.docs-body details {
+  border: 1px solid var(--studio-line);
+  border-radius: 8px;
+  padding: 8px 14px;
+  margin: 12px 0;
+}
+.docs-body summary {
+  cursor: pointer;
+}
+.doc-image {
+  display: block;
+  max-width: 100%;
+  margin: 12px auto;
+  padding: 8px;
+  border-radius: 8px;
+  background: #fff;
+  color: #212529;
+}
+.doc-diagram {
+  margin: 12px 0;
+  overflow-x: auto;
+}
+.doc-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+@media (max-width: 900px) {
+  .docs-layout {
+    grid-template-columns: 1fr;
+  }
+  .docs-toc {
+    position: static;
+  }
+}

@@ -1,5 +1,5 @@
 import { lazy } from "react";
-import { FlaskConical, History, MonitorPlay, Settings2 } from "lucide-react";
+import { BookOpen, FlaskConical, History, MonitorPlay, Settings2 } from "lucide-react";
 // Register a new screen here; the shell builds navigation automatically.
 export const SCREENS = [
   {
@@ -22,6 +22,13 @@ export const SCREENS = [
     description: "Kết quả, cấu hình và ghi chú thử nghiệm",
     icon: History,
     component: lazy(() => import("../screens/RunsScreen")),
+  },
+  {
+    id: "docs",
+    title: "Hướng dẫn",
+    description: "Tài liệu docs/*.md, mở thẳng Replay và Lab từ bài",
+    icon: BookOpen,
+    component: lazy(() => import("../screens/DocsScreen")),
   },
   {
     id: "settings",
