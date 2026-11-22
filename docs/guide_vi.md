@@ -124,22 +124,22 @@ for step in range(500):
 
 ## 3. Bên trong một lần `env.step(action)`
 
-**Phần nâng cao, lần đầu có thể bỏ qua.** Đây là file `env.py`, nơi "chấm điểm" và "kẹp giả" nằm. Khi nào bạn muốn đọc code của `step` thì quay lại đây.
+**Phần nâng cao, lần đầu có thể bỏ qua.** Đây là file `env.py`, nơi "chấm điểm" và nhận biết "đang kẹp" nằm. Khi nào bạn muốn đọc code của `step` thì quay lại đây.
 
-*Chú thích màu: Xử lý · Kẹp giả · Kết quả trả về*
+*Chú thích màu: Xử lý · Kiểm tra kẹp · Kết quả trả về*
 
 ```mermaid
 flowchart TD
   s1["Nhận action<br/>(7 số trong [-1, 1])"]
   s2["Đổi thang → lệnh thật<br/>cho các actuator"]
-  s3["_update_grasp()<br/>dính / nhả hộp"]
   s4["16 × mj_step()<br/>(vật lý, 2 ms mỗi bước)"]
+  s3["_both_pads_touch_box()<br/>hai hàm cùng chạm hộp?"]
   s5["_get_obs() + _get_info()"]
   s6["Trả về: obs, reward,<br/>terminated, truncated, info"]
   s1 --> s2
-  s2 --> s3
-  s3 --> s4
-  s4 --> s5
+  s2 --> s4
+  s4 --> s3
+  s3 --> s5
   s5 --> s6
   classDef data fill:#fff4e6,stroke:#f08c00,color:#212529
   classDef ok fill:#ebfbee,stroke:#2f9e44,color:#212529
@@ -151,10 +151,10 @@ flowchart TD
 
 1. **Đổi thang:** action [-1,1] đổi thành góc đích thật của từng khớp (theo khoảng trong XML).
 2. **Kẹp:** action[5] đổi thành độ mở mỗi ngón (0,005 đến 0,04 m).
-3. **`_update_grasp`:** nếu lệnh đóng + ngón khép + tay cách hộp dưới 6 cm thì hộp bị **dính** vào tay bằng cách gán vị trí. Không phải ma sát thật.
-4. **Vật lý:** chạy 16 bước nhỏ 0,002 s (tổng 0,032 s, tức 31,25 Hz chứ không đúng 30).
+3. **Vật lý:** chạy 16 bước nhỏ 0,002 s (tổng 0,032 s, tức 31,25 Hz chứ không đúng 30). Hộp chỉ được giữ bằng **va chạm và ma sát thật** của hai hàm kẹp (mỗi hàm là nhiều khối lồi nhỏ `fixed_jaw_col_*`, `moving_jaw_col_*`). Không có đoạn code nào gán hộp vào tay.
+4. **Kiểm tra kẹp:** `_both_pads_touch_box()` ghi `_grasped = True` khi cả hai hàm cùng đang chạm hộp. Đây chỉ là **thông tin** cho policy và cho việc chấm điểm, không điều khiển gì.
 5. **Quan sát mới** (`_get_obs`) và thông tin (`_get_info`).
-6. **Chấm điểm:** thành công khi hộp trong bán kính 5 cm của bát và đúng độ cao. Hết 500 bước thì truncated.
+6. **Chấm điểm** (`_get_info`): thành công khi đủ 4 điều: tâm hộp trong lòng bát, tâm hộp thấp hơn miệng bát, hộp đã được **thả** (không còn bị kẹp) và hộp đã **nằm yên**. Hết 500 bước thì truncated.
 
 ## 4. Policy viết tay: 12 phase đi từ trái sang phải
 
@@ -235,7 +235,7 @@ Trong `_move_toward`: đo khoảng cách giữa tay và điểm đích. Dưới 
 
 ### 4. Ai quyết định "gắp được rồi"?
 
-Hàm `_update_grasp` trong `env.py`. Hộp được dính vào tay khi đủ ba điều kiện: lệnh đang đóng kẹp, ngón đã khép, tay gần hộp (dưới ngưỡng). Đây là kẹp giả bằng code, không phải lực ma sát thật. Độ cao gắp `_grasp_z = 0.434` là con số do tác giả thử cho ngang tâm hộp (hộp ở z=0.44, cao 3 cm).
+Không ai "quyết định" cả: hộp được nhấc lên nhờ ma sát thật của hai hàm kẹp, giống robot thật. Env chỉ **báo** `_grasped` (cả hai hàm đang chạm hộp). Ở phase 4, policy đóng kẹp rồi chờ tới khi `_grasped` bật và ngón ngừng khép mới nhấc; quá 30 bước mà chưa kẹp được thì quay lại phase 2 hạ lại. Hộp có thể trượt, xoay hay rơi thật, nên policy phải canh roll cổ tay song song mặt hộp và kẹp ở độ cao `GRASP_Z = 0.43` (ngang tâm hộp).
 
 ### 5. Ngoài đời thật thì sao?
 
@@ -298,7 +298,7 @@ flowchart LR
 | # | File | Đọc gì trong đó |
 | --- | --- | --- |
 | 1 | **`config.py`** | Hằng số: tên khớp, vị trí hộp và bát, tần số, số bước tối đa. Ngắn, đọc 2 phút. |
-| 2 | **`env.py`** | `reset`, `step`, `_update_grasp`, `_get_info` (chỗ chấm thành công). |
+| 2 | **`env.py`** | `reset`, `step`, `_both_pads_touch_box` (nhận biết đang kẹp), `_get_info` (chỗ chấm thành công). |
 | 3 | **`policies/scripted_policy.py`** | `select_action` (12 phase) và `_move_toward` (IK). *Đây là file bạn sẽ sửa nhiều nhất.* |
 | 4 | **`assets/so101_scene.xml`** | Robot, bàn, hộp, bát, camera. Xem phần ngón kẹp và khối hộp (dòng 99 đến 150). |
 | 5 | `record.py` | Vòng lặp thu demo: chạy policy rồi lưu từng bước. |
@@ -360,7 +360,7 @@ bước | phase | tay (x, y, z)            | hộp (x, y, z)             | kẹp
  265*|     6 | (+0.173, +0.007, +0.613) | (+0.171, -0.000, +0.562) |   13.0 |     True
 ```
 
-Cách đọc: dấu `*` là vừa đổi phase. Cột "kẹp mở" từ 100 (mở) xuống khoảng 13 (đóng). Cột "đang kẹp" chuyển True ở bước 240: hộp bắt đầu dính vào tay. Ở bước 265, hộp có z = 0,562, tức đã được nhấc lên theo tay.
+Cách đọc: dấu `*` là vừa đổi phase. Cột "kẹp mở" từ 100 (mở) xuống khoảng 13 (đóng). Cột "đang kẹp" chuyển True ở bước 240: cả hai hàm đã cùng chạm hộp (kẹp bằng ma sát thật). Ở bước 265, hộp có z = 0,562, tức đã được nhấc lên theo tay.
 
 ### 5. Mức 3: thêm action và góc khớp, từng bước · *nhiều nhất*
 
@@ -429,7 +429,7 @@ Mục tiêu là hiểu vì sao từng seed thất bại, không phải đoán s�
 
 | Điểm lạ | Chi tiết |
 | --- | --- |
-| **Kẹp giả** | Hộp được dính vào tay bằng cách gán vị trí (`_update_grasp`), không phải ma sát thật. Ngón kẹp có thể khép sâu hơn bề rộng hộp. Robot thật sẽ khó hơn nhiều. |
+| **Kẹp thật** | Hộp chỉ được giữ bằng va chạm và ma sát của hai hàm kẹp, không gán vị trí. Hộp có thể trượt, xoay, rơi khi nhấc hoặc bị hàm gạt lệch khi hạ, nên phần lớn công sức tinh chỉnh policy nằm ở cách hạ tay và góc roll. |
 | **`state[5]` luôn bằng 0** | `state` có 7 số nhưng chỉ có 5 khớp tay được điền. `state[5]` là ô trống, độ mở kẹp nằm ở `state[6]`. |
 | **31,25 Hz, không phải 30** | `int(1/30/0.002)` = 16 bước vật lý, 16 × 0,002 = 0,032 giây. |
 | **Policy "gian lận"** | Policy viết tay hỏi thẳng env vị trí hộp. Policy AI chỉ được nhìn ảnh camera và góc khớp. |
@@ -452,8 +452,6 @@ Mục tiêu là hiểu vì sao từng seed thất bại, không phải đoán s�
 ### Vì sao thế
 
 Camera được đặt ở cổ tay, cao hơn và lệch so với hai ngón (trong file XML, camera ở `z = -0.025` còn ngón ở `z = -0.046` trở xuống). Tác giả repo có để lại nhiều dòng ghi chú mâu thuẫn về hướng nhìn của camera này, nên vị trí có vẻ đã được thử nhiều lần.
-
-> **Liên quan "kẹp giả":** ngay cả khi nhìn thấy ngón, hộp không được kẹp bằng ma sát thật mà được dính vào tay bằng code (`_update_grasp`). Nên đây là hạn chế của mô phỏng, không phải lỗi của bạn.
 
 Nếu muốn nhìn thấy ngón kẹp rõ hơn, có thể dời hoặc nghiêng camera trong `so101_scene.xml` (dòng `<camera name="arm_cam" ...>`). Lưu ý: ảnh camera này sau này là **dữ liệu đưa vào AI**, nên đổi vị trí camera sẽ đổi dữ liệu. Với robot thật, vị trí camera phải khớp với chỗ gắn camera thật.
 
