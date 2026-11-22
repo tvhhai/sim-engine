@@ -4,8 +4,8 @@ import tempfile
 import unittest
 
 from sim_engine import paths
-from sim_engine.tools.studio_store import StudioStore, render_full_replay
-from sim_engine.tools.studio_api import scene_from_source
+from sim_engine.studio.api import scene_from_source
+from sim_engine.studio.store import StudioStore, render_full_replay
 
 
 def payload(steps=1):

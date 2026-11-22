@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 
 import mujoco
 
-from . import config
+from .. import config
 
 
 def in_workspace(xy):

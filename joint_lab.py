@@ -1,6 +1,6 @@
-"""Compatibility entry point for :mod:`sim_engine.tools.joint_lab`."""
+"""Compatibility entry point for :mod:`sim_engine.studio.server`."""
 
-from .tools import joint_lab as _implementation
+from .studio import server as _implementation
 
 
 if __name__ == "__main__":

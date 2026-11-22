@@ -9,10 +9,10 @@ import time
 
 from .. import paths
 from ..env import SO101PickPlaceEnv
-from ..lab_scene import in_workspace, normalize_objects
 from ..policies.scripted_policy import ScriptedPolicy
-from .make_replay import Recorder, write_replay
-from .studio_store import StudioStore
+from ..tools.make_replay import Recorder, write_replay
+from .scene import in_workspace, normalize_objects
+from .store import StudioStore
 
 LAB_SEED = 2147483647
 

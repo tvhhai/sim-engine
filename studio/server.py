@@ -34,10 +34,10 @@ import numpy as np
 
 from .. import config, paths
 from ..env import SO101PickPlaceEnv
-from .make_replay import arm_model_export, bowl_geom_list
-from ..lab_scene import normalize_objects
-from .studio_api import handle_get as studio_get, handle_post as studio_post
-from .lab_run import LabRun
+from ..tools.make_replay import arm_model_export, bowl_geom_list
+from .api import handle_get as studio_get, handle_post as studio_post
+from .runner import LabRun
+from .scene import normalize_objects
 
 ARM = ["base", "shoulder", "upper_arm", "lower_arm", "wrist", "gripper"]
 JAW = "moving_jaw_so101_v1"      # hàm kẹp di động (hàm cố định thuộc body "gripper")

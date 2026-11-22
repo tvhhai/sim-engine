@@ -7,7 +7,7 @@ from pathlib import Path
 import mujoco
 
 from .. import config, paths
-from .studio_store import render_full_replay
+from .store import render_full_replay
 
 
 def scene_from_source(store, source, index=0):

@@ -97,7 +97,7 @@ supplies menu, active state, header, mobile drawer, loading/error boundary and
 hash routing. Use `useStudio()` for scene, catalog, run status and settings;
 use `route.navigate(id, params)` for navigation. Share UI through `components/`
 and common layout classes in `studio/studio.css`. New backend capabilities can
-be added to `tools/studio_api.py` without growing the original Lab handler.
+be added to `studio/api.py` without growing the original Lab handler.
 Features with new data still need their own API and screen implementation.
 
 ## Coordinates

@@ -415,13 +415,19 @@ sim_engine/
     ik_controller.py           # Jacobian-based inverse kinematics
     tools/                     # Debugging, replay, and viewers
         viewer.py
-        joint_lab.py
         check_scripted.py
         make_replay.py
         select_seeds.py
         step_policy.py
         trace_episode.py
         watch_policy.py
+
+    studio/                    # Sim Studio server (python -m sim_engine.studio)
+        server.py              # HTTP server, static IK, reach envelope
+        api.py                 # /studio/* endpoints
+        runner.py              # one "lab" rollout from the edited scene
+        store.py               # immutable run history
+        scene.py               # multi-object MJCF for Lab scenes
 
     workflows/                 # CLI workflows
         record.py

@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from sim_engine import config
-from sim_engine.tools.lab_run import LAB_SEED, LabRun
+from sim_engine.studio.runner import LAB_SEED, LabRun
 from sim_engine.tools.make_replay import Recorder
 
 

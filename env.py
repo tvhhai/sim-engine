@@ -52,7 +52,7 @@ class SO101PickPlaceEnv(gym.Env):
         # Nạp mô hình MuJoCo từ file XML (robot, bàn, hộp, bát, camera)
         self.lab_objects = []
         if lab_objects is not None:
-            from .lab_scene import normalize_objects, scene_model
+            from .studio.scene import normalize_objects, scene_model
             self.lab_objects = normalize_objects(lab_objects, target_id)
             self.model = scene_model(self.lab_objects)
         else:

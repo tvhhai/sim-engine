@@ -6,9 +6,9 @@ import unittest
 import numpy as np
 
 from sim_engine.env import SO101PickPlaceEnv
-from sim_engine.lab_scene import normalize_objects
-from sim_engine.tools.joint_lab import Lab
-from sim_engine.tools.lab_run import LabRun
+from sim_engine.studio.runner import LabRun
+from sim_engine.studio.scene import normalize_objects
+from sim_engine.studio.server import Lab
 from test_lab_run import pose, wait
 
 
