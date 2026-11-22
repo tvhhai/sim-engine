@@ -28,3 +28,7 @@ docs/studio_runs/
 web/joint-lab/node_modules/
 web/joint-lab/*.tsbuildinfo
 web/joint-lab/.npm-cache/
+
+# Chỉ mục và cấu hình công cụ cục bộ
+.codegraph/
+.cursor/
