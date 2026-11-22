@@ -1,0 +1,7 @@
+# Gốc workspace riêng của Studio, để pnpm không gộp thư mục này vào một pnpm-workspace.yaml ở thư mục cha.
+packages:
+  - "."
+
+# esbuild (Vite dùng) cần chạy script cài đặt để lấy file thực thi cho hệ điều hành
+allowBuilds:
+  esbuild: true

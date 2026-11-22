@@ -24,6 +24,7 @@ results/studio/
 web/joint-lab/node_modules/
 web/joint-lab/*.tsbuildinfo
 web/joint-lab/.npm-cache/
+web/joint-lab/.pnpm-store/
 
 # Chỉ mục và cấu hình công cụ cục bộ
 .codegraph/
