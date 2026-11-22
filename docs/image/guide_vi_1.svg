@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 310" style="width:100%;max-width:720px;height:auto;display:block;margin:12px auto" role="img" aria-label="Các điểm đích của tay nhìn ngang">
+    <line x1="20" y1="256" x2="700" y2="256" stroke="currentColor" stroke-opacity=".4" stroke-width="2"/></line>
+    <text x="24" y="274" font-size="12" fill="currentColor" opacity=".7">mặt bàn</text>
+    <rect x="552" y="226" width="36" height="30" rx="2" fill="#e24b4a" fill-opacity=".85"/></rect>
+    <text x="570" y="296" font-size="13" text-anchor="middle" fill="currentColor">hộp (x=0.15)</text>
+    <path d="M122 232 L130 256 L170 256 L178 232 Z" fill="none" stroke="currentColor" stroke-width="2"/></path>
+    <text x="150" y="296" font-size="13" text-anchor="middle" fill="currentColor">bát (x=-0.15)</text>
+    <g font-size="12" fill="currentColor">
+      <circle cx="570" cy="60" r="6" fill="#378add"/></circle><text x="570" y="46" text-anchor="end">phase 1: z=0.62 (safe_z)</text>
+      <circle cx="570" cy="220" r="6" fill="#378add"/></circle><text x="558" y="212" text-anchor="end">phase 2: z=0.46 (pre_grasp)</text>
+      <circle cx="570" cy="246" r="6" fill="#ef9f27"/></circle><text x="542" y="250" text-anchor="end">phase 3: z=0.434 (gắp)</text>
+      <circle cx="150" cy="60" r="6" fill="#378add"/></circle><text x="150" y="46">phase 6: trên bát (safe_z)</text>
+      <circle cx="150" cy="200" r="6" fill="#378add"/></circle><text x="162" y="196">phase 7: z=0.48 (place_z)</text>
+    </g>
+    <line x1="570" y1="66" x2="570" y2="214" stroke="currentColor" stroke-opacity=".35" stroke-dasharray="4 4"/></line>
+    <line x1="156" y1="60" x2="564" y2="60" stroke="currentColor" stroke-opacity=".35" stroke-dasharray="4 4"/></line>
+  </svg>

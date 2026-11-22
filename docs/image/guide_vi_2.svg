@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 372" style="width:100%;max-width:720px;height:auto;display:block;margin:12px auto" role="img" aria-label="Đường đi của tay ở phase 2 seed 2">
+    <line x1="20" y1="332" x2="700" y2="332" stroke="currentColor" stroke-opacity=".4" stroke-width="2"/></line>
+    <text x="24" y="348" font-size="12" fill="currentColor" opacity=".7">mặt bàn</text>
+    <line x1="176" y1="30" x2="176" y2="332" stroke="#639922" stroke-width="2" stroke-dasharray="5 4"/></line>
+    <text x="168" y="24" font-size="12" text-anchor="end" fill="currentColor">tâm hộp lúc đầu: y = -0.012</text>
+    <rect x="146" y="287" width="60" height="45" fill="#e24b4a" fill-opacity=".35" stroke="#e24b4a"/></rect>
+    <text x="142" y="314" font-size="12" text-anchor="end" fill="currentColor">hộp lúc đầu</text>
+    <rect x="370" y="287" width="60" height="45" fill="#e24b4a" fill-opacity=".85"/></rect>
+    <text x="434" y="314" font-size="12" fill="currentColor">hộp bị gạt (y = 0.10)</text>
+    <polyline points="198,49 198,149 190,210 192,200 202,212 218,242 250,257 312,277 350,286" fill="none" stroke="#378add" stroke-width="2.5"/></polyline>
+    <circle cx="198" cy="49" r="3.5" fill="#378add"/></circle><circle cx="198" cy="149" r="3.5" fill="#378add"/></circle><circle cx="190" cy="210" r="3.5" fill="#378add"/></circle><circle cx="192" cy="200" r="3.5" fill="#378add"/></circle><circle cx="202" cy="212" r="3.5" fill="#378add"/></circle><circle cx="218" cy="242" r="3.5" fill="#378add"/></circle><circle cx="250" cy="257" r="3.5" fill="#378add"/></circle><circle cx="312" cy="277" r="3.5" fill="#378add"/></circle><circle cx="350" cy="286" r="3.5" fill="#378add"/></circle>
+    <text x="208" y="53" font-size="12" fill="currentColor">bắt đầu phase 2: y = -0.001, z = 0.614</text>
+    <text x="362" y="278" font-size="12" fill="currentColor">tay đuổi theo hộp tới y = 0.075</text>
+    <text x="360" y="366" font-size="12" text-anchor="middle" fill="currentColor" opacity=".7">trục ngang: y (mét). Mỗi chấm là một bước. Đường cong, không thẳng đứng.</text>
+  </svg>
