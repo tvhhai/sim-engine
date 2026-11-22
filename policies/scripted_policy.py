@@ -51,6 +51,11 @@ class ScriptedPolicy(BasePolicy):
     STALL_PHASES = (1,)        # chỉ phase 1 dùng phát hiện kẹt; các phase kẹp/mang hộp dựa vào hạn mặc định (đã đo: rút ngắn chúng làm hỏng kẹp)
     IK_LIMIT_PHASES = (5, 6, 7)  # phase nào IK kẹp góc khớp trong giới hạn thật. Đo 200 seed: (5, 6, 7) -> 198/200; cả mọi phase -> 195/200; không phase nào -> 197/200
     IK_RESPECT_LIMITS = False  # True: mọi lời giải IK bị kẹp trong giới hạn khớp. Đo 200 seed: bật cho mọi phase làm 3-4 seed mất kẹp (91, 149...)
+    # Có giới hạn khớp thì IK khoá khớp bão hoà (xem _solve_ik) thay vì chỉ cắt góc, cộng khởi tạo khớp 1 theo hướng đích ở PAN_BEARING_PHASES.
+    # Đo 274 seed: 271 -> 271 (1018 hết hỏng, 55 hỏng: seed mong manh, bản cũ cũng rơi hộp 2 lần khi nhấc); 14 seed sát đế chậm hơn 30+ bước.
+    # Khoá khớp mà không khởi tạo khớp 1: seed 14 kẹt ở phase 6 (270/274)
+    PAN_BEARING_PHASES = (6,)
+    PAN_BEARING_DEG = 30.0     # chỉ khởi tạo lại khi hướng đích lệch góc khớp 1 hiện tại hơn chừng này
     PHASE5_ADAPTIVE_Z = False  # True: phase 5 cũng hạ độ cao nhấc xuống mức tới được. Đo 200 seed: 192-194/200 (xấu hơn), nên TẮT
     PHASE1_ADAPTIVE_Z = True   # phase 1 hạ độ cao đích xuống mức tới được
     REACTIVE_ROLL = True       # tay chạm bát lúc hạ xuống kẹp -> nhấc lên, đổi roll, kẹp lại (xem _flip_roll)
@@ -58,18 +63,69 @@ class ScriptedPolicy(BasePolicy):
     ROLL_TURN_MODE = "half"    # "full": xoay tại chỗ tới roll mới rồi hạ; "half": xoay tại chỗ nửa đường, nửa còn lại xoay trong lúc hạ xuống
     PREDICT_PATH = True        # dự đoán xét cả quãng xoay roll (ở độ cao lơ lửng), không chỉ hai tư thế cuối
     PREDICT_PRETURN = True     # roll dự đoán khác roll hiện tại nhiều thì xoay TẠI CHỖ ở độ cao lơ lửng (cuối phase 1) rồi mới hạ, không xoay lúc đang hạ gần bát
-    CAM_AVOID = True           # hộp sát chân (r < CAM_AVOID_R): chọn roll để camera cổ tay không chạm vai/cánh tay/đế/bàn (xem _cam_geom_distance)
-    CAM_AVOID_R = 0.16         # chỉ xét hộp cách trục khớp 1 gần hơn chừng này (m); xa hơn thì camera không thể chạm vai
+    # Chọn roll để camera cổ tay không chạm vai/cánh tay/đế/bàn (xem _cam_geom_distance), xét cho MỌI hộp. Trước chỉ xét r < 0,16 m:
+    # đo 774 seed xét mọi hộp cho kết quả trùng hệt (ở xa camera không thể chạm vai), nên bỏ ngưỡng
+    CAM_AVOID = True
+    # Kiểm tra hàm kẹp mở không chạm hộp khi hạ (JAW_BOX_MARGIN) cho hộp gần hơn chừng này (m). Trước chỉ áp cho r < 0,16 m: seed 1011
+    # (r 37 cm) bị hàm cố định gạt hộp ra 25 mm lúc hạ ở phase 3, hộp lọt ra vùng xa rồi rơi khi nhấc. Đo 274 seed: 0,16 -> 273/274;
+    # 0,385 -> 274/274 (17 seed đổi, không seed nào chậm hơn 30 bước); mọi hộp (1,0) -> 273 (152 ở r 39,4 cm hỏng). Ngưỡng nằm giữa 1011 và 152,
+    # tức là canh theo đúng hai seed này: thêm seed mới ở r 37-40 cm thì nên đo lại
+    JAW_AVOID_R = 0.385        # đo lại 774 seed: xét mọi hộp -> 772 (152 hỏng, rơi hộp 11 -> 19), giữ ngưỡng
     JAW_BOX_MARGIN = 0.0008    # hộp sát chân: hàm kẹp (mở hết cỡ) phải không chạm hộp ở tư thế kẹp (>= chừng này, m); chạm = đẩy hộp vào đế. Đo seed 205: roll chạm hộp -3..-9 mm đều hỏng
     FAR_FIXED_ROLL = True      # hộp r >= FAR_FIXED_R: roll mặc định -87°, không canh theo yaw hộp (xem _far_fixed_roll). Quét roll ép sẵn seed 244/246/248/252/254: roll ±87..93° gắp được, roll canh yaw (vd -123°) hỏng
-    FAR_FIXED_R = 0.395
+    FAR_FIXED_R = 0.395        # gộp vào FAR_ROLL_R (0,33) -> 770/774 (50, 211, 2312 hỏng), giữ ngưỡng
     FAR_PREF_WEIGHT = 0.1      # hộp xa (r >= FAR_ROLL_R) canh roll theo yaw: trọng số kéo về roll ưa thích -87° (hộp thường 0,02). Seed 172 (r 36 cm, +32°) ở 0,02 canh ra roll ~3° làm hỏng; 0,05 và 0,1 đều 252/252, 0,1 ít bước hơn
     FAR_ROLL_ORDER = (-100, 40)  # thứ tự thử (độ). Quét roll ép sẵn: -100° gắp được seed 217-220/245/247/254 (-87° nằm ngay mép vực: 245 hỏng; -96° làm hỏng 219); seed 244 (-110°, mọi roll <= 25° ngoài tầm khớp 1) chỉ gắp được ở roll >= 40°
     FAR_FIXED_ERR = 0.014      # sai số IK (có giới hạn khớp) tối đa của đích kẹp (m); seed 244 ở -96°: 19 mm, phase 3 hết hạn 200 bước
     FAR_FIXED_CAM = 0.003      # camera cổ tay phải cách bàn/vai tối thiểu chừng này (m) ở tư thế chuẩn bị kẹp và kẹp: không cắm vào bàn (roll +93° cắm 27 mm)
-    CAM_CLEARANCE_MARGIN = 0.010    # camera phải cách vai/cánh tay/đế/bàn tối thiểu chừng này (m)
+    # Hộp sát giới hạn khớp 1 (lệch >= PAN_LIMIT_NEAR_DEG): đích kẹp = tâm hộp lệch GRASP_SIDE_OFFSET về phía hàm cố định, nên một nửa số roll
+    # song song mặt hộp đặt đầu tay RA NGOÀI ±110°. IK không giới hạn khớp ở phase 2-3 vẫn ra lệnh pan -112°, khớp thật dừng ở -110° và hàm cố
+    # định đè lên hộp (seed 1004: roll -105° sai số 16,7 mm). Roll đó sai số (có giới hạn khớp) > PAN_LIMIT_TRIGGER thì xoay thêm k·90° để
+    # hàm CỐ ĐỊNH nằm phía trong tầm khớp 1, hàm di động ở phía ngoài đẩy hộp vào khi khép (roll +75°: 2,2 mm).
+    # Đo 274 seed: 270 -> 271 (1004 hết hỏng; 17, 1001, 1003 nhanh hơn 20-40 bước). Ngưỡng 4 mm làm hỏng 244 (roll -95° sai 4-10 mm vẫn gắp được);
+    # thử kẹp theo hướng bán kính (hàm cố định về phía đế) thì 268/274: kẹp chéo góc hộp, hỏng 28, 231, 244
+    # Hộp xa (r >= DRAG_R): tay vươn gần hết cỡ nên trục kẹp nghiêng 47-66° so với phương thẳng đứng (seed 55, mọi roll -100..+80°), hai hàm ôm
+    # hộp xiên và hộp tuột khi nhấc. Ván nào thành công thì lần kẹp cuối ở r <= 38,2 cm (hộp đã bị xê dịch vào sau lần rơi). Nên kẹp, KÉO TRƯỢT
+    # hộp vào r = DRAG_TARGET, nhả rồi gắp lại (xem _drag_box). Đo 274 seed (camera có va chạm): 271 -> 273 (55, 1019, 1022 hết hỏng; 1011 hỏng:
+    # hộp bị đẩy ra 41 cm ở các lần gắp hỏng trước), trung vị 164,5 -> 180,5 bước. DRAG_R 0,39: cũng 273 nhưng chậm hơn; DRAG_TARGET 0,36: 272.
+    # Chỉ kéo sau khi đã rơi hộp một lần: 271 (không có tác dụng)
+    # Đường hạ có kế hoạch cho hộp r < PLAN_R_MAX (xem _lower_to_box): phase 2 đi ngang ở độ cao lơ lửng tới NGAY TRÊN điểm kẹp và xoay roll xong,
+    # phase 3 hạ THẲNG đứng. Đường cũ dừng phase 1 trên TÂM hộp rồi dời ngang ~2,6 cm ở 1 cm trên đỉnh hộp với hàm mở hết cỡ, hạ trong lúc còn dời
+    # ngang (ngưỡng 2,5 cm) và roll còn xoay: seed 1011 hàm cố định gạt hộp 22 mm rồi phải đổi roll. Đo 274 seed: 274 -> 274, đổi roll 15 -> 9 lần,
+    # 1011 162 -> 133 bước, trung bình +2,6 bước (8: +83 vì vẫn chạm hộp một lần rồi đổi roll). Áp cho mọi hộp: 264-273 (hộp xa tay vươn hết cỡ không
+    # hạ thẳng được; r 38-39,5 cm thì 152/1016 hỏng); sau khi kéo hộp (_drag_box) cũng dùng đường cũ (hộp có thể còn nghiêng)
+    PLANNED_DESCENT = True
+    PLAN_R_MAX = 0.38
+    # Đã thử thay PLAN_R_MAX bằng phép đo (774 seed): hạ thẳng khi có roll mà đường hạ sạch -> 764 (hộp xa tay nghiêng 47-50°, kẹp xiên rồi tuột);
+    # thêm điều kiện trục tay nghiêng <= 44° / 46° -> 753 / 747 (vùng giữa mất đường hạ thẳng). Giữ ngưỡng bán kính
+    PLAN_SAMPLES = 5           # số điểm kiểm tra dọc đường hạ
+    PLAN_REACH_ERR = 0.015     # sai số IK (có giới hạn khớp) tối đa dọc đường hạ (m)
+    PLAN_BOWL_MARGIN = 0.005   # hàm mở cách bát tối thiểu (m), chỉ xét khi hộp cách bát < 20 cm
+    HOVER_ABOVE = 0.03         # độ cao lơ lửng = pre_grasp_z + chừng này (thấp hơn nếu phase 1 thấp hơn; tối thiểu pre_grasp_z + 1,5 cm)
+    HOVER_NEAR, HOVER_FAR = 0.01, 0.025
+    HOVER_STALL, HOVER_STALL_ANY = 5, 10
+    PLAN_ROLL_SETTLE_DEG = 4.0
+    PLAN_ROLL_WAIT = 25
+    DRAG_FAR = True
+    DRAG_R = 0.40
+    DRAG_TARGET = 0.33
+    DRAG_LIFT = 0.004          # nhấc nhẹ khi kéo để bớt ma sát với bàn (m)
+    DRAG_RELEASE_STEPS = 12
+    DRAG_RAISE = 0.03          # nhấc tay lên chừng này sau khi nhả rồi mới gắp lại (m)
+    PAN_LIMIT_ROLL = True
+    PAN_LIMIT_NEAR_DEG = 100.0
+    PAN_LIMIT_TRIGGER = 0.010
+    PAN_LIMIT_ERR_OK = 0.004
+    CAM_CLEARANCE_MARGIN = 0.010   # camera phải cách vai/cánh tay/đế/bàn tối thiểu chừng này (m)
     BOWL_CLEARANCE_MARGIN = 0.010   # hàm kẹp (mở hết cỡ) phải cách bát tối thiểu chừng này (m) ở tư thế chuẩn bị kẹp và tư thế kẹp
     JAW_STUCK_STEPS = 6        # hàm CỐ ĐỊNH nằm trên đỉnh hộp (chạm hộp, đầu tay còn cao hơn đáy > 1,2 cm) liền chừng này bước ở phase 3 thì nhấc lên, đổi roll rồi hạ lại (như khi chạm bát). Seed 1001/1003: hàm đè lên hộp, phase 3 hết hạn
+    # Phase 4, TRƯỚC khi đóng kẹp: đo trục kẹp trên tư thế THẬT (không phải tư thế IK dự đoán) rồi xoay wrist_roll cho song song cặp mặt hộp.
+    # Roll chọn ở _choose_roll tính trên lời giải IK; tư thế thật lệch khỏi đó vài độ (seed 1002: -8,6°) nên hàm cố định chạm GÓC hộp trước,
+    # hộp xoay tới +30° trong lúc khép và kẹp trượt. Đo 274 seed: 266 -> 270 (1002, 1009, 1010, 1011 hết hỏng, không seed nào mất)
+    GRASP_ALIGN = True
+    GRASP_ALIGN_TOL_DEG = 2.0  # lệch trục kẹp - mặt hộp dưới chừng này thì đóng kẹp luôn
+    GRASP_ALIGN_MAX_DEG = 20.0  # chỉ chỉnh roll trong ± chừng này quanh roll đã chọn
+    GRASP_ALIGN_STEPS = 12     # tối đa chừng này bước chờ chỉnh roll; hết thì đóng kẹp như cũ
     BOWL_HIT_STEPS = 3         # tay chạm bát liền chừng này bước khi hạ xuống kẹp (phase 2-4) thì nhấc lên, xoay wrist_roll rồi kẹp lại
     ROLL_FLIP_OFFSETS = (math.pi / 2, -math.pi / 2, math.pi, -math.pi)   # thứ tự thử khi đổi roll (rad so với roll đang giữ): 90° trước, 180° sau
     # Đo 200 seed + 57 vị trí quanh bát: dự đoán + phản ứng (90°, 45° tại chỗ + 45° lúc hạ) -> 194/200 (seed 7: 157 bước, 198: 102, 99: 126);
@@ -77,8 +133,10 @@ class ScriptedPolicy(BasePolicy):
     ROLL_CLEAR_MARGINS = (0.035, 0.025, 0.015)   # nhấc lên cao hơn miệng bát chừng này (m) trước khi xoay roll; lấy mức đầu tiên với tới được
     ROLL_TURN_STEPS = 60       # tối đa chừng này bước để xoay roll tại chỗ
     VIA_ANGLE_DEG = 165.0      # mang hộp tới bát cách tay quá chừng này độ (quanh khớp 1): đi qua điểm trung gian ở giữa (IK một bước sẽ chọn chiều xoay pan ngược và kẹt ở giới hạn)
-    TCP1_R = 0.38              # chỉ áp TCP_STEP1 cho hộp xa hơn mức này (m); đo: áp cho r >= 33 cm làm hỏng seed 55 và 63
-    TCP_STEP1 = 0.02           # >0: hộp XA (có _far_roll) cũng giới hạn bước đích đầu tay ở phase 1 (đi thẳng ở độ cao lơ lửng, không võng xuống quét hộp)
+    # >0: phase 1 tiến đích đầu tay từng đoạn chừng này (m) cho MỌI hộp: đi thẳng ở độ cao lơ lửng, không võng xuống quét hộp khi khớp vượt đích.
+    # Trước chỉ áp cho r >= TCP1_R (0,38 rồi 0,37): seed 2187 (r 37,98 cm, roll đã xoay sớm từ FAR_ROLL_R) võng xuống đẩy hộp ra ngoài tầm.
+    # Đo 774 seed: áp cho mọi hộp 773/774 như ngưỡng 0,37 (trung bình +1,1 bước), bỏ được một ngưỡng bán kính
+    TCP_STEP1 = 0.02
     TCP_STEP = 0.02            # C: >0: ở phase 2-3 giới hạn mỗi tick đích đầu tay tiến tối đa chừng này (m) trước khi giải IK
     FAR_ROLL_R = 0.33          # hộp xa khớp 1 hơn mức này (m): kẹp với roll FAR_ROLL_DEG thay vì roll gần tư thế nghỉ (kẹp ổn hơn khi hộp trượt/ma sát thấp)
     FAR_ROLL_EARLY = True      # True: xoay roll song song lúc di chuyển ra; False: tới phía trên hộp mới xoay tại chỗ
@@ -169,15 +227,17 @@ class ScriptedPolicy(BasePolicy):
         self._lift_z = None             # độ cao đích của phase 5 (nhấc hộp), cũng hạ thấp khi hộp sát đế
         self._bowl_hits = 0             # số bước liền tay đang chạm bát khi hạ xuống kẹp
         self._jaw_stuck = 0             # số bước liền hàm cố định đè lên hộp khi hạ xuống kẹp
-        self._roll_flips = 0            # đã đổi roll bao nhiêu lần vì tay chạm bát
+        self._align_steps = 0           # số bước đã chờ chỉnh roll cho song song mặt hộp ở đầu phase 4 (xem GRASP_ALIGN)        self._roll_flips = 0           # đã đổi roll bao nhiêu lần vì tay chạm bát
         self._roll_pref = None          # roll ưu tiên sau khi đổi (None = chọn roll gần roll hiện tại nhất)
         self._cam_ok_key = None         # vị trí hộp đã kiểm camera và roll mặc định đủ xa
         self._pred_changed = False      # roll được DỰ ĐOÁN đổi để tránh bát (khác roll gần nhất)
         self._preturn_key = None        # vị trí hộp đã xoay-trước-khi-hạ cho
         self._far_roll = None           # roll cho hộp xa (đặt ở reset)
         self._far_fix_key, self._far_fix_roll = None, None   # vị trí hộp và roll đã chốt cho hộp r >= FAR_FIXED_R (xem _far_fixed_roll)
+        self._pan_key, self._pan_roll = None, None   # (vị trí hộp, roll gốc) đã xét và roll thay thế cho hộp sát giới hạn khớp 1 (xem _pan_limit_roll)
+        self._drag, self._drag_n, self._drag_goal, self._dragged = None, 0, None, False   # kéo hộp xa vào trong (xem _drag_box)
+        self._plan = None               # kế hoạch đường hạ: roll, điểm kẹp G, độ cao lơ lửng (xem _make_descent_plan)
         self._via_done = False          # phase 6 đã đi qua điểm trung gian (bát lệch quá VIA_ANGLE_DEG)
-        self._tcp1_on = False           # hộp đủ xa để giới hạn bước đích ở phase 1
         self._tcp_goal = None
         self._pred_key = None           # vị trí hộp đã dự đoán roll cho (để dự đoán lại khi hộp bị đẩy đi)
         self._roll_turn_target = None   # góc roll tại chỗ của bước "turn"
@@ -236,11 +296,14 @@ class ScriptedPolicy(BasePolicy):
         self._best_dist, self._stall, self.last_exit, self._p1_z, self._lift_z = 0.0, 0, None, None, None
         self._bowl_hits, self._roll_flips, self._roll_pref, self._roll_stage, self._roll_z = 0, 0, None, None, None
         self._jaw_stuck = 0
-        self._pred_key, self._roll_turn_target, self._pred_changed, self._preturn_key, self._cam_ok_key = None, None, False, None, None
+        self._align_steps = 0
+        self._pred_key,self._roll_turn_target, self._pred_changed, self._preturn_key, self._cam_ok_key = None, None, False, None, None
         self._far_roll = None
-        self._tcp1_on = False
         self._via_done = False
         self._far_fix_key, self._far_fix_roll = None, None
+        self._pan_key, self._pan_roll = None, None
+        self._drag, self._drag_n, self._drag_goal, self._dragged = None, 0, None, False
+        self._plan = None
         self._tcp_goal = None
         # Hộp nằm ngoài giới hạn góc hoặc bán kính gắp: không thử gắp, về home ngay (phase 10) thay vì chờ hết hạn từng phase
         self.unreachable = bool(box_sampling.is_unreachable(self.env.get_box_pos()[:2]))
@@ -248,7 +311,6 @@ class ScriptedPolicy(BasePolicy):
         if self.FAR_ROLL_R and math.hypot(bx[0] - config.PICK_PAN_XY[0], bx[1] - config.PICK_PAN_XY[1]) >= self.FAR_ROLL_R:
             self._roll_pref = math.radians(self.FAR_ROLL_DEG)
             self._far_roll = self._roll_pref
-            self._tcp1_on = math.hypot(bx[0] - config.PICK_PAN_XY[0], bx[1] - config.PICK_PAN_XY[1]) >= self.TCP1_R
         if self.unreachable:
             self._phase = 10
 
@@ -272,7 +334,7 @@ class ScriptedPolicy(BasePolicy):
             self._abort_unreachable_pick()
 
         # Hộp tuột khi đang mang (nằm xa ee > 5 cm vài bước liền): quay lại phase 1 để kẹp lại (tối đa 2 lần)
-        if 5 <= self._phase <= 7:
+        if 5 <= self._phase <= 7 and self._drag is None:              # đang kéo/nhả hộp (_drag_box): hộp không cần bám tay
             self._lost_steps = self._lost_steps + 1 if np.linalg.norm(box_pos - ee_pos) > 0.05 else 0
             if self._lost_steps > 3 and box_sampling.is_unreachable(box_pos[:2]):
                 self._abort_unreachable_pick()
@@ -349,14 +411,102 @@ class ScriptedPolicy(BasePolicy):
             self._maybe_preturn(box_pos, ee_pos)
 
     def _lower_to_box(self, ee_pos, height):
+        if self.PLANNED_DESCENT and not self._dragged and self._box_pan_r() < self.PLAN_R_MAX:
+            if self._phase == 2:
+                self._descent_hover(ee_pos)
+            else:
+                self._descent_drop(ee_pos, height)
+            return
+        # Đường hạ cũ (hộp xa / sau khi kéo hộp): đích kẹp tính lại mỗi bước, hạ chéo từ phía trên tâm hộp
+        self._plan = None
         target = self._grasp_target(height)
         self._gripper_target = 1.0
+        self._align_steps = 0
         self._move_toward(target, ee_pos, threshold=0.025)
+
+    def _descent_hover(self, ee_pos):
+        """Phase 2 của đường hạ có kế hoạch: đi ngang ở độ cao lơ lửng tới NGAY TRÊN điểm kẹp G, roll khoá theo kế hoạch.
+        Lập lại kế hoạch mỗi bước (tay còn ở trên cao, an toàn) để roll hội tụ theo tư thế thật. Sang phase 3 khi đã tới sát (< HOVER_NEAR),
+        hoặc ngừng tiến HOVER_STALL bước mà cách < HOVER_FAR, hoặc ngừng tiến HOVER_STALL_ANY bước (điểm lơ lửng ngoài tầm, vd hộp sát đế);
+        và roll đã xoay xong (lệch < PLAN_ROLL_SETTLE_DEG, chờ tối đa PLAN_ROLL_WAIT bước)."""
+        self._make_descent_plan()
+        p = self._plan
+        self._roll_hold, self._clamp_dir = p["roll"], p["clamp"]
+        self._gripper_target = 1.0
+        self._align_steps = 0
+        H = np.array([p["G"][0], p["G"][1], p["hz"]])
+        step = self._phase_step + 1
+        self._move_toward(H, ee_pos, threshold=self.HOVER_NEAR)
+        roll_ok = abs(float(self.data.qpos[self._qpos_adr[4]]) - p["roll"]) < math.radians(self.PLAN_ROLL_SETTLE_DEG)
+        if self._phase == 3:
+            if not roll_ok and step <= self.PLAN_ROLL_WAIT:              # tới sát nhưng roll chưa xoay xong: đứng chờ ở trên, chưa hạ
+                self._phase, self._phase_step, self.last_exit = 2, step, None
+            return
+        if roll_ok or self._phase_step > self.PLAN_ROLL_WAIT:
+            if float(np.linalg.norm(ee_pos - H)) < self.HOVER_FAR and self._stall >= self.HOVER_STALL:
+                self.last_exit = "arrived"
+                self._advance_phase()
+            elif self._stall >= self.HOVER_STALL_ANY:
+                self.last_exit = "stall"
+                self._advance_phase()
+
+    def _descent_drop(self, ee_pos, height):
+        """Phase 3 của đường hạ có kế hoạch: hạ THẲNG đứng xuống G với roll đã chốt; đóng kẹp (phase 4) khi cách độ cao kẹp < 8 mm,
+        hoặc ngừng tiến 4 bước mà cách < 2,5 cm (đường cũ dừng ở 2,5 cm nên có lúc khép kẹp gần đỉnh hộp)."""
+        if self._plan is None:
+            self._make_descent_plan()
+        p = self._plan
+        self._roll_hold, self._clamp_dir = p["roll"], p["clamp"]
+        self._gripper_target = 1.0
+        G = np.array([p["G"][0], p["G"][1], height])
+        self._move_toward(G, ee_pos, threshold=0.008)
+        if self._phase == 3 and float(np.linalg.norm(ee_pos - G)) < 0.025 and self._stall >= 4:
+            self.last_exit = "arrived"
+            self._advance_phase()
+
+    def _make_descent_plan(self):
+        """Chọn roll và điểm kẹp G cho đường hạ thẳng: roll của _choose_roll nếu đường hạ sạch (xem _descent_clearance), nếu không thì roll ± k·90°
+        gần nhất mà đường hạ sạch; không roll nào sạch thì giữ roll của _choose_roll."""
+        box = self.env.get_box_pos()
+        hz = max(self._pre_grasp_z + 0.015, min(self._pre_grasp_z + self.HOVER_ABOVE, self._p1_z if self._p1_z is not None else self._safe_z))
+        roll0, _ = self._choose_roll(self._solve_ik(np.array([box[0], box[1], self._pre_grasp_z])))
+        lo, hi = self.model.jnt_range[self._joint_ids[4]]
+        cands = [r for r in [roll0] + [roll0 + k * math.pi / 2 for k in (1, -1, 2, -2)] if lo + 0.05 <= r <= hi - 0.05]
+        res = [(r,) + self._descent_clearance(box, r, hz) for r in cands]
+        ok = [x for x in res if x[1]]
+        pick = ok[0] if ok else res[0]
+        self._plan = {"roll": pick[0], "G": pick[2], "clamp": pick[3], "hz": hz}
+
+    def _descent_clearance(self, box, r, hz):
+        """Đo đường hạ thẳng từ độ cao hz xuống GRASP_Z với roll r (PLAN_SAMPLES điểm, IK có giới hạn khớp, hàm mở hết cỡ): hàm-hộp >= JAW_BOX_MARGIN,
+        camera-bàn/vai >= FAR_FIXED_CAM, sai số với tới <= PLAN_REACH_ERR, gần bát thì hàm-bát >= PLAN_BOWL_MARGIN. Trả (sạch?, G, hướng kẹp)."""
+        saved, self._phase = self._phase, 3
+        try:
+            above = np.array([box[0], box[1], self._grasp_z])
+            q = self._solve_ik(above, roll=r); q[4] = r
+            c = self._clamp_direction(q)
+            G = above - self.GRASP_SIDE_OFFSET * np.append(c[:2], 0.0)
+            near_bowl = np.linalg.norm(box[:2] - self.env.get_bowl_pos()[:2]) <= 0.20
+            worst = 1e9
+            for z in np.linspace(hz, self._grasp_z, self.PLAN_SAMPLES):
+                tgt = np.array([G[0], G[1], z])
+                q = self._solve_ik(tgt, roll=r, limits=True); q[4] = r
+                err = float(np.linalg.norm(self._ik_data.site_xpos[self._ee_site] - tgt))
+                s = min(self._jaw_box_distance(q) / self.JAW_BOX_MARGIN, self._cam_geom_distance(q) / self.FAR_FIXED_CAM,
+                        self.PLAN_REACH_ERR / max(err, 1e-6))
+                if near_bowl:
+                    s = min(s, self._bowl_geom_distance(q, config.GRIPPER_OPEN_RAD) / self.PLAN_BOWL_MARGIN)
+                worst = min(worst, s)
+            return worst >= 1.0, G, c
+        finally:
+            self._phase = saved
 
     def _close_gripper(self):
         # Đóng kẹp. Kết thúc SỚM khi env báo hộp đã được kẹp VÀ ngón đã ngừng khép.
         # Quá 30 bước (~1 giây) mà chưa kẹp được thì quay lại phase 2 để căn lại và hạ xuống lần nữa
         # (đích tính lại từ vị trí hộp hiện tại), tối đa self._max_retries lần.
+        if self._align_roll_before_close():
+            return
         self._gripper_target = -1.0
         self._phase_step += 1
         fo = self.data.qpos[self.model.jnt_qposadr[self.env._gripper_jnt]]
@@ -374,13 +524,96 @@ class ScriptedPolicy(BasePolicy):
             else:
                 self._advance_phase()                    # hết lượt thử: đi tiếp như cũ
 
+    def _align_roll_before_close(self):
+        """Đầu phase 4 (hàm còn mở, chưa chạm hộp): trục kẹp ở tư thế THẬT lệch mặt hộp quá GRASP_ALIGN_TOL_DEG thì giữ kẹp mở, chỉ xoay
+        wrist_roll tới góc song song (các khớp khác giữ đích IK cũ). Trả True nếu bước này dành cho việc chỉnh roll.
+        Hộp xa (roll chốt ở _far_fixed_roll) cố ý không canh theo yaw hộp nên bỏ qua.
+        Mỗi bước tìm trong ± GRASP_ALIGN_MAX_DEG quanh roll VỪA chỉnh nên qua nhiều bước roll có thể trôi xa hơn (seed 1011: 52° sau 9 bước, hộp
+        bị hàm gạt nghiêng nên yaw nhảy). Đã thử chốt quanh roll ban đầu và bỏ qua khi hộp nghiêng > 10°: 1011 vẫn hỏng, 1010 hỏng thêm (272/274)."""
+        if (not self.GRASP_ALIGN or self._phase_step > 0 or self._align_steps >= self.GRASP_ALIGN_STEPS
+                or self._far_fix_key is not None or self._current_joint_targets is None or self._jaw_touches_box()):
+            return False
+        q = self.data.qpos[self._qpos_adr].copy()
+        yaw = self._box_yaw()
+
+        def dev(r):
+            qq = q.copy()
+            qq[4] = r
+            c = self._clamp_direction(qq)
+            return (math.atan2(c[1], c[0]) - yaw + math.pi / 4) % (math.pi / 2) - math.pi / 4
+
+        if abs(dev(q[4])) <= math.radians(self.GRASP_ALIGN_TOL_DEG):
+            return False
+        lo, hi = self.model.jnt_range[self._joint_ids[4]]
+        base = self._roll_hold if self._roll_hold is not None else q[4]
+        cands = [base + d for d in np.radians(np.arange(-self.GRASP_ALIGN_MAX_DEG, self.GRASP_ALIGN_MAX_DEG + 0.01, 0.5))]
+        cands = [r for r in cands if lo + 0.02 <= r <= hi - 0.02]
+        if not cands:
+            return False
+        self._roll_hold = min(cands, key=lambda r: abs(dev(r)))
+        self._current_joint_targets[4] = self._roll_hold
+        self._gripper_target = 1.0
+        self._align_steps += 1
+        return True
+
+    def _box_yaw(self):
+        """Góc yaw của hộp (rad) quanh trục z."""
+        qb = self.data.xquat[self.env._box_body]
+        return math.atan2(2 * (qb[0] * qb[3] + qb[1] * qb[2]), 1 - 2 * (qb[2] ** 2 + qb[3] ** 2))
+
     def _lift_box(self, ee_pos):
         # Nhấc thẳng lên (giữ nguyên x, y của tay). Sát đế thì độ cao an toàn nằm ngoài tầm với: nhấc tới độ cao tới được
+        if self._drag_box(ee_pos):
+            return
         if self._phase_step == 0 or self._lift_z is None:
             self._lift_z = self._reachable_z(ee_pos[:2], z_lo=self._grasp_z + 0.04) if self.PHASE5_ADAPTIVE_Z else self._safe_z
         target = np.array([ee_pos[0], ee_pos[1], self._lift_z])
         self._gripper_target = -1.0
         self._move_toward(target, ee_pos, threshold=0.02)
+
+    def _box_pan_r(self):
+        """Khoảng cách ngang (m) từ hộp tới trục khớp 1."""
+        b = self.env.get_box_pos()
+        return math.hypot(b[0] - config.PICK_PAN_XY[0], b[1] - config.PICK_PAN_XY[1])
+
+    def _drag_box(self, ee_pos):
+        """Đầu phase 5, hộp xa (r >= DRAG_R): không nhấc mà KÉO TRƯỢT hộp trên bàn theo hướng bán kính về phía trục khớp 1 tới r = DRAG_TARGET,
+        nhả kẹp, nhấc tay lên DRAG_RAISE rồi gắp lại từ phase 2. Mỗi ván kéo tối đa một lần. Trả True nếu bước này dành cho việc kéo.
+        Ba bước: "pull" (kẹp chặt, kéo), "release" (mở kẹp, giữ yên), "raise" (nhấc tay khỏi hộp)."""
+        if (self.DRAG_FAR and self._drag is None and not self._dragged and self._phase_step == 0
+                and self._box_pan_r() >= self.DRAG_R):
+            pan = np.array(config.PICK_PAN_XY)
+            v = ee_pos[:2] - pan
+            r = float(np.linalg.norm(v))
+            r_t = r - (self._box_pan_r() - self.DRAG_TARGET)                 # tay dời đúng quãng hộp cần dời
+            self._drag_goal = np.array([*(pan + v * (r_t / r)), ee_pos[2] + self.DRAG_LIFT])
+            self._drag, self._dragged = "pull", True
+        if self._drag == "pull":
+            self._gripper_target = -1.0
+            self._move_toward(self._drag_goal, ee_pos, threshold=0.006, timeout_steps=120)
+            if self._phase != 5 or self.last_exit:                            # tới nơi hoặc hết hạn: ở lại phase 5, sang nhả
+                self._phase, self._phase_step = 5, 0
+                self._drag, self._drag_n = "release", 0
+            return True
+        if self._drag == "release":
+            self._gripper_target = 1.0
+            self._drag_n += 1
+            if self._drag_n >= self.DRAG_RELEASE_STEPS:
+                self._drag = "raise"
+                self._drag_goal = np.array([ee_pos[0], ee_pos[1], ee_pos[2] + self.DRAG_RAISE])
+                self._phase_step = 0
+            return True
+        if self._drag == "raise":
+            self._gripper_target = 1.0
+            self._move_toward(self._drag_goal, ee_pos, threshold=0.008, timeout_steps=40)
+            if self._phase != 5 or self.last_exit:                            # đã nhấc khỏi hộp: gắp lại từ phase 2 ở chỗ mới
+                self._drag = None
+                self._phase, self._phase_step = 2, 0
+                self._roll_hold, self._last_finger, self._retries = None, None, 0
+                self._far_fix_key, self._far_fix_roll = None, None             # hộp đã vào gần: chọn roll lại từ đầu
+                self._best_dist, self._stall, self.last_exit = 0.0, 0, None
+            return True
+        return False
 
     def _carry_via(self, bowl_pos, ee_pos):
         """Phase 6: bát nằm lệch quá VIA_ANGLE_DEG so với tay (quanh khớp 1) thì trước hết đi tới điểm trung gian ở độ cao an toàn, nằm giữa hai góc
@@ -666,8 +899,7 @@ class ScriptedPolicy(BasePolicy):
             fixed = self._far_fixed_roll(q5)
             if fixed is not None:
                 return fixed
-        qb = self.data.xquat[self.env._box_body]
-        box_yaw = math.atan2(2 * (qb[0] * qb[3] + qb[1] * qb[2]), 1 - 2 * (qb[2] ** 2 + qb[3] ** 2))
+        box_yaw = self._box_yaw()
         lo, hi = self.model.jnt_range[self._joint_ids[4]]
         cur = self._roll_pref if self._roll_pref is not None else (self._roll_hold if self._roll_hold is not None else self.data.qpos[self._qpos_adr[4]])
         best = None
@@ -686,7 +918,58 @@ class ScriptedPolicy(BasePolicy):
             roll2 = self._predict_roll(roll, q5)
             if roll2 is not None and abs(roll2 - roll) > 1e-6:
                 roll, clamp = roll2, self._clamp_direction(np.where(np.arange(5) == 4, roll2, np.asarray(q5, dtype=float)))
+        if self.PAN_LIMIT_ROLL:
+            roll3 = self._pan_limit_roll(roll)
+            if roll3 is not None:
+                roll, clamp = roll3, self._clamp_direction(np.where(np.arange(5) == 4, roll3, np.asarray(q5, dtype=float)))
         return roll, clamp
+
+    def _grasp_reach(self, box, r):
+        """Đo tầm với khi kẹp hộp ở `box` với roll `r`: (sai số IK có giới hạn khớp lớn nhất, khoảng cách camera cổ tay nhỏ nhất tới bàn/vai)
+        ở tư thế chuẩn bị kẹp và tư thế kẹp (m). Tính trên bản sao IK với trục kẹp thẳng xuống như phase 3."""
+        saved, self._phase = self._phase, 3
+        try:
+            err, cam = 0.0, 1e9
+            for z in (self._pre_grasp_z, self._grasp_z):
+                above = np.array([box[0], box[1], z])
+                q = self._solve_ik(above, roll=r); q[4] = r
+                c = self._clamp_direction(q)
+                tgt = above - self.GRASP_SIDE_OFFSET * np.append(c[:2], 0.0)
+                q = self._solve_ik(tgt, roll=r); q[4] = r
+                cam = min(cam, self._cam_geom_distance(q))
+                self._solve_ik(tgt, roll=r, limits=True)
+                err = max(err, float(np.linalg.norm(self._ik_data.site_xpos[self._ee_site] - tgt)))
+            return err, cam
+        finally:
+            self._phase = saved
+
+    def _pan_limit_roll(self, roll):
+        """Hộp sát giới hạn khớp 1: roll `roll` đặt đích kẹp ngoài tầm (sai số > PAN_LIMIT_TRIGGER) thì trả roll song song mặt hộp khác (roll ± k·90°)
+        gần nhất mà sai số <= PAN_LIMIT_ERR_OK và camera cách bàn/vai >= FAR_FIXED_CAM; None nếu không cần đổi hoặc không có roll nào đạt.
+        Không áp cho roll đã chốt ở _far_fixed_roll (đã tự xét tầm khớp 1). Kết quả nhớ theo vị trí hộp và roll gốc."""
+        box = self.env.get_box_pos()
+        pan = config.PICK_PAN_XY
+        if abs(math.degrees(math.atan2(box[0] - pan[0], box[1] - pan[1]))) < self.PAN_LIMIT_NEAR_DEG:
+            return None
+        if self._far_fix_roll is not None and abs(roll - self._far_fix_roll) < 1e-6:
+            return None
+        key = (round(float(box[0]), 3), round(float(box[1]), 3), round(float(roll), 2))
+        if self._pan_key != key:
+            self._pan_key, self._pan_roll = key, None
+            err, cam = self._grasp_reach(box, roll)
+            if err > self.PAN_LIMIT_TRIGGER or cam < self.FAR_FIXED_CAM:
+                lo, hi = self.model.jnt_range[self._joint_ids[4]]
+                ok = []
+                for k in (-3, -2, -1, 1, 2, 3):
+                    r = roll + k * math.pi / 2
+                    if not lo + 0.05 <= r <= hi - 0.05:
+                        continue
+                    e, c = self._grasp_reach(box, r)
+                    if e <= self.PAN_LIMIT_ERR_OK and c >= self.FAR_FIXED_CAM:
+                        ok.append((abs(k), r))
+                if ok:
+                    self._pan_roll = min(ok)[1]
+        return self._pan_roll
 
     def _far_fixed_roll(self, q5):
         """Hộp r >= FAR_FIXED_R: không canh roll theo yaw hộp mà thử lần lượt các roll trong FAR_ROLL_ORDER (-87° đầu tiên), lấy roll đầu tiên mà ở
@@ -698,31 +981,17 @@ class ScriptedPolicy(BasePolicy):
         key = (float(box[0]), float(box[1]))
         if self._far_fix_key is None or math.hypot(key[0] - self._far_fix_key[0], key[1] - self._far_fix_key[1]) > 0.02:
             lo, hi = self.model.jnt_range[self._joint_ids[4]]
-            best, saved = None, self._phase
-            self._phase = 3                                           # IK với trục kẹp thẳng xuống, như lúc thật hạ xuống kẹp
-            try:
-                for deg in self.FAR_ROLL_ORDER:
-                    r = math.radians(deg)
-                    if not lo + 0.05 <= r <= hi - 0.05:
-                        continue
-                    err, cam = 0.0, 1e9
-                    for z in (self._pre_grasp_z, self._grasp_z):
-                        above = np.array([box[0], box[1], z])
-                        q = self._solve_ik(above, roll=r); q[4] = r
-                        c = self._clamp_direction(q)
-                        tgt = above - self.GRASP_SIDE_OFFSET * np.append(c[:2], 0.0)
-                        q = self._solve_ik(tgt, roll=r); q[4] = r
-                        cam = min(cam, self._cam_geom_distance(q))
-                        self._solve_ik(tgt, roll=r, limits=True)
-                        err = max(err, float(np.linalg.norm(self._ik_data.site_xpos[self._ee_site] - tgt)))
-                    bad = max(err / self.FAR_FIXED_ERR, self.FAR_FIXED_CAM / max(cam, 1e-4))
-                    if best is None or bad < best[1]:
-                        best = (r, bad)
-                    if bad <= 1.0:
-                        best = (r, bad)
-                        break
-            finally:
-                self._phase = saved
+            best = None
+            for deg in self.FAR_ROLL_ORDER:
+                r = math.radians(deg)
+                if not lo + 0.05 <= r <= hi - 0.05:
+                    continue
+                err, cam = self._grasp_reach(box, r)
+                bad = max(err / self.FAR_FIXED_ERR, self.FAR_FIXED_CAM / max(cam, 1e-4))
+                if best is None or bad < best[1]:
+                    best = (r, bad)
+                if bad <= 1.0:
+                    break
             self._far_fix_roll = best[0] if best else math.radians(self.FAR_ROLL_DEG)
             self._far_fix_key = key
         r = self._far_fix_roll
@@ -771,7 +1040,7 @@ class ScriptedPolicy(BasePolicy):
 
     def _cam_geom_distance(self, q5):
         """Khoảng cách nhỏ nhất (m) từ camera cổ tay (wrist_cam_arm) tới vai, cánh tay trên, đế và mặt bàn khi tay ở tư thế q5 (trên bản sao IK).
-        Camera không có va chạm trong mô phỏng nên đây là phép đo hình học; âm = camera xuyên vào khâu đó."""
+        Đo hình học trên bản sao IK (camera có va chạm trong mô phỏng thật, nhưng bản sao không chạy va chạm); âm = camera xuyên vào khâu đó."""
         ik = self._ik_data
         ik.qpos[:] = self.data.qpos[:]
         ik.qpos[self._qpos_adr] = q5
@@ -806,8 +1075,10 @@ class ScriptedPolicy(BasePolicy):
         box = self.env.get_box_pos()
         bowl = self.env.get_bowl_pos()
         need_bowl = np.linalg.norm(box[:2] - bowl[:2]) <= 0.20
-        need_cam = self.CAM_AVOID and float(np.linalg.norm(box[:2] - np.array(config.PICK_PAN_XY))) < self.CAM_AVOID_R
-        if not need_bowl and not need_cam:
+        box_r = float(np.linalg.norm(box[:2] - np.array(config.PICK_PAN_XY)))
+        need_cam = self.CAM_AVOID
+        need_jaw = self.CAM_AVOID and box_r < self.JAW_AVOID_R
+        if not need_bowl and not need_cam and not need_jaw:
             return None
         key = (round(float(box[0]), 3), round(float(box[1]), 3))
         if self._pred_key == key and self._roll_pref is not None:
@@ -837,6 +1108,7 @@ class ScriptedPolicy(BasePolicy):
                         clear = min(clear, self._bowl_geom_distance(q, config.GRIPPER_OPEN_RAD))
                     if need_cam:
                         cam_clear = min(cam_clear, self._cam_geom_distance(q))
+                    if need_jaw:
                         jaw_clear = min(jaw_clear, self._jaw_box_distance(q))
                 if self.PREDICT_PATH:                                  # đường xoay: từ roll hiện tại tới r, ở độ cao lơ lửng phía trên hộp
                     hover = self._p1_z if self._p1_z is not None else self._pre_grasp_z + 0.02
@@ -851,7 +1123,7 @@ class ScriptedPolicy(BasePolicy):
                             cam_clear = min(cam_clear, self._cam_geom_distance(q))
                 # điểm theo từng điều kiện (đơn vị = mức tối thiểu, >= 1 là đạt): bát, camera (cứng), hàm kẹp-hộp (mềm)
                 hard = min(clear / self.BOWL_CLEARANCE_MARGIN if need_bowl else 1e9, cam_clear / self.CAM_CLEARANCE_MARGIN if need_cam else 1e9)
-                jaw_s = jaw_clear / self.JAW_BOX_MARGIN if need_cam else 1e9
+                jaw_s = jaw_clear / self.JAW_BOX_MARGIN if need_jaw else 1e9
                 results.append((r, min(hard, jaw_s), hard, jaw_s))
         finally:
             self._phase = saved_phase
@@ -885,17 +1157,30 @@ class ScriptedPolicy(BasePolicy):
             dq = J⁺ · e  +  (I − J⁺J) · K · mask · (q_pref − q)
 
         Số hạng sau nằm trong không gian null của J nên (xấp xỉ bậc nhất) không làm đầu tay lệch khỏi đích.
+
+        Khi có giới hạn khớp (`use_lim`): khớp đang ở giới hạn mà bước dq còn đẩy ra ngoài thì bị KHOÁ (bỏ khỏi J) và giải lại, để phần
+        chuyển động còn thiếu dồn sang các khớp khác. Chỉ cắt góc (np.clip) thì vòng sau J vẫn dồn chuyển động vào khớp đã kẹt.
         """
         if roll is None:
             roll = self._roll_hold
+        use_lim = (self.IK_RESPECT_LIMITS or self._phase in self.IK_LIMIT_PHASES) if limits is None else limits
         ik = self._ik_data
         # Bắt đầu từ tư thế thật hiện tại, nên lời giải "gần" tư thế đang có
         ik.qpos[:] = self.data.qpos[:]
         ik.qvel[:] = 0
-        free = np.ones(5)
+        free0 = np.ones(5)
         if roll is not None:                                       # khoá wrist_roll ở góc `roll`: IK chỉ dùng 4 khớp còn lại
             ik.qpos[self._qpos_adr[4]] = roll
-            free[4] = 0.0
+            free0[4] = 0.0
+        if self._phase in self.PAN_BEARING_PHASES:
+            # Khớp 1 bắt đầu từ HƯỚNG của đích quanh trục khớp 1 nếu lệch xa góc hiện tại. IK tuyến tính từ pan +109° tới bát ở -45° chọn
+            # chiều xoay ra giới hạn +110°, khoá khớp 1 rồi gập 2-3-4 xuống và kẹt (seed 14, phase 6 hết hạn)
+            pan = config.PICK_PAN_XY
+            b = math.atan2(target_pos[0] - pan[0], target_pos[1] - pan[1])
+            if abs(b - float(self.data.qpos[self._qpos_adr[0]])) > math.radians(self.PAN_BEARING_DEG):
+                ik.qpos[self._qpos_adr[0]] = float(np.clip(b, self._jnt_lo[0], self._jnt_hi[0]))
+        if use_lim:
+            ik.qpos[self._qpos_adr] = np.clip(ik.qpos[self._qpos_adr], self._jnt_lo, self._jnt_hi)
         self._fk(ik)
 
         jacp = np.zeros((3, self.model.nv))
@@ -922,23 +1207,30 @@ class ScriptedPolicy(BasePolicy):
             if tool_down:
                 # xoay khớp làm trục kẹp đổi hướng:  d(axis) = ω × axis = −[axis]× · ω, với ω = Jr · dq
                 J_axis = -self._skew(axis) @ jacr[:, self._dof_ids]
-                J_all = np.vstack([J, self.TOOL_DOWN_WEIGHT * J_axis])
+                J_full = np.vstack([J, self.TOOL_DOWN_WEIGHT * J_axis])
                 err_all = np.concatenate([error, self.TOOL_DOWN_WEIGHT * axis_error])
             else:
-                J_all, err_all = J, error
+                J_full, err_all = J, error
 
-            # Damped least squares: dq nhỏ nhất sao cho J_all @ dq ≈ err_all.
-            # Damping giúp ổn định khi robot gần tư thế "kỳ dị" (singularity), ví dụ khi 2-3-4 thẳng hàng.
-            J_all = J_all * free[None, :]
-            J_pinv = J_all.T @ np.linalg.inv(J_all @ J_all.T + damping)
-            dq = J_pinv @ err_all * free
-
-            # Nhiệm vụ phụ: kéo khớp về tư thế vòm, chỉ trong không gian null
             q = ik.qpos[self._qpos_adr]
-            dq = dq + ((eye5 - J_pinv @ J_all) @ (posture_k * (q_pref - q))) * free
+            free = free0.copy()
+            for _ in range(5):                                     # tối đa 5 lần khoá thêm khớp bão hoà
+                # Damped least squares: dq nhỏ nhất sao cho J_all @ dq ≈ err_all.
+                # Damping giúp ổn định khi robot gần tư thế "kỳ dị" (singularity), ví dụ khi 2-3-4 thẳng hàng.
+                J_all = J_full * free[None, :]
+                J_pinv = J_all.T @ np.linalg.inv(J_all @ J_all.T + damping)
+                dq = J_pinv @ err_all * free
+                # Nhiệm vụ phụ: kéo khớp về tư thế vòm, chỉ trong không gian null
+                dq = dq + ((eye5 - J_pinv @ J_all) @ (posture_k * (q_pref - q))) * free
+                if not use_lim:
+                    break
+                sat = (((q <= self._jnt_lo + 1e-4) & (dq < 0)) | ((q >= self._jnt_hi - 1e-4) & (dq > 0))) & (free > 0)
+                if not sat.any():
+                    break
+                free[sat] = 0.0
 
             ik.qpos[self._qpos_adr] += self.IK_STEP_GAIN * dq
-            if (self.IK_RESPECT_LIMITS or self._phase in self.IK_LIMIT_PHASES) if limits is None else limits:
+            if use_lim:
                 ik.qpos[self._qpos_adr] = np.clip(ik.qpos[self._qpos_adr], self._jnt_lo, self._jnt_hi)   # IK phải tôn trọng giới hạn khớp thật
             self._fk(ik)
 
@@ -972,7 +1264,7 @@ class ScriptedPolicy(BasePolicy):
         """
         self.motion_target = (target_pos.copy(), threshold)
         ik_target = target_pos
-        far1 = self.TCP_STEP1 > 0 and self._phase == 1 and self._far_roll is not None and self._tcp1_on
+        far1 = self.TCP_STEP1 > 0 and self._phase == 1
         if (self.TCP_STEP > 0 and self._phase in (2, 3)) or far1:   # C: đích đầu tay tiến từng đoạn nhỏ
             if self._tcp_goal is None or self._phase_step == 0:
                 self._tcp_goal = np.array(ee_pos, dtype=float)
