@@ -21,6 +21,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["diffusers", "transformers", "torchvision"]
+test = ["pytest>=8"]
 
 # The repo root *is* the `sim_engine` package (flat layout), so map the package
 # name onto the root directory instead of searching for a sim_engine/ subfolder.
@@ -30,3 +31,8 @@ packages = ["sim_engine", "sim_engine.policies", "sim_engine.tools", "sim_engine
 
 [tool.setuptools.package-data]
 sim_engine = ["assets/*.xml", "assets/so101/*.stl", "results/*.json", "static/replay/*", "static/studio/*.html", "static/studio/assets/*", "docs/*.md", "docs/image/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# tests/ chạy như thư mục script (test_lab_scene dùng lại hàm của test_lab_run)
+pythonpath = ["tests"]

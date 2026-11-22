@@ -89,6 +89,7 @@ defaults, with validated JSON import/export. Batch seeds and `results/replay.htm
 are left untouched. Keep the Python server
 running while editing, starting trials, or viewing the React replay. The older
 compatibility replay can also be opened offline. The previous lab UI remains at `/legacy`.
+Run the simulator tests with `pip install -e .[test]` then `python -m pytest` (from `sim-engine/`).
 The Vietnamese guide is [`docs/guide_vi.md`](docs/guide_vi.md); Studio shows it under **Hướng dẫn**.
 Frontend source/build instructions (pnpm) and technology review are in
 [`web/joint-lab/README.md`](web/joint-lab/README.md).
