@@ -188,7 +188,7 @@ def main():
     ap = argparse.ArgumentParser(description="Chấm dải seed lớn và chọn bộ seed để xem lại")
     ap.add_argument("--pool", default="0-199", help="dải seed để chấm, ví dụ 0-199")
     ap.add_argument("--count", type=int, default=30, help="số seed trong nhóm chính")
-    ap.add_argument("--policy", default="sim_engine.policies.scripted_policy:ScriptedPolicy")
+    ap.add_argument("--policy", default=config.DEFAULT_POLICY)
     ap.add_argument("--box-range", type=float, default=None)
     ap.add_argument("--bowl-range", type=float, default=None)
     ap.add_argument("--slow-factor", type=float, default=1.5, help="chậm = số bước >= hệ số này x số bước trung vị")

@@ -17,8 +17,8 @@ def evaluate(policy_type, checkpoint=None, num_episodes=10, render=False,
         policy = RandomPolicy()
     elif policy_type == "scripted":
         env_tmp = SO101PickPlaceEnv(render_images=False)
-        from ..policies.scripted_policy import ScriptedPolicy
-        policy = ScriptedPolicy(env_tmp)
+        from ..policies import default_policy
+        policy = default_policy(env_tmp)
         # Will re-assign env below
     elif policy_type == "mlp":
         from ..policies.mlp_policy import MLPPolicy
@@ -39,8 +39,8 @@ def evaluate(policy_type, checkpoint=None, num_episodes=10, render=False,
 
     # Re-assign env for scripted policy
     if policy_type == "scripted":
-        from ..policies.scripted_policy import ScriptedPolicy
-        policy = ScriptedPolicy(env)
+        from ..policies import default_policy
+        policy = default_policy(env)
 
     # Video recording setup
     video_frames = []

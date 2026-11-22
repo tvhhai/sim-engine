@@ -292,7 +292,7 @@ class Recorder:
             "tg": r3(self.target) if self.target is not None else None,   # đích của phase
             "th": self.threshold if self.target is not None else None,    # ngưỡng để sang phase kế
             "fo": self.finger_open(),                    # góc hàm kẹp di động (rad): lớn = mở
-            "gr": bool(self.env._grasped),               # hộp đang dính vào tay
+            "gr": bool(self.env._grasped),               # cả hai hàm đang chạm hộp (kẹp thật)
             "ag": round(float(action_grip), 2),          # lệnh kẹp: +1 mở, -1 đóng
             "rc": getattr(self.policy, "_roll_stage", None),             # phục hồi sau khi chạm bát: lift / turn / None
             "rf": getattr(self.policy, "_roll_flips", 0),               # số lần đã đổi roll vì chạm bát
@@ -475,7 +475,7 @@ def main():
                         "nếu không có thì 0-29")
     parser.add_argument("--seed-file", default=str(paths.REPLAY_SEEDS),
                         help="file do select_seeds ghi: danh sách seed đã chọn kèm nhãn (hỏng, timeout, chậm...)")
-    parser.add_argument("--policy", default="sim_engine.policies.scripted_policy:ScriptedPolicy")
+    parser.add_argument("--policy", default=config.DEFAULT_POLICY)
     parser.add_argument("--box-range", type=float, default=None, help="hộp ngẫu nhiên trong ± giá trị này (mét), mặc định theo config")
     parser.add_argument("--bowl-range", type=float, default=None, help="bát ngẫu nhiên trong ± giá trị này (mét), mặc định theo config")
     parser.add_argument("--out", default=None, help="mặc định results/replay.html (kèm results/replay.json cùng dữ liệu)")

@@ -87,19 +87,7 @@ class Runner:
         self.seed = seed
         self.target = None          # đích của phase hiện tại (None nếu phase chờ)
         self.threshold = None
-        self._patch_move_toward()
         self.reset()
-
-    def _patch_move_toward(self):
-        """Bọc _move_toward để biết đích và ngưỡng của policy mà KHÔNG phải sửa file policy."""
-        original = self.policy._move_toward
-
-        def wrapped(target_pos, ee_pos, threshold=0.02):
-            self.target = np.array(target_pos, dtype=float)
-            self.threshold = threshold
-            return original(target_pos, ee_pos, threshold)
-
-        self.policy._move_toward = wrapped
 
     def reset(self, quiet=False):
         self.obs, self.info = self.env.reset(seed=self.seed)
@@ -170,6 +158,9 @@ class Runner:
                 {"state": self.obs["state"], "images": {}, "task": config.DEFAULT_TASK}
             )
         phase_after = self.policy._phase
+        # đích và ngưỡng của bước này: policy ghi vào motion_target (V1, V2 và bản kết hợp đều có), như Recorder của replay
+        mt = getattr(self.policy, "motion_target", None)
+        self.target, self.threshold = (np.array(mt[0], dtype=float), mt[1]) if mt else (None, None)
         target, threshold = self.target, self.threshold
         self.obs, reward, terminated, truncated, self.info = self.env.step(action)
         self.step_no += 1
@@ -191,7 +182,7 @@ class Runner:
             goal = f"chờ {self.policy._phase_step if phase_after == phase_before else 'xong'}"
         line = (f"bước {self.step_no:3d} | phase {phase_before:2d} (bước {self.policy._phase_step:3d}) | "
                 f"tay {fmt(ee)} | {goal} | hộp {fmt(box)} | "
-                f"ngón mở {self.finger_open():.3f} | dính: {self.env._grasped} | va chạm: {self.contact_text()}")
+                f"ngón mở {self.finger_open():.3f} | đang kẹp: {self.env._grasped} | va chạm: {self.contact_text()}")
         print(line)
         self.last_log = line
 
@@ -320,7 +311,7 @@ def main():
     parser = argparse.ArgumentParser(description="Chạy policy từng bước bằng phím bấm")
     parser.add_argument("--viewer", action="store_true", help="dùng cửa sổ MuJoCo viewer (xoay được, thấy va chạm thật)")
     parser.add_argument("--seed", type=int, default=2)
-    parser.add_argument("--policy", default="sim_engine.policies.scripted_policy:ScriptedPolicy")
+    parser.add_argument("--policy", default=config.DEFAULT_POLICY)
     parser.add_argument("--headless", action="store_true", help="không mở cửa sổ, chạy hết ván và in log")
     parser.add_argument("--goto", type=int, default=0, help="chạy sẵn N bước (không in log) rồi mới dừng chờ phím; "
                         "dùng số 'tổng bước' trên replay.html để demo dừng đúng chỗ đó")

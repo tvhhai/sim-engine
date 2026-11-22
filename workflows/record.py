@@ -6,7 +6,7 @@ import numpy as np
 from .. import config
 from ..env import SO101PickPlaceEnv
 from ..dataset import DatasetRecorder
-from ..policies.scripted_policy import ScriptedPolicy
+from ..policies import default_policy
 from ..policies.random_policy import RandomPolicy
 
 
@@ -24,7 +24,7 @@ def record_scripted(num_episodes=10, save_dir=None, task=None, render=False):
     """Record episodes using the scripted pick-and-place policy."""
     env = SO101PickPlaceEnv(render_mode="human" if render else None)
     recorder = DatasetRecorder(save_dir=save_dir)
-    policy = ScriptedPolicy(env)
+    policy = default_policy(env)
 
     successes = 0
     for ep in range(num_episodes):

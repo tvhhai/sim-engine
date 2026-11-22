@@ -610,7 +610,7 @@ function drawInfo(fr, fs) {
     }).join("") + `</tbody></table>`;
   $("info").innerHTML = html;
 }
-// Từ lúc env đã "dính" hộp vào tay ít nhất một lần, hộp dịch chuyển là chủ ý
+// Từ lúc hai hàm đã kẹp hộp ít nhất một lần, hộp dịch chuyển là chủ ý
 function ph_after_grasp() { return F().slice(0, i + 1).some(f => f.gr); }
 // PUSH[ep] = chỉ số khung đầu tiên mà hộp trượt ngang > 0.2 cm khi chưa được kẹp (hoặc null)
 const PUSH = EPS.map(e => {
@@ -664,7 +664,7 @@ function drawChk(fr) {
 /* ---------- log ---------- */
 function maxDiff(f) { return f.ik ? Math.max(...f.ik.map((a, k) => Math.abs(a - f.jq[k]))) : null; }
 function buildLog(fs) {
-  let rows = `<table><thead><tr><th>bước</th><th>phase</th><th>tay</th><th>đích</th><th>cách đích</th><th>IK sai số</th><th>góc lệch max</th><th>hộp</th><th>ngón</th><th>dính</th><th>chạm hộp</th><th>chạm bàn</th></tr></thead><tbody>`;
+  let rows = `<table><thead><tr><th>bước</th><th>phase</th><th>tay</th><th>đích</th><th>cách đích</th><th>IK sai số</th><th>góc lệch max</th><th>hộp</th><th>ngón</th><th>đang kẹp</th><th>chạm hộp</th><th>chạm bàn</th></tr></thead><tbody>`;
   fs.forEach((f, k) => {
     const d = f.tg ? dist(f.ee, f.tg) : null, md = maxDiff(f);
     const dCls = d === null ? "" : d < f.th ? "hlg" : "hlw";

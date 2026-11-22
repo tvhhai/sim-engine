@@ -9,7 +9,8 @@ import time
 
 from .. import paths
 from ..env import SO101PickPlaceEnv
-from ..policies.scripted_policy import ScriptedPolicy
+from .. import config
+from ..policies import default_policy
 from ..tools.make_replay import Recorder, write_replay
 from .scene import in_workspace, normalize_objects
 from .store import StudioStore
@@ -80,12 +81,12 @@ class LabRun:
             os.replace(case_tmp, case_path)
             env = SO101PickPlaceEnv(render_images=False, end_on_success=False,
                                     lab_objects=pose.get("objects"), target_id=pose.get("target_id"))
-            episode = Recorder(env, ScriptedPolicy(env)).run(LAB_SEED, options=options)
+            episode = Recorder(env, default_policy(env)).run(LAB_SEED, options=options)
             episode.update(name="lab", group="mixed", tags=["LAB · lần chạy mới nhất"])
             episode["initial_options"] = options
             out = self.directory / "replay_lab.html"
             temporary = out.with_suffix(".tmp")
-            payload = write_replay(env, [episode], str(temporary), "sim_engine.policies.scripted_policy:ScriptedPolicy")
+            payload = write_replay(env, [episode], str(temporary), config.DEFAULT_POLICY)
             data_path = self.directory / "replay_lab.json"
             data_tmp = data_path.with_suffix(".json.tmp")
             data_tmp.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")

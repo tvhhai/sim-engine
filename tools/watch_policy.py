@@ -9,7 +9,7 @@ Cách hoạt động: mỗi khung hình, script kiểm tra giờ sửa (mtime) c
 Nếu có file đổi, nó nạp lại module (importlib.reload), tạo lại env và policy mới,
 rồi chạy lại episode từ đầu với CÙNG seed. Cửa sổ không bị đóng.
 
-File được theo dõi: config.py, renderer.py, env.py, policies/base.py, file policy, so101_scene.xml.
+File được theo dõi: config.py, renderer.py, env.py, policies/base.py, scripted_policy.py, scripted_v2.py, file policy, so101_scene.xml.
 
 Phím: SPACE = tạm dừng / chạy tiếp | R = chạy lại episode | N / B = seed kế / seed trước | Q hoặc ESC = thoát
 Giới hạn: chỉ chạy lại episode, không giữ trạng thái đang dở. Nếu file có lỗi cú pháp,
@@ -40,6 +40,8 @@ def watched_files(policy_module):
         os.path.join(here, "policies", "base.py"),
         config.SCENE_XML,
     ]
+    # bản kết hợp V1+V2 nằm ở file riêng: theo dõi cả hai file policy con
+    files += [os.path.join(here, "policies", name) for name in ("scripted_policy.py", "scripted_v2.py")]
     if policy_module is not None and getattr(policy_module, "__file__", None):
         files.append(policy_module.__file__)
     return files
@@ -64,6 +66,9 @@ def reload_all(policy_path):
     importlib.reload(renderer)
     importlib.reload(env_mod)
     importlib.reload(base)
+    from ..policies import scripted_policy, scripted_v2          # bản kết hợp dùng hai module này: nạp lại trước
+    importlib.reload(scripted_policy)
+    importlib.reload(scripted_v2)
 
     module_name, class_name = policy_path.split(":")
     policy_module = importlib.import_module(module_name)
@@ -78,7 +83,7 @@ def reload_all(policy_path):
 def main():
     parser = argparse.ArgumentParser(description="Xem policy chạy, tự nạp lại khi lưu file")
     parser.add_argument("--seed", type=int, default=2, help="seed vị trí hộp (mặc định 2, một seed hay thất bại)")
-    parser.add_argument("--policy", default="sim_engine.policies.scripted_policy:ScriptedPolicy")
+    parser.add_argument("--policy", default=config.DEFAULT_POLICY)
     parser.add_argument("--headless", action="store_true", help="không mở cửa sổ, chỉ in log")
     parser.add_argument("--max-frames", type=int, default=0, help="tự thoát sau N khung hình (0 = không giới hạn)")
     args = parser.parse_args()

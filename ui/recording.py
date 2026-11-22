@@ -7,7 +7,7 @@ from contextlib import ExitStack
 from .. import config
 from ..dataset import DatasetRecorder
 from ..env import SO101PickPlaceEnv
-from ..policies.scripted_policy import ScriptedPolicy
+from ..policies import default_policy
 from ..workflows.record import record_policy_step
 
 
@@ -42,7 +42,7 @@ def _run_recording(cv2, num_episodes, save_dir, window, put, show_message, width
     with ExitStack() as resources:
         env = SO101PickPlaceEnv(render_images=True)
         resources.callback(env.close)
-        policy = ScriptedPolicy(env)
+        policy = default_policy(env)
         recorder = DatasetRecorder(save_dir=save_dir)
         pip_w, pip_h = 200, 150
         successes = 0

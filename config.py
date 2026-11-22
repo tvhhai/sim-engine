@@ -50,6 +50,11 @@ PHYSICS_SUBSTEPS = int(1.0 / CONTROL_FREQ / PHYSICS_TIMESTEP)
 MAX_EPISODE_STEPS = 500  # tối đa 500 bước (~16 giây ở 30 Hz) rồi bị coi là hết giờ
 
 # Task: câu lệnh mặc định (VLA sẽ dùng câu này làm input ngôn ngữ)
+# Policy viết tay mặc định cho MỌI công cụ (Lab, quét vùng gắp, make_replay, select_seeds, ghi demo, đánh giá, viewer...):
+# bản kết hợp chạy V1 (scripted_policy) rồi chuyển sang V2 (scripted_v2) khi V1 bỏ cuộc mà hộp còn gắp được. 774/774 seed.
+# Muốn dùng policy khác cho một lệnh thì truyền --policy module:Lớp.
+DEFAULT_POLICY = "sim_engine.policies.scripted_hybrid:ScriptedPolicyHybrid"
+
 DEFAULT_TASK = "Pick up the box and place it in the bowl"
 
 # Đường dẫn

@@ -32,7 +32,7 @@ def main():
     parser.add_argument("--level", type=int, choices=[1, 2, 3], default=1)
     parser.add_argument("--every", type=int, default=0,
                         help="in 1 dòng mỗi N bước (mặc định: mức 2 = 10, mức 3 = 1)")
-    parser.add_argument("--policy", default="sim_engine.policies.scripted_policy:ScriptedPolicy")
+    parser.add_argument("--policy", default=config.DEFAULT_POLICY)
     args = parser.parse_args()
 
     every = args.every or (10 if args.level == 2 else 1)
@@ -85,7 +85,7 @@ def main():
     print(f"Kết thúc ở bước {step + 1}: {'THÀNH CÔNG' if info['success'] else 'THẤT BẠI'} "
           f"| hộp cách bát {info['box_to_bowl_dist']:.3f} m")
     if args.level >= 2:
-        print("Chú thích: dấu * = vừa đổi phase | 'kẹp mở' từ 0 (đóng) đến 100 (mở) | 'đang kẹp' = hộp đang dính vào tay")
+        print("Chú thích: dấu * = vừa đổi phase | 'kẹp mở' từ 0 (đóng) đến 100 (mở) | 'đang kẹp' = cả hai hàm đang chạm hộp (kẹp thật bằng ma sát)")
     env.close()
 
 

@@ -411,11 +411,11 @@ class Lab:
 
     # ---------- tư thế của policy ----------
     def policy_pose(self, seed, phase):
-        from ..policies.scripted_policy import ScriptedPolicy
+        from ..policies import default_policy
         if self.policy_env is None:
             self.policy_env = SO101PickPlaceEnv(render_images=False, end_on_success=False)
         env = self.policy_env
-        pol = ScriptedPolicy(env)
+        pol = default_policy(env)
         obs, info = env.reset(seed=seed)
         pol.reset()
         got = None

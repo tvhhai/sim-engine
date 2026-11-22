@@ -557,8 +557,8 @@ class {class_name}(BasePolicy):
 
         # Load policy
         if policy_type == "scripted":
-            from .policies.scripted_policy import ScriptedPolicy
-            policy = ScriptedPolicy(env)
+            from .policies import default_policy
+            policy = default_policy(env)
         elif policy_type == "random":
             from .policies.random_policy import RandomPolicy
             policy = RandomPolicy()
@@ -673,10 +673,10 @@ class {class_name}(BasePolicy):
     # ──────────────────────────────────────────────
 
     def demo_screen():
-        from .policies.scripted_policy import ScriptedPolicy
+        from .policies import default_policy
 
         env = SO101PickPlaceEnv(render_images=False)
-        policy = ScriptedPolicy(env)
+        policy = default_policy(env)
         renderer = OffscreenRenderer(env.model, W, H)
         wrist_r = OffscreenRenderer(env.model, 320, 240)
 

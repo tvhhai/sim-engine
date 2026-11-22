@@ -23,10 +23,10 @@ def main():
         sys.exit(1)
 
     from ..env import SO101PickPlaceEnv
-    from ..policies.scripted_policy import ScriptedPolicy
+    from ..policies import default_policy
 
     env = SO101PickPlaceEnv(render_images=False)
-    policy = ScriptedPolicy(env)
+    policy = default_policy(env)
 
     # Two renderers: main view + wrist camera
     main_renderer = OffscreenRenderer(env.model, 960, 720)

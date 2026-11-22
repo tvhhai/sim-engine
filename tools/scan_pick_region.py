@@ -1,5 +1,5 @@
 """Quét vùng GẮP ĐƯỢC THẬT của cánh tay: đặt hộp ở lưới điểm theo toạ độ cực quanh trục khớp 1, chạy trọn một ván bằng policy
-hiện tại, ghi lại ván nào thành công. Kết quả ghi vào results/pick_scan.json; replay vẽ vùng gắp được từ đó (không còn vẽ theo
+mặc định (config.DEFAULT_POLICY), ghi lại ván nào thành công. Kết quả ghi vào results/pick_scan.json; replay vẽ vùng gắp được từ đó (không còn vẽ theo
 tầm với hình học của IK) và env lấy hình quạt đặt hộp ngẫu nhiên từ config.PICK_REGION (đặt dựa trên bản đồ này).
 
 Cách dùng (đứng ở thư mục chứa sim_engine, đã kích hoạt .venv):
@@ -41,11 +41,11 @@ def grid(r_min, r_max, r_step, a_min, a_max, a_step):
 
 
 def run_points(pts):
-    from ..policies.scripted_policy import ScriptedPolicy
+    from ..policies import default_policy
     env = SO101PickPlaceEnv(render_images=False, end_on_success=False)
     rows = []
     for r, a, xy in pts:
-        policy = ScriptedPolicy(env)
+        policy = default_policy(env)
         obs, info = env.reset(seed=0, options={"box_xy": [float(xy[0]), float(xy[1])]})
         policy.reset()
         for t in range(config.MAX_EPISODE_STEPS):

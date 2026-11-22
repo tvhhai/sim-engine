@@ -10,7 +10,7 @@ import numpy as np
 
 from .. import box_sampling, config, paths
 from ..env import SO101PickPlaceEnv
-from ..policies.scripted_policy import ScriptedPolicy
+from ..policies import default_policy
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOCS = str(paths.RESULTS)
@@ -32,7 +32,7 @@ def in_sector(p):
 
 def run_one(p):
     env = SO101PickPlaceEnv(render_images=False, end_on_success=False)
-    pol = ScriptedPolicy(env)
+    pol = default_policy(env)
     obs, info = env.reset(seed=0, options={"box_xy": [float(p["xy"][0]), float(p["xy"][1])]})
     pol.reset()
     z0 = float(env.get_box_pos()[2])
