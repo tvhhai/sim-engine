@@ -110,16 +110,24 @@ def handle_post(handler, lab):
         return True
     try:
         parts = handler.path.split("/")
-        if len(parts) != 5 or parts[1:3] != ["studio", "runs"] or parts[4] != "meta":
-            handler.send_error(404)
-            return True
         length = int(handler.headers.get("Content-Length", "0"))
         if not 0 < length <= 8192:
             raise ValueError("Invalid request size")
-        changes = json.loads(handler.rfile.read(length))
-        if not isinstance(changes, dict):
-            raise ValueError("Metadata phải là object")
-        result = lab.runner.store.update(parts[3], changes)
+        body = json.loads(handler.rfile.read(length))
+        store = lab.runner.store
+        if handler.path == "/studio/lab/delete":                                   # xoá replay Lab gần nhất
+            store.delete_lab()
+            result = {"deleted": "lab"}
+        elif len(parts) == 5 and parts[1:3] == ["studio", "runs"] and parts[4] == "delete":
+            store.delete(parts[3])
+            result = {"deleted": parts[3]}
+        elif len(parts) == 5 and parts[1:3] == ["studio", "runs"] and parts[4] == "meta":
+            if not isinstance(body, dict):
+                raise ValueError("Metadata phải là object")
+            result = store.update(parts[3], body)
+        else:
+            handler.send_error(404)
+            return True
         handler._send(json.dumps(result, ensure_ascii=False))
     except (OSError, ValueError, KeyError, TypeError) as exc:
         handler._send(json.dumps({"error": str(exc)}, ensure_ascii=False))

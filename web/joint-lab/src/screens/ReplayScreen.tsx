@@ -8,6 +8,7 @@ import {
   Button,
   Group,
   Loader,
+  Modal,
   Select,
   SegmentedControl,
   Stack,
@@ -28,6 +29,8 @@ import { useStudio } from "../studio/StudioContext";
 import type { ReplayViewState } from "../types";
 import { navigationSeek } from "../studio/replayNavigation";
 import { ReplayWebGL } from "../components/ReplayWebGL";
+import { api } from "../api";
+import { filterEpisodes, RESULT_FILTERS, ZONE_FILTERS } from "../studio/replayFilters";
 
 export default function ReplayScreen() {
   const {
@@ -47,6 +50,11 @@ export default function ReplayScreen() {
   const [portalDocument, setPortalDocument] = useState<Document | null>(null);
   const [viewState, setViewState] = useState<ReplayViewState | null>(null);
   const [bookmarksOpen, setBookmarksOpen] = useState(false);
+  // Bộ lọc danh sách episode (giống replay canvas): kết quả và vùng của vị trí hộp, lưu trên trình duyệt
+  const [resultFilter, setResultFilter] = useLocalStorage({ key: "sim-studio-replay-result", defaultValue: "all" }),
+    [zoneFilter, setZoneFilter] = useLocalStorage({ key: "sim-studio-replay-zone", defaultValue: "all" });
+  const [confirmDelete, setConfirmDelete] = useState(false),
+    [deleting, setDeleting] = useState(false);
   const [note, setNote] = useState(""),
     [marks, setMarks] = useLocalStorage<
       Record<string, { step: number; label: string }[]>
@@ -67,6 +75,23 @@ export default function ReplayScreen() {
     ? catalog.runs.find((item) => item.id === source.slice(4))
     : null;
   const summary = selectedSource?.episodes[episode] || runRecord;
+  const shownEpisodes = selectedSource
+    ? filterEpisodes(selectedSource.episodes, resultFilter, zoneFilter, episode)
+    : [];
+  const deletable = source === "lab" || source.startsWith("run:");
+  async function deleteReplay() {
+    setDeleting(true);
+    try {
+      await api(source === "lab" ? "/studio/lab/delete" : `/studio/runs/${source.slice(4)}/delete`, {});
+      setConfirmDelete(false);
+      await refreshCatalog();
+      route.navigate("replay", { source: "baseline", episode: 0, step: 0, view: mode }, true);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDeleting(false);
+    }
+  }
   const sourceOptions = [
     ...catalog.sources.map((item) => ({ value: item.id, label: item.title })),
     ...catalog.runs.map((item) => ({
@@ -253,19 +278,40 @@ export default function ReplayScreen() {
             allowDeselect={false}
           />
           {selectedSource && selectedSource.episodes.length > 1 && (
-            <Select
-              label="Episode / seed"
-              aria-label="Episode / seed"
-              searchable
-              w={220}
-              value={String(episode)}
-              onChange={(value) => change({ episode: Number(value), step: 0 })}
-              data={selectedSource.episodes.map((item) => ({
-                value: String(item.index),
-                label: item.name,
-              }))}
-              allowDeselect={false}
-            />
+            <>
+              <Select
+                label="Kết quả"
+                aria-label="Lọc theo kết quả"
+                w={140}
+                value={resultFilter}
+                onChange={(value) => value && setResultFilter(value)}
+                data={RESULT_FILTERS}
+                allowDeselect={false}
+              />
+              <Select
+                label="Vùng"
+                aria-label="Lọc theo vùng của hộp"
+                w={160}
+                value={zoneFilter}
+                onChange={(value) => value && setZoneFilter(value)}
+                data={ZONE_FILTERS}
+                allowDeselect={false}
+              />
+              <Select
+                label={`Episode / seed (${shownEpisodes.filter((e) => e.matches).length}/${selectedSource.episodes.length})`}
+                aria-label="Episode / seed"
+                searchable
+                w={240}
+                value={String(episode)}
+                onChange={(value) => change({ episode: Number(value), step: 0 })}
+                data={shownEpisodes.map((item) => ({
+                  value: String(item.index),
+                  label: item.matches ? item.name : `${item.name} (ngoài bộ lọc)`,
+                }))}
+                nothingFoundMessage="Không có episode khớp bộ lọc"
+                allowDeselect={false}
+              />
+            </>
           )}
           <SegmentedControl
             aria-label="Chế độ xem replay"
@@ -330,6 +376,19 @@ export default function ReplayScreen() {
               <RefreshCw size={17} />
             </ActionIcon>
           </Tooltip>
+          {deletable && (
+            <Tooltip label="Xoá replay này">
+              <ActionIcon
+                aria-label="Xoá replay này"
+                variant="default"
+                color="red"
+                size="lg"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Trash2 size={17} />
+              </ActionIcon>
+            </Tooltip>
+          )}
           <Tooltip label="Toàn màn hình replay">
             <ActionIcon
               aria-label="Toàn màn hình replay"
@@ -346,6 +405,24 @@ export default function ReplayScreen() {
           </Tooltip>
         </Group>
       </div>
+      <Modal opened={confirmDelete} onClose={() => setConfirmDelete(false)} title="Xoá replay?" centered>
+        <Stack>
+          <Text size="sm">
+            {source === "lab"
+              ? "Xoá replay của lần chạy Lab gần nhất. Cảnh đã đặt trong Lab vẫn giữ nguyên."
+              : `Xoá hẳn "${runRecord?.title ?? source}" khỏi lịch sử (cả cảnh và dữ liệu replay).`}{" "}
+            Không hoàn tác được.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setConfirmDelete(false)}>
+              Huỷ
+            </Button>
+            <Button color="red" loading={deleting} onClick={deleteReplay}>
+              Xoá
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
       <div className="replay-summary">
         <Group gap="xs">
           <Badge

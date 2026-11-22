@@ -55,6 +55,7 @@ class LabRunTests(unittest.TestCase):
             self.assertAlmostEqual(episode["initial_options"]["arm_qpos"][0], .2617993878)
             self.assertAlmostEqual(episode["frames"][0]["box"][0], .18, delta=.003)
             self.assertEqual(LabRun(root).saved_pose, second_pose)
+            self.assertEqual(runner.store.list_runs(), [])               # chạy từ Studio chỉ ghi đè replay Lab, không thêm lịch sử
             for name in ("replay.html", "replay_seeds.json", "replay_prev_steps.json"):
                 self.assertEqual((root / name).read_text(), "untouched")
 

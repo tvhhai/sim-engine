@@ -26,6 +26,7 @@ import {
   RefreshCw,
   Search,
   Star,
+  Trash2,
 } from "lucide-react";
 import { useStudio } from "../studio/StudioContext";
 import { api } from "../api";
@@ -48,6 +49,16 @@ export default function RunsScreen() {
     [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<string[]>([]),
     [compare, setCompare] = useState(false);
+  const [removing, setRemoving] = useState<RunRecord | null>(null);
+  async function remove() {
+    if (!removing) return;
+    await action(async () => {
+      await api(`/studio/runs/${removing.id}/delete`, {});
+      setSelected((ids) => ids.filter((id) => id !== removing.id));
+      await refreshCatalog();
+    });
+    setRemoving(null);
+  }
   const records = useMemo(() => {
     const text = search.toLowerCase().trim();
     const result = catalog.runs.filter(
@@ -106,12 +117,27 @@ export default function RunsScreen() {
     .filter((record): record is RunRecord => !!record);
   return (
     <div className="standard-screen">
+      <Modal opened={!!removing} onClose={() => setRemoving(null)} title="Xoá lần chạy?" centered>
+        <Stack>
+          <Text size="sm">
+            Xoá hẳn "{removing?.title}" (cảnh, dữ liệu replay và ghi chú). Không hoàn tác được.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setRemoving(null)}>
+              Huỷ
+            </Button>
+            <Button color="red" onClick={remove}>
+              Xoá
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
       <div className="screen-toolbar">
         <div>
           <Text fw={600}>Các lần chạy đã lưu</Text>
           <Text size="sm" c="dimmed">
-            Mỗi dòng giữ nguyên kết quả và cảnh ban đầu. Xem lại không chạy mô
-            phỏng.
+            Các lần chạy đã lưu trước đây. Chạy từ Lab giờ chỉ ghi đè một replay
+            "Lab · lần chạy mới nhất", không thêm dòng mới.
           </Text>
         </div>
         <Group>
@@ -344,6 +370,16 @@ export default function RunsScreen() {
                           }
                         >
                           <Play size={15} />
+                        </ActionIcon>
+                      </Tooltip>
+                      <Tooltip label="Xoá lần chạy này">
+                        <ActionIcon
+                          aria-label={`Xoá ${record.title}`}
+                          variant="default"
+                          color="red"
+                          onClick={() => setRemoving(record)}
+                        >
+                          <Trash2 size={15} />
                         </ActionIcon>
                       </Tooltip>
                       <Tooltip label="Sửa tên và ghi chú">

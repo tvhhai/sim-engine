@@ -5,9 +5,11 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import threading
 
 from .. import paths
+from ..tools.make_replay import pick_zone
 
 
 def atomic_json(path, value):
@@ -51,18 +53,25 @@ class StudioStore:
             atomic_json(folder / "meta.json", record)
         return record
 
-    def seed_latest(self):
-        """Bring the existing latest Lab result into the new archive once."""
-        if self.list_runs():
-            return
-        try:
-            path = self.directory / "replay_lab.json"
-            payload = json.loads(path.read_text(encoding="utf-8"))
-            case = json.loads((self.directory / "lab_case.json").read_text(encoding="utf-8"))
-            created = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
-            self.archive(str(path.stat().st_mtime_ns), case, payload, created_at=created)
-        except (OSError, ValueError, KeyError, TypeError):
-            pass
+    def delete(self, run_id):
+        """Xoá hẳn một lần chạy đã lưu (cả cảnh, dữ liệu replay và ghi chú)."""
+        with self.lock:
+            folder = self._run_dir(run_id)
+            if not (folder / "meta.json").is_file():
+                raise ValueError("Không có lần chạy này")
+            shutil.rmtree(folder)
+
+    def delete_lab(self):
+        """Xoá replay của lần chạy Lab gần nhất (replay_lab.json/.html). Cảnh đã đặt (lab_case.json) vẫn giữ để Lab mở lại đúng cảnh."""
+        with self.lock:
+            removed = False
+            for name in ("replay_lab.json", "replay_lab.html"):
+                path = self.directory / name
+                if path.is_file():
+                    path.unlink()
+                    removed = True
+            if not removed:
+                raise ValueError("Chưa có replay Lab để xoá")
 
     def list_runs(self):
         with self.lock:
@@ -128,7 +137,8 @@ class StudioStore:
                 sources.append({"id": ident, "title": title, "episodes": [
                     {"index": i, "seed": e["seed"], "name": e.get("name", f"seed {e['seed']}"),
                      "success": e["success"], "steps": e["steps"], "tags": e.get("tags", []),
-                     "blocked_reason": e.get("blocked_reason")}
+                     "blocked_reason": e.get("blocked_reason"),
+                     "zone": pick_zone(*e["frames"][0]["box"][:2]) if e.get("frames") else None}
                     for i, e in enumerate(payload["episodes"])]})
             except (OSError, ValueError, KeyError):
                 continue

@@ -150,6 +150,7 @@ export type EpisodeSummary = {
   steps: number;
   tags: string[];
   blocked_reason?: string;
+  zone?: "green" | "mixed" | "red" | null;
 };
 export type Catalog = {
   sources: { id: string; title: string; episodes: EpisodeSummary[] }[];

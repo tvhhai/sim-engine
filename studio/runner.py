@@ -23,7 +23,6 @@ class LabRun:
         self.lock = threading.Lock()
         self.state = {"status": "idle"}
         self.store = StudioStore(self.directory)
-        self.store.seed_latest()
         try:
             self.saved_pose = json.loads((self.directory / "lab_case.json").read_text(encoding="utf-8"))["pose"]
         except (OSError, ValueError, KeyError):
@@ -92,7 +91,6 @@ class LabRun:
             data_tmp.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
             os.replace(data_tmp, data_path)
             os.replace(temporary, out)
-            self.store.archive(self.state["run_id"], case, payload)
             with self.lock:
                 self.state.update(status="done", success=episode["success"], steps=episode["steps"],
                                   blocked_reason=blocked,

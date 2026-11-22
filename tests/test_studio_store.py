@@ -50,15 +50,30 @@ class StudioStoreTests(unittest.TestCase):
                 with self.subTest(source=source), self.assertRaises(ValueError):
                     store.payload(source)
 
-    def test_existing_latest_is_imported_only_once(self):
+    def test_delete_run_and_lab_replay(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "replay_lab.json").write_text(json.dumps(payload()))
-            (root / "lab_case.json").write_text(json.dumps({"seed": 0, "pose": {}}))
             store = StudioStore(directory)
-            store.seed_latest()
-            store.seed_latest()
-            self.assertEqual(len(store.list_runs()), 1)
+            store.archive("1795295445070733900", {"seed": 1, "pose": {}}, payload())
+            store.delete("1795295445070733900")
+            self.assertEqual(store.list_runs(), [])
+            with self.assertRaises(ValueError):
+                store.delete("1795295445070733900")
+            (root / "replay_lab.json").write_text(json.dumps(payload()))
+            (root / "replay_lab.html").write_text("x")
+            (root / "lab_case.json").write_text("{}")
+            store.delete_lab()
+            self.assertFalse((root / "replay_lab.json").exists() or (root / "replay_lab.html").exists())
+            self.assertTrue((root / "lab_case.json").exists())          # cảnh đã đặt vẫn giữ
+            with self.assertRaises(ValueError):
+                store.delete_lab()
+
+    def test_catalog_reports_box_zone(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "replay.json"
+            path.write_text(json.dumps(payload()), encoding="utf-8")
+            episode = StudioStore(directory, baseline=path).catalog()["sources"][0]["episodes"][0]
+            self.assertEqual(episode["zone"], "green")                # hộp ở (0.15, 0.03): trong vùng gắp được
 
     def test_full_view_reuses_all_replay_tools_without_cdn(self):
         html = render_full_replay(payload(), paths.REPLAY_ASSETS)

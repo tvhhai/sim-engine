@@ -19,6 +19,7 @@ import contextlib
 import importlib
 import io
 import json
+import math
 import os
 import time
 
@@ -376,6 +377,20 @@ def unreachable_region():
     """Giới hạn dừng của policy (vùng đỏ): ngoài góc khớp 1 ±(giới hạn + biên), quá xa, quá sát đế thì về home ngay."""
     return {"pan": list(config.PICK_PAN_XY), "angle_deg": config.PAN_LIMIT_DEG + config.PAN_UNREACHABLE_MARGIN_DEG,
             "radius_m": config.PICK_UNREACHABLE_RADIUS, "inner_radius_m": config.PICK_UNREACHABLE_INNER_RADIUS}
+
+
+def pick_zone(x, y):
+    """Vùng của một vị trí hộp: "green" (trong hình quạt gắp được), "red" (ngoài giới hạn dừng) hoặc "mixed".
+    Cùng quy tắc với pickZone trong static/replay/replay.js và web/joint-lab/src/zones.ts."""
+    region, stop = config.PICK_REGION, unreachable_region()
+    dx, dy = x - config.PICK_PAN_XY[0], y - config.PICK_PAN_XY[1]
+    r, angle = math.hypot(dx, dy), math.degrees(math.atan2(dx, dy))
+    if r > stop["radius_m"] or r < stop["inner_radius_m"] or abs(angle) > stop["angle_deg"]:
+        return "red"
+    if (r < region["r_min"] - 1e-9 or r > region["r_max"] + 1e-9
+            or angle < region["angle_min_deg"] - 1e-9 or angle > region["angle_max_deg"] + 1e-9):
+        return "mixed"
+    return "green"
 
 
 def write_replay(env, episodes, out, policy_name):
