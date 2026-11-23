@@ -28,6 +28,7 @@ class StudioStore:
         self.runs = self.directory / "studio_runs"
         self.lock = threading.RLock()
         self.cache = None
+        self.file_cache = {}
 
     def _run_dir(self, run_id):
         if not re.fullmatch(r"[0-9]{15,25}", str(run_id)):
@@ -123,6 +124,18 @@ class StudioStore:
                         payload = json.JSONDecoder().raw_decode(text.split(marker, 1)[1].lstrip())[0]
                     self.cache = (signature, payload)
                 return self.cache[1]
+        if source.startswith("file:"):                        # results/replays/<tên>.json do tools/object_replay (bóng, vật cỡ khác...) ghi
+            name = source[5:]
+            if not re.fullmatch(r"[A-Za-z0-9_-]{1,60}", name):
+                raise ValueError("Nguồn replay không hợp lệ")
+            path = paths.RESULTS / "replays" / f"{name}.json"
+            signature = (path, path.stat().st_mtime_ns, path.stat().st_size)
+            with self.lock:
+                cached = self.file_cache.get(name)
+                if cached is None or cached[0] != signature:
+                    cached = (signature, json.loads(path.read_text(encoding="utf-8")))
+                    self.file_cache[name] = cached
+                return cached[1]
         if source == "lab":
             return json.loads((self.directory / "replay_lab.json").read_text(encoding="utf-8"))
         if source.startswith("run:"):
@@ -131,9 +144,11 @@ class StudioStore:
 
     def catalog(self):
         sources = []
-        for ident, title in (("lab", "Lab · lần chạy mới nhất"), ("baseline", "Bộ replay hiện tại")):
+        extra = [(f"file:{p.stem}", None) for p in sorted((paths.RESULTS / "replays").glob("*.json"))] if (paths.RESULTS / "replays").is_dir() else []
+        for ident, title in (("lab", "Lab · lần chạy mới nhất"), ("baseline", "Bộ replay hiện tại"), *extra):
             try:
                 payload = self.payload(ident)
+                title = title or payload.get("scene", {}).get("title") or ident[5:]
                 sources.append({"id": ident, "title": title, "episodes": [
                     {"index": i, "seed": e["seed"], "name": e.get("name", f"seed {e['seed']}"),
                      "success": e["success"], "steps": e["steps"], "tags": e.get("tags", []),

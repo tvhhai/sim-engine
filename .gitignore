@@ -31,3 +31,4 @@ web/joint-lab/.pnpm-store/
 .cursor/
 results/replay_*.html
 results/replay_compare.*
+results/replays/
