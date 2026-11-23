@@ -29,3 +29,5 @@ web/joint-lab/.pnpm-store/
 # Chỉ mục và cấu hình công cụ cục bộ
 .codegraph/
 .cursor/
+results/replay_*.html
+results/replay_compare.*
