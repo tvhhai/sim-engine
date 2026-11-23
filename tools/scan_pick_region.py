@@ -9,6 +9,7 @@ Góc đo từ hướng tay (trục +y) về phía +x: x = trục_x + r*sin(góc)
 """
 
 import argparse
+import functools
 import re
 import contextlib
 import io
@@ -40,22 +41,30 @@ def grid(r_min, r_max, r_step, a_min, a_max, a_step):
     return pts
 
 
-def run_points(pts):
+def run_points(pts, yaws=(0,), min_rate=0.5):
+    """Mỗi điểm chạy với từng góc xoay hộp trong `yaws` (độ). rate = tỉ lệ ván thành công; ok = rate >= min_rate.
+    Quét một góc (0°, hộp thẳng trục) từng cho kết quả lệch: nhiều điểm hỏng chỉ ở đúng góc đó."""
     from ..policies import default_policy
     env = SO101PickPlaceEnv(render_images=False, end_on_success=False)
     rows = []
     for r, a, xy in pts:
-        policy = default_policy(env)
-        obs, info = env.reset(seed=0, options={"box_xy": [float(xy[0]), float(xy[1])]})
-        policy.reset()
-        for t in range(config.MAX_EPISODE_STEPS):
-            with contextlib.redirect_stdout(io.StringIO()):
-                act = policy.select_action({"state": obs["state"], "images": {}, "task": config.DEFAULT_TASK})
-            obs, _, _, trunc, info = env.step(act)
-            if trunc or policy._phase > 10:
-                break
-        _, info, _ = env.settle(act, info)                       # hộp còn lắc trong bát thì chờ nằm yên rồi mới chấm
-        rows.append({"r": r, "a": a, "xy": [round(float(xy[0]), 4), round(float(xy[1]), 4)], "ok": bool(info["success"]), "steps": t})
+        wins, steps = [], []
+        for yaw in yaws:
+            policy = default_policy(env)
+            obs, info = env.reset(seed=0, options={"box_xy": [float(xy[0]), float(xy[1])], "box_yaw": math.radians(yaw)})
+            policy.reset()
+            for t in range(config.MAX_EPISODE_STEPS):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    act = policy.select_action({"state": obs["state"], "images": {}, "task": config.DEFAULT_TASK})
+                obs, _, _, trunc, info = env.step(act)
+                if trunc or policy._phase > 10:
+                    break
+            _, info, _ = env.settle(act, info)                   # hộp còn lắc trong bát thì chờ nằm yên rồi mới chấm
+            wins.append(bool(info["success"]))
+            steps.append(t)
+        rate = sum(wins) / len(wins)
+        rows.append({"r": r, "a": a, "xy": [round(float(xy[0]), 4), round(float(xy[1]), 4)], "ok": rate >= min_rate,
+                     "rate": round(rate, 3), "yaws": {str(y): w for y, w in zip(yaws, wins)}, "steps": max(steps)})
     env.close()
     return rows
 
@@ -65,6 +74,8 @@ def main():
     ap.add_argument("--r", type=float, nargs=3, default=[0.08, 0.42, 0.02], metavar=("MIN", "MAX", "STEP"))
     ap.add_argument("--angle", type=int, nargs=3, default=[-130, 120, 10], metavar=("MIN", "MAX", "STEP"))
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1))
+    ap.add_argument("--yaws", type=int, nargs="+", default=[0, 15, 30, 45, 60, 75], help="góc xoay hộp (độ) thử ở mỗi điểm; hộp vuông nên 90° lặp lại 0°")
+    ap.add_argument("--min-rate", type=float, default=0.5, help="điểm tính là gắp được khi tỉ lệ thành công qua các góc >= mức này")
     ap.add_argument("--seeds-only", action="store_true", help="không quét lại: đọc results/pick_scan.json rồi chỉ cập nhật khối SCAN-SEEDS")
     ap.add_argument("--update-seeds", action="store_true", help="ghi lại khối SCAN-SEEDS trong config.py: các điểm quét hỏng trong vùng gắp thành seed cố định 7..")
     ap.add_argument("--out", default=str(paths.PICK_SCAN))
@@ -75,12 +86,12 @@ def main():
         return
     pts = grid(*args.r, *args.angle)
     chunks = [pts[k::args.workers] for k in range(args.workers)]
-    print(f"quét {len(pts)} điểm bằng {args.workers} tiến trình ...", flush=True)
+    print(f"quét {len(pts)} điểm x {len(args.yaws)} góc xoay bằng {args.workers} tiến trình ...", flush=True)
     with mp.get_context("spawn").Pool(args.workers) as pool:
-        parts = pool.map(run_points, chunks)
+        parts = pool.map(functools.partial(run_points, yaws=tuple(args.yaws), min_rate=args.min_rate), chunks)
     rows = sorted((r for part in parts for r in part), key=lambda d: (d["r"], d["a"]))
     with open(args.out, "w", encoding="utf-8") as f:
-        json.dump({"pan_xy": PAN.tolist(), "angle_from": "+y về phía +x", "points": rows}, f, ensure_ascii=False)
+        json.dump({"pan_xy": PAN.tolist(), "angle_from": "+y về phía +x", "yaws": args.yaws, "min_rate": args.min_rate, "points": rows}, f, ensure_ascii=False)
     ok = sum(r["ok"] for r in rows)
     print(f"thành công {ok}/{len(rows)} điểm. Đã ghi {args.out}")
     if args.update_seeds:
