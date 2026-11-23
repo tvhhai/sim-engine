@@ -123,23 +123,6 @@ export default function StudioShell() {
             </Text>
           </div>
         )}
-        <Tooltip label={settings.collapsed ? "Mở rộng menu" : "Thu gọn menu"}>
-          <ActionIcon
-            aria-label={settings.collapsed ? "Mở rộng menu" : "Thu gọn menu"}
-            variant="subtle"
-            color="gray"
-            size="lg"
-            onClick={() =>
-              setSettings({ ...settings, collapsed: !settings.collapsed })
-            }
-          >
-            {settings.collapsed ? (
-              <PanelLeftOpen size={19} />
-            ) : (
-              <PanelLeftClose size={19} />
-            )}
-          </ActionIcon>
-        </Tooltip>
       </div>
     </>
   );
@@ -160,7 +143,7 @@ export default function StudioShell() {
       <aside className="studio-sidebar">{navigation}</aside>
       <div className="studio-body">
         <header className="studio-header">
-          <Group gap="md">
+          <Group gap="sm" wrap="nowrap" className="header-title">
             <Burger
               className="mobile-navigation"
               opened={mobile}
@@ -168,14 +151,29 @@ export default function StudioShell() {
               aria-label="Mở menu điều hướng"
               size="sm"
             />
-            <div>
-              <Title order={1} size="h3">
-                {active?.title || "Không tìm thấy màn hình"}
-              </Title>
-              <Text c="dimmed" size="sm">
-                {active?.description}
-              </Text>
-            </div>
+        <Tooltip label={settings.collapsed ? "Mở rộng menu" : "Thu gọn menu"}>
+          <ActionIcon
+            aria-label={settings.collapsed ? "Mở rộng menu" : "Thu gọn menu"}
+            variant="subtle"
+            color="gray"
+            size="md" className="sidebar-toggle"
+            onClick={() =>
+              setSettings({ ...settings, collapsed: !settings.collapsed })
+            }
+          >
+            {settings.collapsed ? (
+              <PanelLeftOpen size={19} />
+            ) : (
+              <PanelLeftClose size={19} />
+            )}
+          </ActionIcon>
+        </Tooltip>
+            <Title order={1} size="h4">
+              {active?.title || "Không tìm thấy màn hình"}
+            </Title>
+            <Text c="dimmed" size="xs" className="header-desc">
+              {active?.description}
+            </Text>
           </Group>
           <Group gap="sm">
             <Badge color={connected ? "teal" : "orange"} variant="light">
