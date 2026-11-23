@@ -33,8 +33,8 @@ app.innerHTML = `
       <button id="sPrev" title="seed trước (phím [)">◀ seed</button>
       <label>Vùng <select id="flt"><option value="all">Tất cả</option><option value="green">Gắp được</option><option value="red">Không gắp được</option><option value="mixed">Hỗn hợp</option></select></label>
       <label id="mixResultLabel">Kết quả <select id="mixResult"><option value="all">Tất cả</option><option value="ok">Thành công</option><option value="fail">Thất bại</option></select></label>
-      <label>Tìm <input id="q" type="search" placeholder="seed, tên, nhãn…" title="gõ số seed, tên hoặc nhãn (vd 1011, hỏng, timeout, chậm); nhiều từ = phải khớp hết" autocomplete="off"></label>
-      <label>Seed <select id="sel" title="chọn nhanh seed ở xa; dùng nút ◀ ▶ để duyệt lần lượt"></select></label>
+      <span class="sel-wrap">Seed <select id="sel" hidden></select><button type="button" id="selBtn" class="sel-btn" popovertarget="selPop" aria-haspopup="listbox" title="chọn seed; ô tìm nằm trong danh sách (gõ số seed, tên hoặc nhãn: 1011, hong, timeout). Dùng ◀ ▶ để duyệt lần lượt"></button></span>
+      <div id="selPop" popover class="sel-pop"><input id="q" type="search" placeholder="Tìm seed, tên, nhãn… (Enter = chọn ván đầu)" autocomplete="off" aria-label="Tìm seed"><div id="selList" role="listbox" aria-label="Danh sách seed"></div></div>
       <button id="sNext" title="seed sau (phím ])">seed ▶</button>
       <span class="sub" id="epPos"></span>
     </span>
@@ -54,15 +54,14 @@ app.innerHTML = `
     </div>
   </header>
   <main class="main">
-    <div class="card c-small"><div id="topWrap" class="fs-wrap"><h2>Nhìn từ trên · XY từ khớp 1 (m)<span class="pick-zone-toggle"><label><input type="checkbox" id="showReach" checked> Vùng gắp</label> <button type="button" class="fs-btn" id="topFs" title="Xem toàn màn hình (phím F, Esc để thoát)" aria-label="Toàn màn hình hình nhìn từ trên">⛶ Toàn màn hình</button></span></h2>
-      <div class="pick-zone-legend"><span class="zone-green">Gắp được</span><span class="zone-red">Không gắp · về home</span><span class="zone-mixed">Hỗn hợp · cần tối ưu</span><span class="scan-note"><b style="color:#d14049">✕</b> điểm quét hỏng (vùng xanh còn ít điểm hỏng: mỗi điểm có 1 seed 1001+)</span><span class="scan-note"><b style="color:#16834f">●</b> điểm quét gắp được, chỉ vẽ ở vùng hỗn hợp</span></div><svg id="top" role="img" aria-label="Hình chiếu XY cố định" viewBox="0 0 520 340"></svg>
-      <div class="fs-only fs-bar"><button type="button" id="fsPrev" title="Lùi 1 bước (←)">◀</button><button type="button" id="fsPlay" title="Phát / tạm dừng (Space)">▶ / ❚❚</button><button type="button" id="fsNext" title="Tiến 1 bước (→)">▶</button><input type="range" id="fsRng" min="0" value="0" aria-label="Bước"><output id="fsInfo"></output></div></div>
-      <h2>Nhìn từ cạnh · Y ngang, Z cao (m)</h2><svg id="side" role="img" aria-label="Hình chiếu YZ cố định" viewBox="0 18 520 202"></svg></div>
+    <div class="card c-small"><div id="topWrap" class="fs-wrap"><h2><span class="vtabs" role="tablist" aria-label="Góc nhìn 2D"><button type="button" role="tab" id="tabTop" aria-selected="true" aria-controls="top">Nhìn từ trên · XY (m)</button><button type="button" role="tab" id="tabSide" aria-selected="false" aria-controls="side">Nhìn từ cạnh · YZ (m)</button></span><span class="pick-zone-toggle" id="topTools"><label><input type="checkbox" id="showReach" checked> Vùng gắp</label> <button type="button" class="legend-btn" popovertarget="zonePop" title="Chú giải màu vùng và điểm quét">ⓘ Chú giải</button> <button type="button" class="fs-btn" id="topFs" title="Xem toàn màn hình (phím F, Esc để thoát)" aria-label="Toàn màn hình hình nhìn từ trên">⛶ Toàn màn hình</button></span></h2>
+      <div id="zonePop" popover class="legend-pop"><div class="pick-zone-legend"><span class="zone-green">Gắp được</span><span class="zone-red">Không gắp · về home</span><span class="zone-mixed">Hỗn hợp · cần tối ưu</span><span class="scan-note"><b style="color:#d14049">✕</b> điểm quét hỏng (vùng xanh còn ít điểm hỏng: mỗi điểm có 1 seed 1001+)</span><span class="scan-note"><b style="color:#16834f">●</b> điểm quét gắp được, chỉ vẽ ở vùng hỗn hợp</span></div></div><svg id="top" role="tabpanel" aria-label="Hình chiếu XY cố định" viewBox="0 0 520 340"></svg><svg id="side" role="tabpanel" aria-label="Hình chiếu YZ cố định" viewBox="0 18 520 202" hidden></svg>
+      <div class="fs-only fs-bar"><button type="button" id="fsPrev" title="Lùi 1 bước (←)">◀</button><button type="button" id="fsPlay" title="Phát / tạm dừng (Space)">▶ / ❚❚</button><button type="button" id="fsNext" title="Tiến 1 bước (→)">▶</button><input type="range" id="fsRng" min="0" value="0" aria-label="Bước"><output id="fsInfo"></output></div></div></div>
     <div class="card c-3d"><h2><span>3D (VIEW CHÍNH)</span><span class="hint">kéo trái xoay · kéo phải dịch · lăn zoom · R mặc định · ⌨ xem phím</span><button type="button" class="fs-btn" id="c3Fs" title="Xem toàn màn hình (phím G, Esc để thoát)" aria-label="Toàn màn hình hình 3D" style="margin-left:auto">⛶ Toàn màn hình</button></h2>
       <div class="cv"><canvas id="c3"></canvas>
         <div class="viewbar" role="group" aria-label="Góc nhìn 3D">
-          <button id="v1" title="Góc chéo mặc định">Chéo</button><button id="v2" title="Nhìn từ phía +Y về đế">Trước</button><button id="vSide" title="Chiếu vuông góc từ +X lên mặt phẳng YZ">Hông</button><button id="v3" title="Nhìn thẳng từ trên xuống">Trên</button><button id="vCams" title="Xem vị trí camera bên hông cổ tay">Vị trí cam</button>
-          <span class="sep"></span><button id="bFollow" aria-pressed="false" title="Camera bám theo đầu tay (phím T)">Bám tay</button><button id="bCenter" title="Đưa đầu tay về giữa khung (phím C)">Giữa tay</button><button id="zIn" title="Zoom gần (phím Z hoặc +)">＋</button><button id="zOut" title="Zoom xa (phím X hoặc -)">－</button><button type="button" popovertarget="keysPop" title="Phím điều khiển camera 3D">⌨</button><span class="sep"></span><button id="bCam" aria-pressed="true" title="Bật hoặc tắt ảnh camera cổ tay">Ảnh cam</button><label class="tilt" title="Gập giá đỡ camera quanh chốt để đổi góc nhìn; giá trị ưng ý thì ghi vào config.WRIST_CAM_TILT_DEG">Gập cam <input type="range" id="camTilt" min="-45" max="45" step="1" value="0"><output id="camTiltV">0°</output></label>
+          <button id="vCams" title="Xem vị trí camera bên hông cổ tay">Vị trí cam</button>
+          <button id="bFollow" aria-pressed="false" title="Camera bám theo đầu tay (phím T)">Bám tay</button><button id="zIn" title="Zoom gần (phím Z hoặc +)">＋</button><button id="zOut" title="Zoom xa (phím X hoặc -)">－</button><button type="button" popovertarget="keysPop" title="Phím điều khiển camera 3D">⌨</button><span class="sep"></span><button id="bCam" aria-pressed="true" title="Bật hoặc tắt ảnh camera cổ tay">Ảnh cam</button><label class="tilt" title="Gập giá đỡ camera quanh chốt để đổi góc nhìn; giá trị ưng ý thì ghi vào config.WRIST_CAM_TILT_DEG">Gập cam <input type="range" id="camTilt" min="-45" max="45" step="1" value="0"><output id="camTiltV">0°</output></label>
         </div>
         <div id="keysPop" popover class="legend-pop keys-pop"><b>Điều khiển camera 3D</b>
           <span><kbd>W</kbd><kbd>S</kbd> tiến / lùi · <kbd>A</kbd><kbd>D</kbd> trái / phải · <kbd>Q</kbd><kbd>E</kbd> xuống / lên (dịch điểm nhìn)</span>
@@ -123,8 +122,7 @@ const fold = s => String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ
 EPS.forEach(e => { e._hay = fold([e.seed, "seed " + e.seed, e.name || "", e.group || "", ...(e.tags || []), e.success ? "ok thanh cong" : "fail hong"].join(" ")); });
 const passFlt = e => {
   const zone = $("flt").value, result = $("mixResult").value;
-  const words = fold($("q").value).split(/\s+/).filter(Boolean);
-  return (zone === "all" || e._pickZone === zone) && (result === "all" || e.success === (result === "ok")) && words.every(w => e._hay.includes(w));
+  return (zone === "all" || e._pickZone === zone) && (result === "all" || e.success === (result === "ok"));
 };
 function buildSel() {      // dropdown chia nhóm, chỉ giữ ván hợp bộ lọc (OK/FAIL); duyệt lần lượt bằng nút ◀ ▶ cũng chỉ trong danh sách này
   const groups = [...new Set(EPS.map(e => e.group || ""))];
@@ -134,7 +132,27 @@ function buildSel() {      // dropdown chia nhóm, chỉ giữ ván hợp bộ l
   if (!count) $("sel").add(new Option("Không có seed phù hợp", ""));
   $("sel").disabled = !count;
   $("sPrev").disabled = $("sNext").disabled = count < 2;
+  renderPick();
 }
+// Danh sách trong popup: các ván hợp bộ lọc Vùng / Kết quả và khớp ô tìm (bỏ dấu, nhiều từ phải khớp hết), chia nhóm như dropdown cũ
+function renderPick() {
+  const words = fold($("q").value).split(/\s+/).filter(Boolean);
+  const list = visible().filter(k => words.every(w => EPS[k]._hay.includes(w)));
+  const groups = [...new Set(list.map(k => EPS[k].group || ""))];
+  $("selList").innerHTML = list.length ? groups.map(g => {
+    const rows = list.filter(k => (EPS[k].group || "") === g).map(k => { const e = EPS[k], ex = (e.tags || []).filter(x => !/^(THÀNH CÔNG|HỎNG)/.test(x));
+      return `<button type="button" role="option" data-k="${k}" aria-selected="${k === ep}" class="${e.success ? "" : "fail"}"><span>${k + 1}. ${e.name || "seed " + e.seed}</span><small>${e.success ? "OK" : "FAIL"}${ex.length ? " · " + ex.join(" · ") : ""}</small></button>`; }).join("");
+    return (g ? `<div class="sel-group">${g}</div>` : "") + rows;
+  }).join("") : `<div class="sel-empty">Không có seed khớp</div>`;
+}
+function updatePickBtn() { const e = EPS[ep]; $("selBtn").textContent = e ? `${ep + 1}. ${e.name || "seed " + e.seed} ▾` : "Chọn seed ▾"; }
+$("selList").onclick = e => { const b = e.target.closest("button[data-k]"); if (b) { $("selPop").hidePopover(); loadEp(+b.dataset.k); } };
+$("selPop").addEventListener("toggle", e => {
+  if (e.newState !== "open") { $("q").value = ""; renderPick(); return; }
+  const r = $("selBtn").getBoundingClientRect(), p = $("selPop");
+  p.style.top = Math.min(r.bottom + 4, innerHeight - 120) + "px"; p.style.left = Math.max(8, Math.min(r.left, innerWidth - p.offsetWidth - 8)) + "px";
+  renderPick(); $("q").focus(); $("selList").querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+});
 const visible = () => EPS.map((e, k) => k).filter(k => passFlt(EPS[k]));
 function stepEp(d) {
   const v = visible(); if (!v.length) return;
@@ -1028,14 +1046,23 @@ function loadEp(k) {
   const e = EPS[k];
   $("rng").max = e.frames.length - 1;
   $("res").innerHTML = `<span class="badge ${e.success ? "ok" : "bad"}">${e.success ? "THÀNH CÔNG" : "THẤT BẠI"}</span> <strong>${e.steps} bước tổng</strong> <span class="zone-${e._pickZone}">${PICK_LABELS[e._pickZone]}</span>`;
-  $("sel").value = k; $("epPos").textContent = `${k + 1}/${EPS.length}` + ($("flt").value !== "all" ? ` (lọc ${visible().indexOf(k) + 1}/${visible().length})` : "");
+  $("sel").value = k; updatePickBtn(); $("epPos").textContent = `${k + 1}/${EPS.length}` + ($("flt").value !== "all" ? ` (lọc ${visible().indexOf(k) + 1}/${visible().length})` : "");
   $("tags").innerHTML = e.tags ? e.tags.filter(x => x !== "THÀNH CÔNG").map(x => `<span class="badge ${/HỎNG|timeout/.test(x) ? "bad" : "warn"}" style="margin-right:3px">${x}</span>`).join("") : "";
   buildLog(e.frames); buildTimeline(e.frames); render();
 }
 $("showReach").onchange = () => render();
 $("sel").onchange = () => loadEp(+$("sel").value);
-$("q").oninput = () => applySeedFilters();
-$("q").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); const v = visible(); if (v.length) loadEp(v.includes(ep) ? ep : v[0]); } e.stopPropagation(); };   // gõ chữ không kích hoạt phím tắt của replay
+// Tab nhìn từ trên / nhìn từ cạnh trong cùng một khung; chỉ hình nhìn từ trên có vùng gắp và nút toàn màn hình
+function pickView(v) {
+  const top = v === "top";
+  $("top").hidden = !top; $("side").hidden = top; $("topTools").hidden = !top;
+  $("tabTop").setAttribute("aria-selected", top); $("tabSide").setAttribute("aria-selected", !top);
+  store.set("replayView2d", v);
+}
+$("tabTop").onclick = () => pickView("top"); $("tabSide").onclick = () => pickView("side");
+pickView(store.get("replayView2d") === "side" ? "side" : "top");
+$("q").oninput = () => renderPick();
+$("q").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); const b = $("selList").querySelector("button[data-k]"); if (b) { $("selPop").hidePopover(); loadEp(+b.dataset.k); } } e.stopPropagation(); };   // gõ chữ không kích hoạt phím tắt của replay
 $("sPrev").onclick = () => stepEp(-1);
 $("sNext").onclick = () => stepEp(1);
 function applySeedFilters() {
@@ -1049,7 +1076,7 @@ function applySeedFilters() {
   if (!matches.includes(ep)) {
     loadEp(matches[0]);
   } else {
-    $("sel").value = ep;
+    $("sel").value = ep; updatePickBtn();
     $("epPos").textContent = `${matches.indexOf(ep)+1}/${matches.length} seed`;
   }
 }
@@ -1097,7 +1124,6 @@ const panCam = (dr, du, dfw = 0) => {                       // dịch điểm nh
 const zoomCam = k => { CAM.dist = Math.max(0.1, Math.min(5, CAM.dist * k)); };
 const centerOnHand = () => { const fr = F()[i]; if (fr && fr.ee) { CAM.t = [fr.ee[0], fr.ee[1], fr.ee[2]]; CAM.follow = false; syncFollow(); redraw3(); } };
 $("bFollow").onclick = () => { CAM.follow = !CAM.follow; syncFollow(); redraw3(); };
-$("bCenter").onclick = centerOnHand;
 $("zIn").onclick = () => { zoomCam(0.8); redraw3(); };
 $("zOut").onclick = () => { zoomCam(1.25); redraw3(); };
 // phím giữ liên tục: vòng lặp theo khung hình, dt-based nên mượt và không phụ thuộc tốc độ lặp phím của hệ điều hành
@@ -1126,11 +1152,7 @@ $("topFs").onclick = () => toggleFs($("topWrap"));
 $("c3Fs").onclick = () => toggleFs($("c3").closest(".card"));
 $("fsPrev").onclick = () => go(i - 1); $("fsNext").onclick = () => go(i + 1); $("fsPlay").onclick = () => play();
 $("fsRng").oninput = e => go(+e.target.value);
-$("v1").onclick = () => setCam(CAM0.yaw, CAM0.pitch, CAM0.dist);
-$("v2").onclick = () => setCam(Math.PI / 2, 0, CAM0.dist, true);
-$("vSide").onclick = () => setCam(0, 0, CAM0.dist, true);
 $("vCams").onclick = () => setCam(CAM0.yaw, CAM0.pitch, CAM0.dist, true);
-$("v3").onclick = () => setCam(-Math.PI / 2, Math.PI / 2, CAM0.dist, true);
 {
   const base = S.cam_tilt_deg || 0, sl = $("camTilt");
   // KHÔNG lưu độ gập vào localStorage: F5 luôn quay về đúng độ gập của config lúc dựng replay, nên số hiển thị luôn khớp dữ liệu.

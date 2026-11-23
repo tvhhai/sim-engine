@@ -18,7 +18,7 @@
   document.head.append(threeStyle);
   // Studio owns source, episode, status and fullscreen controls. Keep transport and view controls here.
   const cleanStyle=document.createElement('style');
-  cleanStyle.textContent='.hd,.c-3d>h2,#topFs{display:none!important}.c-3d{padding:0!important;overflow:hidden!important}.cv .viewbar{top:10px;left:10px;max-width:calc(100% - 20px)}.ctl{padding:10px 12px;background:var(--card);border-top:1px solid var(--line)}.wrap{padding:10px;gap:10px}.canvas-caption{display:none}.studio-focus3d .main{padding:0}.studio-focus3d #app{padding:10px}.studio-focus3d .cv{min-height:200px}';
+  cleanStyle.textContent='.hd,.c-3d>h2,#topFs{display:none!important}.c-3d{padding:0!important;overflow:hidden!important}.cv .viewbar{top:10px;left:10px;max-width:calc(100% - 20px)}.wrap{padding:10px;gap:10px}.canvas-caption{display:none}.studio-focus3d .main{padding:0}.studio-focus3d #app{padding:10px}.studio-focus3d .cv{min-height:200px}';
   cleanStyle.textContent+='#studio-three-camera .canvas-caption{display:block}';
   document.head.append(cleanStyle);
   const options=document.createElement('details');options.className='studio-view-options';
@@ -61,7 +61,7 @@
       if(OPT.path && to>from)lines.push({points:fs.slice(from,to+1).filter((_,k)=>k%Math.max(1,Math.ceil((to-from)/150))===0||k===to-from).map(f=>f.ee),color,opacity:.65});
       ghostIdx(i,from===i?to:from).forEach(k=>lines.push({points:[...fs[k].arm,fs[k].ee],color,opacity:.18}));
     }
-    parent.postMessage({type:'studio-replay-scene',source:sourceKey,scene:{poses,objects:replayObjects(fr).map((obj,k)=>({...obj,id:obj.id||`object-${k+1}`,x:obj.pos[0],y:obj.pos[1],yaw:obj.yaw||0})),bowl:S.bowl,bowlGeoms:S.bowl_geoms,ee:fr.ee,origin,region:S.pick_region,zones:S.pick_region?{region:S.pick_region,stop:S.unreachable_region||null,scan:S.pick_scan||[]}:null,showRegion:$('showReach').checked,sensor:SHOW_CAM?camera:null,camera:{...CAM,t:[...CAM.t]},target:fr.tg,lines,contacts:{box:fr.ct,table:fr.tb,bowl:fr.bc||[]},playing:!!timer,sample:{...sample,continuous:!!timer&&sample.continuous}}},location.origin);
+    parent.postMessage({type:'studio-replay-scene',source:sourceKey,scene:{poses,objects:replayObjects(fr).map((obj,k)=>({...obj,id:obj.id||`object-${k+1}`,x:obj.pos[0],y:obj.pos[1],yaw:obj.yaw||0})),bowl:S.bowl,bowlGeoms:S.bowl_geoms,ee:fr.ee,origin,region:S.pick_region,zones:S.pick_region?{region:S.pick_region,stop:S.unreachable_region||null,scan:S.pick_scan||[]}:null,showRegion:$('showReach').checked,sensor:SHOW_CAM?camera:null,camera:{...CAM,t:[...CAM.t]},target:fr.tg,lines,contacts:{box:fr.ct,table:fr.tb,bowl:fr.bc||[],cam:fr.cc||[]},playing:!!timer,sample:{...sample,continuous:!!timer&&sample.continuous}}},location.origin);
   };
   window.studioRender = publish;
   const notify = () => parent.postMessage({type:'studio-replay-state',source:sourceKey,episode:ep,step:i,playing:!!timer}, location.origin);

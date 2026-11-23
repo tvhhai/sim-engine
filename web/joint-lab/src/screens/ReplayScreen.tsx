@@ -30,10 +30,9 @@ import type { ReplayViewState } from "../types";
 import { navigationSeek } from "../studio/replayNavigation";
 import { ReplayWebGL } from "../components/ReplayWebGL";
 import { api } from "../api";
+import { EpisodePicker } from "../components/EpisodePicker";
 import {
-  episodeHaystack,
   filterEpisodes,
-  matchesSearch,
   RESULT_FILTERS,
   ZONE_FILTERS,
 } from "../studio/replayFilters";
@@ -80,7 +79,6 @@ export default function ReplayScreen() {
   const runRecord = source.startsWith("run:")
     ? catalog.runs.find((item) => item.id === source.slice(4))
     : null;
-  const summary = selectedSource?.episodes[episode] || runRecord;
   const shownEpisodes = selectedSource
     ? filterEpisodes(selectedSource.episodes, resultFilter, zoneFilter, episode)
     : [];
@@ -303,32 +301,11 @@ export default function ReplayScreen() {
                 data={ZONE_FILTERS}
                 allowDeselect={false}
               />
-              <Select
+              <EpisodePicker
                 label={`Episode / seed (${shownEpisodes.filter((e) => e.matches).length}/${selectedSource.episodes.length})`}
-                aria-label="Episode / seed"
-                searchable
-                placeholder="Tìm seed, tên, nhãn…"
-                filter={({ options, search }) =>
-                  (options as { value: string; label: string }[]).filter(
-                    (o) =>
-                      !search.trim() ||
-                      matchesSearch(
-                        episodeHaystack(
-                          selectedSource.episodes[Number(o.value)],
-                        ),
-                        search,
-                      ),
-                  )
-                }
-                w={240}
-                value={String(episode)}
-                onChange={(value) => change({ episode: Number(value), step: 0 })}
-                data={shownEpisodes.map((item) => ({
-                  value: String(item.index),
-                  label: item.matches ? item.name : `${item.name} (ngoài bộ lọc)`,
-                }))}
-                nothingFoundMessage="Không có episode khớp bộ lọc"
-                allowDeselect={false}
+                items={shownEpisodes}
+                value={episode}
+                onChange={(index) => change({ episode: index, step: 0 })}
               />
             </>
           )}
@@ -442,30 +419,6 @@ export default function ReplayScreen() {
           </Group>
         </Stack>
       </Modal>
-      <div className="replay-summary">
-        <Group gap="xs">
-          <Badge
-            color={
-              summary?.blocked_reason
-                ? "orange"
-                : summary?.success
-                  ? "teal"
-                  : "red"
-            }
-            variant="light"
-          >
-            {summary?.blocked_reason
-              ? "Đứng yên"
-              : summary?.success
-                ? "Thành công"
-                : "Thất bại"}
-          </Badge>
-          <Text size="sm">{summary?.steps ?? "—"} bước</Text>
-        </Group>
-        <Text size="xs" c="dimmed">
-          Đang xem dữ liệu đã ghi · không chạy mô phỏng
-        </Text>
-      </div>
       <Collapse in={bookmarksOpen}>
         <div className="replay-bookmarks">
           <TextInput

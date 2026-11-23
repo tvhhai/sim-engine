@@ -33,7 +33,7 @@
   .main > .card svg { flex:1; min-height:0; width:100%; height:100%; }
   .cv { flex:1; min-height:0; position:relative; }
   .cv canvas { position:absolute; inset:0; width:100%; height:100%; cursor:grab; touch-action:none; }
-  #cameraFeeds { position:absolute; right:8px; bottom:8px; width:clamp(116px, 31%, 250px); pointer-events:none; }
+  #cameraFeeds { position:absolute; right:8px; top:8px; width:clamp(116px, 31%, 250px); pointer-events:none; }
   #cameraFeeds[hidden] { display:none; }
   #cameraFeeds canvas { position:static; width:100%; height:auto; aspect-ratio:4/3; border:1px solid var(--line); border-radius:6px; background:#111; }
   .card h2 .vb { float:right; display:inline-flex; gap:4px; }
@@ -168,9 +168,9 @@
     .ctl .media-speed input { min-height:34px; }
   }
 
-  .c-small #topWrap { flex:1.55 1 0; min-height:0; display:flex; flex-direction:column; }
+  .c-small #topWrap { flex:1 1 0; min-height:0; display:flex; flex-direction:column; }
   .c-small #top { flex:1 1 0; }
-  .c-small #side { flex:.88 1 0; }
+  .c-small #side { flex:1 1 0; }
   @media (max-width:899px) {
     .c-small #top, .c-small #side { flex:none; height:auto; }
   }
@@ -200,3 +200,24 @@
   .zone-green { --zone:#16834f; }
   .zone-red { --zone:#d14049; }
   .zone-mixed { --zone:#8b55bd; }
+
+  /* ---- tab XY / nhìn cạnh, bộ chọn seed có ô tìm trong popup, thanh phát trong suốt trên 3D ---- */
+  .c-small [hidden] { display:none !important; }
+  .vtabs { display:inline-flex; gap:2px; }
+  .vtabs button { border-color:transparent; background:transparent; color:var(--muted); font:inherit; font-weight:600; padding:2px 8px; border-radius:6px; }
+  .vtabs button[aria-selected="true"] { color:var(--ink); background:var(--sel); border-color:var(--line); }
+  .sel-btn { max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; }
+  .sel-pop { position:fixed; inset:auto; margin:0; padding:8px; width:min(460px, calc(100vw - 16px)); max-height:min(420px, calc(100vh - 80px)); flex-direction:column; gap:6px;
+    background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:10px; box-shadow:0 8px 28px #0005; }
+  .sel-pop:popover-open { display:flex; }
+  .sel-pop input { width:100%; box-sizing:border-box; }
+  #selList { overflow:auto; min-height:0; display:flex; flex-direction:column; gap:1px; }
+  #selList button { display:flex; justify-content:space-between; gap:10px; align-items:baseline; text-align:left; border-color:transparent; background:transparent; padding:3px 8px; width:100%; }
+  #selList button:hover, #selList button[aria-selected="true"] { background:var(--sel); }
+  #selList button small { color:var(--muted); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:60%; }
+  #selList button.fail small { color:#d14049; }
+  .sel-group, .sel-empty { font-size:11px; font-weight:700; letter-spacing:.05em; color:var(--muted); padding:6px 8px 2px; }
+  .c-3d { position:relative; }
+  .c-3d > .ctl { position:absolute; left:8px; right:8px; bottom:8px; z-index:3; margin:0; padding:6px 10px; border:1px solid var(--line); border-radius:10px;
+    background:color-mix(in srgb, var(--card) 70%, transparent); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+  .c-3d > .ctl .keys { display:none; }
