@@ -145,7 +145,8 @@ class ScriptedPolicy(BasePolicy):
     FAR_ROLL_EARLY = True      # True: xoay roll song song lúc di chuyển ra; False: tới phía trên hộp mới xoay tại chỗ
     FAR_ROLL_DEG = -87.0       # -87 (không phải +93): +93 làm cụm cam đâm xuống bàn (-11 mm) ở 7/43 hộp xa; -87 luôn cách bàn >= 30 mm
     MAX_ROLL_FLIPS = 3         # số lần đổi roll tối đa trong một ván (thử lần lượt: xoay 180°, +90°, -90° so với roll đang giữ)
-    STALL_STEPS = 20           # đầu tay không tiến gần đích thêm STALL_PROGRESS trong chừng này bước liền thì coi là KẸT, sang phase kế
+    STALL_STEPS = 8            # (trước 20) đầu tay không tiến gần đích thêm STALL_PROGRESS trong chừng này bước liền thì coi là KẸT, sang phase kế
+    # Đo 274 + 500 seed: 20 -> 8 bước không hỏng seed nào, 49 seed nhanh hơn, 1 chậm hơn; 5 hoặc 3 bước hỏng 203 / 208 (hộp sát đế, đường hạ nhạy)
     STALL_PROGRESS = 0.001     # mét
 
     # Ưu tiên PHỤ về tư thế "vòm" (khớp 2, 3, 4 cùng cong về một phía, khuỷu ở trên cao) để cánh tay
