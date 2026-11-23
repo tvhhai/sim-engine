@@ -14,6 +14,8 @@ import { useState } from "react";
 import type { Item, Region, Scene } from "../types";
 import { reachable } from "../workspace";
 import { Panel } from "./Panel";
+// Màu chọn nhanh cho vật mới: đỏ, xanh, vàng (vật mới lần lượt lấy màu kế tiếp)
+const PALETTE = ["#e5484d", "#30a46c", "#f5c542"];
 export function ObjectPanel({
   scene,
   selected,
@@ -28,7 +30,8 @@ export function ObjectPanel({
   onChange: (scene: Scene) => void;
 }) {
   const [kind, setKind] = useState<string | null>("box"),
-    [color, setColor] = useState("#ee7d61"),
+    [color, setColor] = useState(PALETTE[0]),
+    [yaw, setYaw] = useState<string | number>(0),
     [count, setCount] = useState<string | number>(1),
     [undo, setUndo] = useState<Scene | null>(null);
   function update(id: string, patch: Partial<Item>) {
@@ -58,10 +61,12 @@ export function ObjectPanel({
         color,
         x: -0.1 + (scene.objects.length + i) * 0.055,
         y: 0.12,
-        yaw: 0,
+        yaw: kind === "sphere" ? 0 : Number(yaw) || 0,
       }),
     );
     onChange({ ...scene, objects: [...scene.objects, ...added] });
+    const next = PALETTE.indexOf(color);
+    if (next >= 0) setColor(PALETTE[(next + 1) % PALETTE.length]);
     if (added[0]) onSelect(added[0].id);
   }
   return (
@@ -87,6 +92,16 @@ export function ObjectPanel({
             allowDecimal={false}
           />
         </Group>
+        <NumberInput
+          label="Góc xoay hộp mới (°)"
+          description="0° là hộp thẳng trục; hộp vuông lặp lại sau 90°"
+          value={kind === "sphere" ? 0 : yaw}
+          onChange={setYaw}
+          disabled={kind === "sphere"}
+          min={-180}
+          max={180}
+          step={5}
+        />
         <Group align="end" wrap="nowrap">
           <ColorInput
             eyeDropperButtonProps={{ "aria-label": "Lấy màu cho vật mới" }}
@@ -94,7 +109,7 @@ export function ObjectPanel({
             value={color}
             onChange={setColor}
             format="hex"
-            swatches={["#ee7d61", "#77b8f7", "#74cba1", "#d8b45b", "#b89bdf"]}
+            swatches={PALETTE}
           />
           <Button
             leftSection={<Plus size={16} />}
@@ -206,6 +221,7 @@ export function ObjectPanel({
                     if (/^#[0-9a-f]{6}$/i.test(v)) update(obj.id, { color: v });
                   }}
                   format="hex"
+                  swatches={PALETTE}
                 />
                 <NumberInput
                   label="Xoay (°)"
