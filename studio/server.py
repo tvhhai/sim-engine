@@ -827,7 +827,7 @@ def make_handler(lab):
                                            "bowl_geoms": bowl_geom_list(lab.env),
                                            "bowl_origin": lab.env.get_bowl_pos().tolist(),
                                            "gopen": config.GRIPPER_OPEN_RAD, "gclose": config.GRIPPER_CLOSED_RAD,
-                                           "pick_region": dict(config.PICK_REGION, pan=list(config.PICK_PAN_XY)),
+                                           "pick_region": dict(config.PICK_GREEN, pan=list(config.PICK_PAN_XY)),
                                            "pick_scan": lab.pick_scan(),
                                            "unreachable_region": unreachable_region(),
                                            "glim": [float(lab.m.jnt_range[lab.m.jnt_qposadr.tolist().index(lab.fl)][0]) if False else -10, 100]}))

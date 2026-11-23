@@ -382,7 +382,7 @@ def unreachable_region():
 def pick_zone(x, y):
     """Vùng của một vị trí hộp: "green" (trong hình quạt gắp được), "red" (ngoài giới hạn dừng) hoặc "mixed".
     Cùng quy tắc với pickZone trong static/replay/replay.js và web/joint-lab/src/zones.ts."""
-    region, stop = config.PICK_REGION, unreachable_region()
+    region, stop = config.PICK_GREEN, unreachable_region()
     dx, dy = x - config.PICK_PAN_XY[0], y - config.PICK_PAN_XY[1]
     r, angle = math.hypot(dx, dy), math.degrees(math.atan2(dx, dy))
     if r > stop["radius_m"] or r < stop["inner_radius_m"] or abs(angle) > stop["angle_deg"]:
@@ -418,8 +418,8 @@ def write_replay(env, episodes, out, policy_name):
     scene["kin"], scene["arm_mesh"] = arm_model_export(env)
     scene["cams"] = cameras_export(env)           # camera trong model, để HTML dựng lại góc nhìn của chúng     # cánh tay THẬT: cây khung + lưới tam giác để HTML tự vẽ
     # Vùng với tới của cánh tay (do joint_lab tính và lưu); nếu chưa có thì bỏ qua và nhắc cách tạo
-    # Vùng GẮP ĐƯỢC THẬT: hình quạt trong config.PICK_REGION và các điểm đã quét (tools/scan_pick_region.py -> results/pick_scan.json)
-    scene["pick_region"] = dict(config.PICK_REGION, pan=list(config.PICK_PAN_XY), bowl_clearance=config.BOX_BOWL_CLEARANCE)
+    # Vùng GẮP ĐƯỢC THẬT: hình quạt trong config.PICK_GREEN và các điểm đã quét (tools/scan_pick_region.py -> results/pick_scan.json)
+    scene["pick_region"] = dict(config.PICK_GREEN, pan=list(config.PICK_PAN_XY), bowl_clearance=config.BOX_BOWL_CLEARANCE)
     scan_points = pick_scan_points()
     if scan_points:
         scene["pick_scan"] = scan_points
@@ -462,6 +462,7 @@ def rebuild(out):
         data = json.load(f)
     data["scene"]["pick_scan"] = pick_scan_points()
     data["scene"]["unreachable_region"] = unreachable_region()
+    data["scene"]["pick_region"] = dict(config.PICK_GREEN, pan=list(config.PICK_PAN_XY), bowl_clearance=config.BOX_BOWL_CLEARANCE)
     render_html(data, out)
     with open(json_path, "w", encoding="utf-8") as f:            # Studio đọc file JSON: giữ hai bản cùng dữ liệu
         json.dump(data, f, separators=(",", ":"), ensure_ascii=False)

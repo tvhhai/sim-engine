@@ -15,7 +15,7 @@ def in_workspace(xy):
     dx, dy = xy[0] - config.PICK_PAN_XY[0], xy[1] - config.PICK_PAN_XY[1]
     radius = math.hypot(dx, dy)
     angle = math.degrees(math.atan2(dx, dy))
-    region = config.PICK_REGION
+    region = config.PICK_GREEN
     return (region["r_min"] - 1e-8 <= radius <= region["r_max"] + 1e-8
             and region["angle_min_deg"] - 1e-8 <= angle <= region["angle_max_deg"] + 1e-8)
 

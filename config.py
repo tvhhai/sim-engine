@@ -82,6 +82,11 @@ PICK_REGION = {                       # vùng hộp đặt được: r = khoản
     "r_min": 0.12, "r_max": 0.42,     # đo (quét lại sau khi sửa roll hộp xa): r 14-32 cm gắp hết; r 37-42 cm gắp 94-98% mỗi vòng; r 43 cm 71%; r 44 cm gần như hỏng hết
     "angle_min_deg": -110.0, "angle_max_deg": 110.0,   # đo: +-120 hỏng (ngoài giới hạn khớp 1 = +-110); +-100/+-110 gắp được như nhau
 }
+# Vùng XANH (gắp được) hiển thị trong Studio / replay và vùng Lab cho phép đặt vật cần gắp / bát. Đo bằng quét NHIỀU GÓC XOAY hộp
+# (0-75°, mỗi điểm 6 ván): r 8-42 cm, góc +-110° gắp được >= 90% (hầu hết 100%); r 6-7 cm 52-79%; r 43 cm 58%; r 44 cm 4%; góc +-120° 0%.
+# Giữa vùng xanh và giới hạn đỏ là vùng hỗn hợp (r 4-8 cm và 42-44 cm). PICK_REGION ở trên chỉ dùng để ĐẶT HỘP NGẪU NHIÊN (box_sampling):
+# đổi nó sẽ dời vị trí của cả 200 seed nên giữ nguyên.
+PICK_GREEN = {"r_min": 0.08, "r_max": 0.42, "angle_min_deg": -110.0, "angle_max_deg": 110.0}
 PAN_LIMIT_DEG = 110.0                # giới hạn khớp 1 (pan) trong XML: +-110 độ so với hướng tay
 PAN_UNREACHABLE_MARGIN_DEG = 5.0     # hộp lệch quá PAN_LIMIT_DEG + biên này thì CHẮC CHẮN không với tới: policy về home ngay (đo: +-120 hỏng hết)
 PICK_UNREACHABLE_INNER_RADIUS = 0.04  # m: hộp cách trục khớp 1 gần hơn mức này nằm chồng lên ĐẾ (đế ±5,5 cm x, -7..+2,6 cm y; quét r 2-4 cm: 0/69 gắp được) -> chắc chắn không gắp

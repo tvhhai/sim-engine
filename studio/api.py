@@ -91,7 +91,7 @@ def handle_get(handler, lab, path, query):
             result = {"status": "ok", "mujoco": mujoco.__version__, "control_hz": config.CONTROL_FREQ,
                       "physics_dt": config.PHYSICS_TIMESTEP, "max_steps": config.MAX_EPISODE_STEPS,
                       "scene": Path(config.SCENE_XML).name, "run": lab.runner.snapshot(),
-                      "workspace": dict(config.PICK_REGION, pan=list(config.PICK_PAN_XY)),
+                      "workspace": dict(config.PICK_GREEN, pan=list(config.PICK_PAN_XY)),
                       "capabilities": ["lab", "full-replay", "multi-object", "run-history", "scene-import-export", "docs"]}
         else:
             handler.send_error(404)
