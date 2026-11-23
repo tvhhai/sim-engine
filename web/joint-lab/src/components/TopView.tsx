@@ -76,6 +76,7 @@ export function TopView({
     y: number,
     color: string,
     label: string,
+    radiusPx = id === "bowl" ? 44 : 17,
   ) => (
     <g
       key={id}
@@ -107,7 +108,7 @@ export function TopView({
       <circle
         cx={X(x)}
         cy={Y(y)}
-        r={id === "bowl" ? 44 : 17}
+        r={radiusPx}
         fill={color}
         fillOpacity={id === "bowl" ? 0.15 : 0.9}
         stroke={selected === id ? "#f3f4f6" : color}
@@ -246,7 +247,7 @@ export function TopView({
             opacity=".3"
           />
         )}
-        {handle("bowl", scene.pose.wx, scene.pose.wy, "#78a5ff", "Bát")}
+        {handle("bowl", scene.pose.wx, scene.pose.wy, scene.bowl.color, "Bát", 44 * (scene.bowl.radius / 0.045))}
         {scene.objects.map((obj, i) => (
           <g key={obj.id}>
             {handle(
@@ -255,6 +256,7 @@ export function TopView({
               obj.y,
               obj.color,
               `${obj.type === "sphere" ? "Bóng" : "Hộp"} ${i + 1}${scene.target_id === obj.id ? " · đích" : ""}`,
+              17 * ((obj.size ?? 0.03) / 0.03),
             )}
             {!reachable(obj.x, obj.y, region) && (
               <text

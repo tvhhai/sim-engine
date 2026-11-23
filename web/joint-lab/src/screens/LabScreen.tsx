@@ -3,6 +3,7 @@ import {
   Alert,
   Badge,
   Button,
+  ColorInput,
   FileButton,
   Group,
   Loader,
@@ -31,7 +32,7 @@ import { TopView } from "../components/TopView";
 import { SceneView } from "../components/LazySceneView";
 import { ObjectPanel } from "../components/ObjectPanel";
 import { useStudio } from "../studio/StudioContext";
-import { downloadJson, parseScene } from "../studio/scene";
+import { bowlGeoms, downloadJson, parseScene } from "../studio/scene";
 import { toBase } from "../studio/coordinates";
 export default function LabScreen() {
   const {
@@ -202,8 +203,9 @@ export default function LabScreen() {
                     poses={snapshot.pose}
                     objects={scene.objects}
                     bowl={[scene.pose.wx, scene.pose.wy, 0.42]}
-                    bowlGeoms={meta.bowl_geoms}
-                    bowlOrigin={meta.bowl_origin}
+                    bowlGeoms={bowlGeoms(scene.bowl)}
+                    bowlOrigin={[0, 0, 0]}
+                    bowlColor={scene.bowl.color}
                     ee={snapshot.ee}
                     selected={selected}
                     onSelect={setSelected}
@@ -265,9 +267,40 @@ export default function LabScreen() {
                     step={0.5}
                   />
                 </Group>
+                <Group grow>
+                  <NumberInput
+                    label="Bán kính (cm)"
+                    description="3 – 9"
+                    value={Number((scene.bowl.radius * 100).toFixed(1))}
+                    onChange={(v) =>
+                      setScene({ ...scene, bowl: { ...scene.bowl, radius: Math.max(0.03, Math.min(0.09, Number(v) / 100 || 0.045)) } })
+                    }
+                    min={3}
+                    max={9}
+                    step={0.5}
+                  />
+                  <NumberInput
+                    label="Cao (cm)"
+                    description="2 – 8"
+                    value={Number((scene.bowl.height * 100).toFixed(1))}
+                    onChange={(v) =>
+                      setScene({ ...scene, bowl: { ...scene.bowl, height: Math.max(0.02, Math.min(0.08, Number(v) / 100 || 0.04)) } })
+                    }
+                    min={2}
+                    max={8}
+                    step={0.5}
+                  />
+                </Group>
+                <ColorInput
+                  label="Màu bát"
+                  value={scene.bowl.color}
+                  onChange={(v) => /^#[0-9a-f]{6}$/i.test(v) && setScene({ ...scene, bowl: { ...scene.bowl, color: v } })}
+                  format="hex"
+                  swatches={["#3366d9", "#e5484d", "#30a46c", "#f5c542"]}
+                />
                 <Text size="xs" c="dimmed">
                   Bát dừng tại biên vùng thao tác. Hộp và bóng được đặt ngoài
-                  vùng để test.
+                  vùng để test. Màu bát dùng cho các bài gắp theo màu sau này.
                 </Text>
               </Stack>
             </Panel>

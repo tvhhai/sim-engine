@@ -492,11 +492,11 @@ function replayObjects(fr) {
 }
 function objectFaces(obj) {
   if (obj.type !== "sphere") {
-    const v = boxV(obj.pos, obj.quat, S.box_half);
+    const v = boxV(obj.pos, obj.quat, obj.size ? obj.size / 2 : S.box_half);
     return [[0,1,3,2],[4,5,7,6],[0,1,5,4],[2,3,7,6],[0,2,6,4],[1,3,7,5]].map(face => face.map(k => v[k]));
   }
   const point = (lat, lon) => {
-    const a = lat*Math.PI/12, b = lon*Math.PI/12, r = S.box_half;
+    const a = lat*Math.PI/12, b = lon*Math.PI/12, r = obj.size ? obj.size / 2 : S.box_half;
     return [obj.pos[0]+r*Math.sin(a)*Math.cos(b),obj.pos[1]+r*Math.sin(a)*Math.sin(b),obj.pos[2]+r*Math.cos(a)];
   };
   return Array.from({length:12*24},(_,k) => {

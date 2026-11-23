@@ -1,5 +1,27 @@
-import type { Item, Meta, Pose, Scene } from "../types";
+import type { Bowl, BowlGeom, Item, Meta, Pose, Scene } from "../types";
 import { JOINTS } from "../types";
+export const DEFAULT_SIZE = 0.03;
+export const SIZE_RANGE = [0.02, 0.06] as const;
+export const DEFAULT_BOWL: Bowl = { color: "#3366d9", radius: 0.045, height: 0.04 };
+export const BOWL_WALL = 0.003;
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+export function parseBowl(input: unknown): Bowl {
+  const b = (input && typeof input === "object" ? input : {}) as Partial<Bowl>;
+  return {
+    color: /^#[0-9a-f]{6}$/i.test(String(b.color)) ? String(b.color) : DEFAULT_BOWL.color,
+    radius: clamp(Number(b.radius) || DEFAULT_BOWL.radius, 0.03, 0.09),
+    height: clamp(Number(b.height) || DEFAULT_BOWL.height, 0.02, 0.08),
+  };
+}
+// Hình học bát tương đối so với tâm bát (cùng công thức với studio/scene.py: đáy trụ + 24 tấm tường hẹp), để Lab vẽ ngay khi chỉnh cỡ bát
+export function bowlGeoms(bowl: Bowl): BowlGeom[] {
+  const n = 24, r = bowl.radius, h = bowl.height, half = (1.34 * Math.PI * r) / n;
+  const walls = Array.from({ length: n }, (_, k) => {
+    const a = (2 * Math.PI * k) / n;
+    return { type: "box", pos: [r * Math.cos(a), r * Math.sin(a), h / 2] as [number, number, number], size: [BOWL_WALL, half, h / 2] as [number, number, number], yaw: a };
+  });
+  return [{ type: "cylinder", pos: [0, 0, 0], size: [r, 0.003, 0], yaw: 0 }, ...walls];
+}
 export function parseScene(input: unknown, meta: Meta): Scene {
   if (!input || typeof input !== "object")
     throw new Error("Tệp cảnh không hợp lệ");
@@ -34,6 +56,7 @@ export function parseScene(input: unknown, meta: Meta): Scene {
       x: item.x,
       y: item.y,
       yaw: item.yaw,
+      size: Number.isFinite(item.size) ? clamp(Number(item.size), SIZE_RANGE[0], SIZE_RANGE[1]) : DEFAULT_SIZE,
     };
   });
   const pose = {} as Pose;
@@ -61,7 +84,7 @@ export function parseScene(input: unknown, meta: Meta): Scene {
   const target = items.find((item) => item.id === target_id);
   if (!target) throw new Error("Vật cần gắp không tồn tại");
   Object.assign(pose, { bx: target.x, by: target.y, byaw: target.yaw });
-  return { pose, objects: items, target_id };
+  return { pose, objects: items, target_id, bowl: parseBowl(value.bowl ?? raw.bowl) };
 }
 export function request(scene: Scene) {
   const target = scene.objects.find((item) => item.id === scene.target_id)!;
@@ -72,6 +95,7 @@ export function request(scene: Scene) {
     byaw: target.yaw,
     objects: scene.objects,
     target_id: scene.target_id,
+    bowl: scene.bowl,
   };
 }
 export function downloadJson(name: string, data: unknown) {

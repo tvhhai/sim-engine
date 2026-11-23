@@ -32,6 +32,7 @@ export function ObjectPanel({
   const [kind, setKind] = useState<string | null>("box"),
     [color, setColor] = useState(PALETTE[0]),
     [yaw, setYaw] = useState<string | number>(0),
+    [size, setSize] = useState<string | number>(3),
     [count, setCount] = useState<string | number>(1),
     [undo, setUndo] = useState<Scene | null>(null);
   function update(id: string, patch: Partial<Item>) {
@@ -62,6 +63,7 @@ export function ObjectPanel({
         x: -0.1 + (scene.objects.length + i) * 0.055,
         y: 0.12,
         yaw: kind === "sphere" ? 0 : Number(yaw) || 0,
+        size: Math.max(0.02, Math.min(0.06, (Number(size) || 3) / 100)),
       }),
     );
     onChange({ ...scene, objects: [...scene.objects, ...added] });
@@ -92,6 +94,16 @@ export function ObjectPanel({
             allowDecimal={false}
           />
         </Group>
+        <Group grow align="end">
+          <NumberInput
+            label={kind === "sphere" ? "Đường kính (cm)" : "Cạnh hộp (cm)"}
+            description="2 – 6"
+            value={size}
+            onChange={setSize}
+            min={2}
+            max={6}
+            step={0.5}
+          />
         <NumberInput
           label="Góc xoay hộp mới (°)"
           description="0° là hộp thẳng trục; hộp vuông lặp lại sau 90°"
@@ -102,6 +114,7 @@ export function ObjectPanel({
           max={180}
           step={5}
         />
+        </Group>
         <Group align="end" wrap="nowrap">
           <ColorInput
             eyeDropperButtonProps={{ "aria-label": "Lấy màu cho vật mới" }}
@@ -229,6 +242,17 @@ export function ObjectPanel({
                   onChange={(v) => update(obj.id, { yaw: Number(v) })}
                   min={-180}
                   max={180}
+                />
+                <NumberInput
+                  label={obj.type === "sphere" ? "Đường kính (cm)" : "Cạnh (cm)"}
+                  value={Number(((obj.size ?? 0.03) * 100).toFixed(1))}
+                  onChange={(v) => {
+                    const cm = Number(v);
+                    if (Number.isFinite(cm)) update(obj.id, { size: Math.max(0.02, Math.min(0.06, cm / 100)) });
+                  }}
+                  min={2}
+                  max={6}
+                  step={0.5}
                 />
               </Group>
             )}

@@ -7,6 +7,7 @@ export type Item = {
   x: number;
   y: number;
   yaw: number;
+  size?: number; // hộp: cạnh, bóng: đường kính (m), mặc định 0,03
   pos?: Vec3;
   quat?: [number, number, number, number];
 };
@@ -23,7 +24,8 @@ export type Pose = {
   wx: number;
   wy: number;
 };
-export type Scene = { pose: Pose; objects: Item[]; target_id: string };
+export type Bowl = { color: string; radius: number; height: number }; // radius: tới tâm tường (m), height: chiều cao tường (m)
+export type Scene = { pose: Pose; objects: Item[]; target_id: string; bowl: Bowl };
 export type Region = {
   pan: [number, number];
   r_min: number;
@@ -55,6 +57,7 @@ export type ReplayViewState = {
   poses: Record<string, BodyPose>;
   objects: Item[];
   bowl: Vec3;
+  bowlColor?: string;
   bowlGeoms: BowlGeom[];
   ee: Vec3;
   origin: Vec3;
@@ -83,7 +86,7 @@ export type Meta = {
   limits: [number, number][];
   gopen: number;
   gclose: number;
-  saved_pose: (Pose & { objects?: Item[]; target_id?: string }) | null;
+  saved_pose: (Pose & { objects?: Item[]; target_id?: string; bowl?: Bowl }) | null;
   pick_region: Region;
   pick_scan?: ScanPoint[];
   unreachable_region?: StopRegion;

@@ -33,6 +33,7 @@ export function ReplayWebGL({
     objects: scene.objects,
     bowl: scene.bowl,
     bowlGeoms: scene.bowlGeoms,
+    bowlColor: scene.bowlColor,
     bowlOrigin: scene.bowl,
     ee: scene.ee,
     origin: scene.origin,

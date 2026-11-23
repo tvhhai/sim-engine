@@ -208,6 +208,7 @@ export function SceneView({
   bowl,
   bowlGeoms,
   bowlOrigin,
+  bowlColor = "#729df0",
   ee,
   selected = "",
   onSelect,
@@ -231,6 +232,7 @@ export function SceneView({
   bowl: Vec3;
   bowlGeoms: BowlGeom[];
   bowlOrigin: Vec3;
+  bowlColor?: string;
   ee: Vec3;
   selected?: string;
   onSelect?: (id: string) => void;
@@ -248,7 +250,10 @@ export function SceneView({
   animate?: boolean;
   sample?: PlaybackSample;
 }) {
-  const table = tableBounds(origin[1] - 0.09);          // bàn bắt đầu 9 cm sau trục khớp 1 (đế rộng ±7 cm)
+  // Bàn vẽ đủ phủ vùng gắp và vùng hỗn hợp (tới giới hạn dừng của policy), chỉ cắt phần bàn trống xa phía sau cánh tay
+  const stop = zones?.stop;
+  const behind = (stop?.radius_m ?? region?.r_max ?? 0.44) * Math.cos(((stop?.angle_deg ?? 115) * Math.PI) / 180);
+  const table = tableBounds(Math.max(-0.4, origin[1] + behind - 0.015));
   return (
     <div
       className="scene-canvas"
@@ -340,7 +345,7 @@ export function SceneView({
             }
             animate={animate}
             sample={sample}
-            position={obj.pos || [obj.x, obj.y, 0.435]}
+            position={obj.pos || [obj.x, obj.y, 0.42 + (obj.size ?? 0.03) / 2]}
             selected={selected}
             onSelect={onSelect}
             onMove={onMove}
@@ -359,9 +364,9 @@ export function SceneView({
               }
             >
               {obj.type === "sphere" ? (
-                <sphereGeometry args={[0.015, 32, 24]} />
+                <sphereGeometry args={[(obj.size ?? 0.03) / 2, 32, 24]} />
               ) : (
-                <boxGeometry args={[0.03, 0.03, 0.03]} />
+                <boxGeometry args={[obj.size ?? 0.03, obj.size ?? 0.03, obj.size ?? 0.03]} />
               )}
               <meshStandardMaterial color={obj.color} roughness={0.45} />
             </mesh>
@@ -397,7 +402,7 @@ export function SceneView({
                   args={[g.size[0] * 2, g.size[1] * 2, g.size[2] * 2]}
                 />
               )}
-              <meshStandardMaterial color="#729df0" roughness={0.4} />
+              <meshStandardMaterial color={bowlColor} roughness={0.4} />
             </mesh>
           ))}
         </Movable>
