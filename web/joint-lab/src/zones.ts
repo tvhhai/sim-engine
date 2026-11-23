@@ -26,6 +26,8 @@ export const ZONE_COLORS: Record<Zone, string> = {
   mixed: "#8b55bd",
 };
 export const TABLE_HALF: [number, number] = [0.45, 0.4];
+export type Bounds = { x0: number; x1: number; y0: number; y1: number };
+export const tableBounds = (yMin = -TABLE_HALF[1]): Bounds => ({ x0: -TABLE_HALF[0], x1: TABLE_HALF[0], y0: yMin, y1: TABLE_HALF[1] });
 
 const deg = Math.PI / 180;
 
@@ -81,13 +83,14 @@ function sectorPts(
 // Sutherland–Hodgman: cắt đa giác theo hình chữ nhật mặt bàn (cửa sổ lồi nên đúng cả với đa giác lõm)
 export function clipToRect(
   poly: [number, number][],
-  [hx, hy]: [number, number] = TABLE_HALF,
+  bounds: Bounds = tableBounds(),
 ) {
+  const { x0, x1, y0, y1 } = bounds;
   const edges: [(p: [number, number]) => boolean, (a: [number, number], b: [number, number]) => [number, number]][] = [
-    [(p) => p[0] >= -hx, (a, b) => cut(a, b, 0, -hx)],
-    [(p) => p[0] <= hx, (a, b) => cut(a, b, 0, hx)],
-    [(p) => p[1] >= -hy, (a, b) => cut(a, b, 1, -hy)],
-    [(p) => p[1] <= hy, (a, b) => cut(a, b, 1, hy)],
+    [(p) => p[0] >= x0, (a, b) => cut(a, b, 0, x0)],
+    [(p) => p[0] <= x1, (a, b) => cut(a, b, 0, x1)],
+    [(p) => p[1] >= y0, (a, b) => cut(a, b, 1, y0)],
+    [(p) => p[1] <= y1, (a, b) => cut(a, b, 1, y1)],
   ];
   function cut(a: [number, number], b: [number, number], k: number, v: number): [number, number] {
     const t = (v - a[k]) / (b[k] - a[k]);
@@ -110,10 +113,10 @@ export function clipToRect(
 }
 
 // Các mảnh vùng đã cắt theo mặt bàn. "Ngoài bán kính dừng" trả riêng (outsideHole) vì là mặt bàn trừ một hình tròn.
-export function zoneShapes(z: PickZones) {
+export function zoneShapes(z: PickZones, bounds: Bounds = tableBounds()) {
   const R = z.region,
     U = z.stop;
-  if (!U) return { pieces: [["green", clipToRect(sectorPts(R.pan, R.r_min, R.r_max, R.angle_min_deg, R.angle_max_deg))]] as [Zone, [number, number][]][], outsideHole: null };
+  if (!U) return { pieces: [["green", clipToRect(sectorPts(R.pan, R.r_min, R.r_max, R.angle_min_deg, R.angle_max_deg), bounds)]] as [Zone, [number, number][]][], outsideHole: null };
   const { pan, r_min: lo, r_max: hi, angle_min_deg: left, angle_max_deg: right } = R;
   const edge = U.angle_deg,
     limit = U.radius_m,
@@ -128,7 +131,7 @@ export function zoneShapes(z: PickZones) {
   ];
   if (inner) raw.push(["red", sectorPts(pan, 0, inner, -180, 180, 144).slice(0, -1)]);
   const pieces = raw
-    .map(([zone, pts]) => [zone, clipToRect(pts)] as [Zone, [number, number][]])
+    .map(([zone, pts]) => [zone, clipToRect(pts, bounds)] as [Zone, [number, number][]])
     .filter(([, pts]) => pts.length >= 3);
   const circle = Array.from({ length: 145 }, (_, q) => {
     const a = (q / 144) * 360 * deg;

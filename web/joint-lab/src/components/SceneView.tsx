@@ -27,7 +27,8 @@ import type {
   Region,
   PlaybackSample,
 } from "../types";
-import { BaseAxes, PickZones3D, ReachBoundary, SceneRig, SensorRig } from "./SceneRig";
+import { BaseAxes, PickZones3D, ReachBoundary, SceneRig, SensorRig, TableGrid } from "./SceneRig";
+import { tableBounds } from "../zones";
 import type { PickZones } from "../zones";
 import { SmoothPose } from "./SmoothPose";
 import { BASE_ORIGIN } from "../studio/coordinates";
@@ -65,6 +66,9 @@ const Robot = memo(function Robot({
             metalness: 0.12,
             side: DoubleSide,
           });
+        }).map((material) => {
+          material.userData.base = material.color.clone();   // màu gốc, để pha màu va chạm rồi trả lại
+          return material;
         });
         return { name, geometry, materials };
       }),
@@ -80,18 +84,30 @@ const Robot = memo(function Robot({
     [parts],
   );
   useEffect(() => {
+    // Màu khâu đang va chạm: đỏ = chạm hộp, cam = chạm bàn, tím = chạm bát, lục lam = chạm camera cổ tay (hoặc chính camera khi đang chạm).
+    // Pha thẳng vào màu vật liệu (60%) cộng phát sáng, vì cánh tay màu vàng nên chỉ phát sáng thì rất nhạt.
+    const cam = contacts?.cam ?? [];
     parts.forEach((part) =>
       part.materials.forEach((material) => {
-        material.emissive.set(
-          contacts?.box.includes(part.name)
-            ? "#e84545"
-            : contacts?.table.includes(part.name)
-              ? "#dd9d22"
-              : contacts?.bowl.includes(part.name)
-                ? "#a45bd7"
-                : "#000000",
-        );
-        material.emissiveIntensity = 0.45;
+        const tint = contacts?.box.includes(part.name)
+          ? "#ff2d2d"
+          : contacts?.table.includes(part.name)
+            ? "#ff8a00"
+            : contacts?.bowl.includes(part.name)
+              ? "#b04dff"
+              : cam.includes(part.name) || (cam.length > 0 && part.name === "wrist_cam_arm")
+                ? "#12d6e0"
+                : null;
+        const base = material.userData.base as Color;
+        if (tint) {
+          material.color.copy(base).lerp(new Color(tint), 0.6);
+          material.emissive.set(tint);
+          material.emissiveIntensity = 0.7;
+        } else {
+          material.color.copy(base);
+          material.emissive.set("#000000");
+          material.emissiveIntensity = 0;
+        }
       }),
     );
   }, [parts, contacts]);
@@ -232,6 +248,7 @@ export function SceneView({
   animate?: boolean;
   sample?: PlaybackSample;
 }) {
+  const table = tableBounds(origin[1] - 0.09);          // bàn bắt đầu 9 cm sau trục khớp 1 (đế rộng ±7 cm)
   return (
     <div
       className="scene-canvas"
@@ -274,19 +291,14 @@ export function SceneView({
           shadow-bias={-0.0001}
         />
         <directionalLight position={[-1, 1, 1]} intensity={1} />
-        <mesh position={[0, 0, 0.4]} receiveShadow>
-          <boxGeometry args={[0.9, 0.8, 0.04]} />
+        {/* Chỉ giữ phần bàn từ ngay sau đế trở ra (không vẽ 25 cm bàn trống phía sau cánh tay) */}
+        <mesh position={[0, (table.y0 + table.y1) / 2, 0.4]} receiveShadow>
+          <boxGeometry args={[table.x1 - table.x0, table.y1 - table.y0, 0.04]} />
           <meshStandardMaterial color="#354149" roughness={0.9} />
         </mesh>
-        {!sensor && (
-          <gridHelper
-            args={[0.9, 18, "#718089", "#48565e"]}
-            rotation={[Math.PI / 2, 0, 0]}
-            position={[origin[0], origin[1], 0.4201]}
-          />
-        )}
+        {!sensor && <TableGrid origin={origin} bounds={table} />}
         {!sensor && <BaseAxes origin={origin} />}
-        {!sensor && showRegion && zones && <PickZones3D zones={zones} />}
+        {!sensor && showRegion && zones && <PickZones3D zones={zones} bounds={table} />}
         {!sensor && region && showRegion && <ReachBoundary region={region} />}
         {!sensor &&
           lines

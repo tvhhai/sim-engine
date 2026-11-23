@@ -26,7 +26,8 @@ import type {
 import { useReplayTransform } from "./useReplayTransform";
 import { composeMount } from "../studio/playback";
 import { sector } from "../workspace";
-import { TABLE_HALF, ZONE_COLORS, visibleScan, zoneShapes } from "../zones";
+import { ZONE_COLORS, tableBounds, visibleScan, zoneShapes } from "../zones";
+import type { Bounds } from "../zones";
 import type { PickZones } from "../zones";
 
 function AxisLabel({
@@ -74,7 +75,6 @@ export function BaseAxes({ origin }: { origin: Vec3 }) {
       <AxisLabel position={[0.11, 0, 0.005]} label="X" color="#ed8f87" />
       <AxisLabel position={[0, 0.11, 0.005]} label="Y" color="#75d7b4" />
       <AxisLabel position={[0, 0, 0.115]} label="Z" color="#8daff7" />
-      <AxisLabel position={[0, -0.06, 0.005]} label="O · đế" wide />
     </group>
   );
 }
@@ -93,23 +93,41 @@ export function ReachBoundary({ region }: { region: Region }) {
     />
   );
 }
+// Lưới mặt bàn: chỉ vẽ trên phần bàn còn hiển thị (bounds), các vạch cách nhau 5 cm tính từ gốc (trục khớp 1)
+export function TableGrid({ origin, bounds }: { origin: Vec3; bounds: Bounds }) {
+  const geometry = useMemo(() => {
+    const pts: number[] = [];
+    const z = 0.4201;
+    const first = (o: number, lo: number) => o + Math.ceil((lo - o) / 0.05 - 1e-9) * 0.05;
+    for (let x = first(origin[0], bounds.x0); x <= bounds.x1 + 1e-9; x += 0.05) pts.push(x, bounds.y0, z, x, bounds.y1, z);
+    for (let y = first(origin[1], bounds.y0); y <= bounds.y1 + 1e-9; y += 0.05) pts.push(bounds.x0, y, z, bounds.x1, y, z);
+    const g = new BufferGeometry();
+    g.setAttribute("position", new Float32BufferAttribute(pts, 3));
+    return g;
+  }, [origin[0], origin[1], bounds.x0, bounds.x1, bounds.y0, bounds.y1]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  return (
+    <lineSegments geometry={geometry}>
+      <lineBasicMaterial color="#5b6a73" />
+    </lineSegments>
+  );
+}
 const ZONE_Z = 0.4203; // ngay trên mặt bàn (0.42), dưới lưới toạ độ
 // Vùng gắp xanh / hỗn hợp / đỏ trên mặt bàn và các điểm quét (✕ hỏng; chấm chỉ ở vùng hỗn hợp), xem zones.ts.
-export function PickZones3D({ zones }: { zones: PickZones }) {
+export function PickZones3D({ zones, bounds }: { zones: PickZones; bounds: Bounds }) {
   const scanKey = zones.scan?.length ?? 0;
   const { meshes, cross, dots } = useMemo(() => {
-    const { pieces, outsideHole } = zoneShapes(zones);
+    const { pieces, outsideHole } = zoneShapes(zones, bounds);
     const meshes = pieces.map(([zone, pts]) => {
       const shape = new Shape(pts.map(([x, y]) => new Vector2(x, y)));
       return { zone, geometry: new ShapeGeometry(shape) };
     });
     if (outsideHole) {
-      const [hx, hy] = TABLE_HALF;
       const table = new Shape();
-      table.moveTo(-hx, -hy);
-      table.lineTo(hx, -hy);
-      table.lineTo(hx, hy);
-      table.lineTo(-hx, hy);
+      table.moveTo(bounds.x0, bounds.y0);
+      table.lineTo(bounds.x1, bounds.y0);
+      table.lineTo(bounds.x1, bounds.y1);
+      table.lineTo(bounds.x0, bounds.y1);
       table.closePath();
       const hole = new Path();
       outsideHole.forEach(([x, y], i) => (i ? hole.lineTo(x, y) : hole.moveTo(x, y)));
@@ -135,7 +153,7 @@ export function PickZones3D({ zones }: { zones: PickZones }) {
     return { meshes, cross, dots };
     // scan được gửi lại mỗi khung hình từ replay: so theo nội dung thay vì tham chiếu mảng
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(zones.region), JSON.stringify(zones.stop), scanKey]);
+  }, [JSON.stringify(zones.region), JSON.stringify(zones.stop), scanKey, bounds.y0]);
   useEffect(
     () => () => {
       meshes.forEach((m) => m.geometry.dispose());

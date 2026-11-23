@@ -210,6 +210,22 @@ class Recorder:
         geoms = lambda b: [g for g in range(self.model.ngeom) if self.model.geom_bodyid[g] == b]
         self._cam_pairs = [(a, w) for a in geoms(bid("wrist_cam_arm")) for n in ("base", "shoulder", "upper_arm", "table") for w in geoms(bid(n))]
 
+    def cam_contacts(self):
+        """Tên các khâu đang chạm camera cổ tay (vai, cánh tay trên, đế, bàn, bát, hộp...), không tính gá camera, cổ tay và hàm kẹp."""
+        if not hasattr(self, "_cam_gids"):
+            bid = lambda n: mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, n)
+            self._cam_body = bid("wrist_cam_arm")
+            self._cam_own = {self._cam_body, bid("gripper"), bid("wrist"), bid("moving_jaw_so101_v1")}
+        names = set()
+        for i in range(self.data.ncon):
+            c = self.data.contact[i]
+            b1, b2 = self.model.geom_bodyid[c.geom1], self.model.geom_bodyid[c.geom2]
+            if self._cam_body in (b1, b2):
+                other = b2 if b1 == self._cam_body else b1
+                if other not in self._cam_own:
+                    names.add(mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, other))
+        return sorted(n for n in names if n)
+
     def cam_clearance_mm(self):
         """Khoảng cách nhỏ nhất (mm) từ camera cổ tay tới đế, vai, cánh tay trên và mặt bàn; âm = camera lún vào. Camera có va chạm (geom wrist_cam_*_col)
         nên chỉ lún vài mm khi bị ép; đây là phép đo hình học để cảnh báo (xem nhãn "CAMERA" ở select_seeds)."""
@@ -284,6 +300,7 @@ class Recorder:
             "ie": ik_err,                                # sai số IK (m): tay dự đoán so với đích
             "jq": self.joint_deg(),                      # 5 góc khớp thật (độ)
             "tb": self.table_contacts(),                 # khúc tay đang chạm bàn
+            "cc": self.cam_contacts(),                   # khâu đang chạm camera cổ tay (vai, cánh tay trên, bàn...)
             "t": step,                                   # tổng số bước đã chạy
             "ph": ph, "phn": phn, "ps": ps,              # phase vừa chạy, phase kế, bước trong phase
             "ee": r3(info["ee_pos"]),                    # điểm giữa hai ngón kẹp
