@@ -30,3 +30,18 @@ describe("replay filters", () => {
     ]);
   });
 });
+
+import { episodeHaystack, fold, matchesSearch } from "./replayFilters";
+describe("replay search", () => {
+  const e = { ...ep(1011, false, "mixed"), name: "seed 1011 · hộp XA", tags: ["HỎNG: chưa kẹp", "timeout phase 1"] };
+  it("folds diacritics and case", () => {
+    expect(fold("HỎNG Đế")).toBe("hong de");
+  });
+  it("matches seed number, tags and multiple words", () => {
+    const h = episodeHaystack(e);
+    expect(matchesSearch(h, "1011")).toBe(true);
+    expect(matchesSearch(h, "hong timeout")).toBe(true);
+    expect(matchesSearch(h, "chậm")).toBe(false);
+    expect(matchesSearch(h, "")).toBe(true);
+  });
+});

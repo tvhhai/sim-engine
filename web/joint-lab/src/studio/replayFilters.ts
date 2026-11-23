@@ -14,6 +14,18 @@ export const ZONE_FILTERS = [
   { value: "red", label: "Không gắp được" },
 ];
 
+// Bỏ dấu và chữ hoa để "hong" khớp "Hỏng"
+export const fold = (s: string) =>
+  s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
+
+// Chuỗi tìm kiếm của một episode: số seed, tên, nhãn (hỏng, timeout, chậm...) và kết quả
+export const episodeHaystack = (e: EpisodeSummary) =>
+  fold([e.seed, `seed ${e.seed}`, e.name, ...e.tags, e.success ? "ok thanh cong" : "fail hong"].join(" "));
+
+// Nhiều từ = phải khớp hết, theo thứ tự bất kỳ
+export const matchesSearch = (haystack: string, query: string) =>
+  fold(query).split(/\s+/).filter(Boolean).every((w) => haystack.includes(w));
+
 export function matchesResult(e: EpisodeSummary, result: string) {
   if (result === "ok") return e.success;
   if (result === "fail") return !e.success && !e.blocked_reason;

@@ -30,7 +30,13 @@ import type { ReplayViewState } from "../types";
 import { navigationSeek } from "../studio/replayNavigation";
 import { ReplayWebGL } from "../components/ReplayWebGL";
 import { api } from "../api";
-import { filterEpisodes, RESULT_FILTERS, ZONE_FILTERS } from "../studio/replayFilters";
+import {
+  episodeHaystack,
+  filterEpisodes,
+  matchesSearch,
+  RESULT_FILTERS,
+  ZONE_FILTERS,
+} from "../studio/replayFilters";
 
 export default function ReplayScreen() {
   const {
@@ -301,6 +307,19 @@ export default function ReplayScreen() {
                 label={`Episode / seed (${shownEpisodes.filter((e) => e.matches).length}/${selectedSource.episodes.length})`}
                 aria-label="Episode / seed"
                 searchable
+                placeholder="Tìm seed, tên, nhãn…"
+                filter={({ options, search }) =>
+                  (options as { value: string; label: string }[]).filter(
+                    (o) =>
+                      !search.trim() ||
+                      matchesSearch(
+                        episodeHaystack(
+                          selectedSource.episodes[Number(o.value)],
+                        ),
+                        search,
+                      ),
+                  )
+                }
                 w={240}
                 value={String(episode)}
                 onChange={(value) => change({ episode: Number(value), step: 0 })}

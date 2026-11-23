@@ -33,6 +33,7 @@ app.innerHTML = `
       <button id="sPrev" title="seed trước (phím [)">◀ seed</button>
       <label>Vùng <select id="flt"><option value="all">Tất cả</option><option value="green">Gắp được</option><option value="red">Không gắp được</option><option value="mixed">Hỗn hợp</option></select></label>
       <label id="mixResultLabel">Kết quả <select id="mixResult"><option value="all">Tất cả</option><option value="ok">Thành công</option><option value="fail">Thất bại</option></select></label>
+      <label>Tìm <input id="q" type="search" placeholder="seed, tên, nhãn…" title="gõ số seed, tên hoặc nhãn (vd 1011, hỏng, timeout, chậm); nhiều từ = phải khớp hết" autocomplete="off"></label>
       <label>Seed <select id="sel" title="chọn nhanh seed ở xa; dùng nút ◀ ▶ để duyệt lần lượt"></select></label>
       <button id="sNext" title="seed sau (phím ])">seed ▶</button>
       <span class="sub" id="epPos"></span>
@@ -117,9 +118,13 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
 };
 const epLabel = (e, k) => { const ex = (e.tags || []).filter(x => !/^(THÀNH CÔNG|HỎNG)/.test(x)); return `<option value="${k}">${k + 1}. ${e.name || "seed " + e.seed} — ${e.success ? "OK" : "FAIL"}${ex.length ? " · " + ex.join(" · ") : ""}</option>`; };
+// Bỏ dấu và chữ hoa để "hong" khớp "HỎNG"; mỗi ván có một chuỗi tìm kiếm gồm số seed, tên, nhóm và nhãn
+const fold = s => String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
+EPS.forEach(e => { e._hay = fold([e.seed, "seed " + e.seed, e.name || "", e.group || "", ...(e.tags || []), e.success ? "ok thanh cong" : "fail hong"].join(" ")); });
 const passFlt = e => {
   const zone = $("flt").value, result = $("mixResult").value;
-  return (zone === "all" || e._pickZone === zone) && (result === "all" || e.success === (result === "ok"));
+  const words = fold($("q").value).split(/\s+/).filter(Boolean);
+  return (zone === "all" || e._pickZone === zone) && (result === "all" || e.success === (result === "ok")) && words.every(w => e._hay.includes(w));
 };
 function buildSel() {      // dropdown chia nhóm, chỉ giữ ván hợp bộ lọc (OK/FAIL); duyệt lần lượt bằng nút ◀ ▶ cũng chỉ trong danh sách này
   const groups = [...new Set(EPS.map(e => e.group || ""))];
@@ -1029,6 +1034,8 @@ function loadEp(k) {
 }
 $("showReach").onchange = () => render();
 $("sel").onchange = () => loadEp(+$("sel").value);
+$("q").oninput = () => applySeedFilters();
+$("q").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); const v = visible(); if (v.length) loadEp(v.includes(ep) ? ep : v[0]); } e.stopPropagation(); };   // gõ chữ không kích hoạt phím tắt của replay
 $("sPrev").onclick = () => stepEp(-1);
 $("sNext").onclick = () => stepEp(1);
 function applySeedFilters() {
