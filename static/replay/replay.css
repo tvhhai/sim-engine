@@ -218,6 +218,14 @@
   #selList button.fail small { color:#d14049; }
   .sel-group, .sel-empty { font-size:11px; font-weight:700; letter-spacing:.05em; color:var(--muted); padding:6px 8px 2px; }
   .c-3d { position:relative; }
-  .c-3d > .ctl { position:absolute; left:8px; right:8px; bottom:8px; z-index:3; margin:0; padding:6px 10px; border:1px solid var(--line); border-radius:10px;
-    background:color-mix(in srgb, var(--card) 70%, transparent); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+  /* Thanh phát: khung ngoài không nền và không nhận chuột, chỉ ba cụm có nền (nút phát, tốc độ, bảng thời gian) nên khoảng trống giữa
+     nút phát và tốc độ không che 3D (như "tai thỏ" bị cắt bỏ) và kéo xoay 3D xuyên qua được */
+  .c-3d > .ctl { position:absolute; left:8px; right:8px; bottom:8px; z-index:3; margin:0; padding:0; border:0; background:none; pointer-events:none; }
+  .c-3d > .ctl > .transport { justify-content:space-between; margin:0 0 6px; }
+  .c-3d > .ctl .transport-buttons, .c-3d > .ctl .media-speed, .c-3d > .ctl .ctl-panel {
+    pointer-events:auto; border:1px solid var(--line); border-radius:10px; padding:5px 8px;
+    background:color-mix(in srgb, var(--card) 84%, transparent); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+  .c-3d > .ctl .media-speed { margin-left:0; }
+  .c-3d > .ctl .ctl-panel { padding:6px 10px; }
+  .legend-icon { width:24px; height:24px; min-height:24px; padding:0; border-radius:50%; font-weight:700; line-height:1; }
   .c-3d > .ctl .keys { display:none; }

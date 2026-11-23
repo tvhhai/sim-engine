@@ -54,7 +54,7 @@ app.innerHTML = `
     </div>
   </header>
   <main class="main">
-    <div class="card c-small"><div id="topWrap" class="fs-wrap"><h2><span class="vtabs" role="tablist" aria-label="Góc nhìn 2D"><button type="button" role="tab" id="tabTop" aria-selected="true" aria-controls="top">Nhìn từ trên · XY (m)</button><button type="button" role="tab" id="tabSide" aria-selected="false" aria-controls="side">Nhìn từ cạnh · YZ (m)</button></span><span class="pick-zone-toggle" id="topTools"><label><input type="checkbox" id="showReach" checked> Vùng gắp</label> <button type="button" class="legend-btn" popovertarget="zonePop" title="Chú giải màu vùng và điểm quét">ⓘ Chú giải</button> <button type="button" class="fs-btn" id="topFs" title="Xem toàn màn hình (phím F, Esc để thoát)" aria-label="Toàn màn hình hình nhìn từ trên">⛶ Toàn màn hình</button></span></h2>
+    <div class="card c-small"><div id="topWrap" class="fs-wrap"><h2><span class="vtabs" role="tablist" aria-label="Góc nhìn 2D"><button type="button" role="tab" id="tabTop" aria-selected="true" aria-controls="top">Nhìn từ trên · XY (m)</button><button type="button" role="tab" id="tabSide" aria-selected="false" aria-controls="side">Nhìn từ cạnh · YZ (m)</button></span><span class="pick-zone-toggle" id="topTools"><label><input type="checkbox" id="showReach" checked> Vùng gắp</label> <button type="button" class="legend-btn legend-icon" id="zoneBtn" popovertarget="zonePop" title="Chú giải màu vùng và điểm quét" aria-label="Chú giải màu vùng và điểm quét">?</button> <button type="button" class="fs-btn" id="topFs" title="Xem toàn màn hình (phím F, Esc để thoát)" aria-label="Toàn màn hình hình nhìn từ trên">⛶ Toàn màn hình</button></span></h2>
       <div id="zonePop" popover class="legend-pop"><div class="pick-zone-legend"><span class="zone-green">Gắp được</span><span class="zone-red">Không gắp · về home</span><span class="zone-mixed">Hỗn hợp · cần tối ưu</span><span class="scan-note"><b style="color:#d14049">✕</b> điểm quét hỏng (vùng xanh còn ít điểm hỏng: mỗi điểm có 1 seed 1001+)</span><span class="scan-note"><b style="color:#16834f">●</b> điểm quét gắp được, chỉ vẽ ở vùng hỗn hợp</span></div></div><svg id="top" role="tabpanel" aria-label="Hình chiếu XY cố định" viewBox="0 0 520 340"></svg><svg id="side" role="tabpanel" aria-label="Hình chiếu YZ cố định" viewBox="0 18 520 202" hidden></svg>
       <div class="fs-only fs-bar"><button type="button" id="fsPrev" title="Lùi 1 bước (←)">◀</button><button type="button" id="fsPlay" title="Phát / tạm dừng (Space)">▶ / ❚❚</button><button type="button" id="fsNext" title="Tiến 1 bước (→)">▶</button><input type="range" id="fsRng" min="0" value="0" aria-label="Bước"><output id="fsInfo"></output></div></div></div>
     <div class="card c-3d"><h2><span>3D (VIEW CHÍNH)</span><span class="hint">kéo trái xoay · kéo phải dịch · lăn zoom · R mặc định · ⌨ xem phím</span><button type="button" class="fs-btn" id="c3Fs" title="Xem toàn màn hình (phím G, Esc để thoát)" aria-label="Toàn màn hình hình 3D" style="margin-left:auto">⛶ Toàn màn hình</button></h2>
@@ -83,7 +83,7 @@ app.innerHTML = `
           </div>
           <label class="media-speed" for="spd">Tốc độ <input id="spd" type="range" min="0.25" max="2" step="0.25" value="1"><output id="speedValue" for="spd">1×</output></label>
         </div>
-        <div class="scrub">
+        <div class="ctl-panel"><div class="scrub">
           <label for="rng">Thời gian <output id="stepCount" for="rng"></output></label>
           <input type="range" id="rng" min="0" value="0">
         </div>
@@ -99,7 +99,7 @@ app.innerHTML = `
             <label>phạm vi <select id="oHz"><option value="1" selected>1 bước</option><option value="5">5 bước</option><option value="15">15 bước</option><option value="phase">hết phase</option><option value="end">hết ván</option></select></label>
             <label>1 cánh tay mờ mỗi <select id="oEv"><option value="1" selected>1 bước</option><option value="3">3 bước</option><option value="5">5 bước</option><option value="10">10 bước</option></select></label>
           </div>
-        </details>
+        </details></div>
         <span class="sub keys">Phím: ← → từng bước · ↑ ↓ phase · Space · Home/End</span>
       </div>
     </div>
@@ -147,6 +147,13 @@ function renderPick() {
 }
 function updatePickBtn() { const e = EPS[ep]; $("selBtn").textContent = e ? `${ep + 1}. ${e.name || "seed " + e.seed} ▾` : "Chọn seed ▾"; }
 $("selList").onclick = e => { const b = e.target.closest("button[data-k]"); if (b) { $("selPop").hidePopover(); loadEp(+b.dataset.k); } };
+// Popover chú giải mở ngay dưới nút "?" (mặc định .legend-pop nằm góc trên phải màn hình)
+$("zonePop").addEventListener("toggle", e => {
+  if (e.newState !== "open") return;
+  const r = $("zoneBtn").getBoundingClientRect(), p = $("zonePop");
+  p.style.top = Math.min(r.bottom + 6, innerHeight - 140) + "px";
+  p.style.left = Math.max(8, Math.min(r.right - p.offsetWidth, innerWidth - p.offsetWidth - 8)) + "px"; p.style.right = "auto";
+});
 $("selPop").addEventListener("toggle", e => {
   if (e.newState !== "open") { $("q").value = ""; renderPick(); return; }
   const r = $("selBtn").getBoundingClientRect(), p = $("selPop");
@@ -1055,7 +1062,7 @@ $("sel").onchange = () => loadEp(+$("sel").value);
 // Tab nhìn từ trên / nhìn từ cạnh trong cùng một khung; chỉ hình nhìn từ trên có vùng gắp và nút toàn màn hình
 function pickView(v) {
   const top = v === "top";
-  $("top").hidden = !top; $("side").hidden = top; $("topTools").hidden = !top;
+  $("top").toggleAttribute("hidden", !top); $("side").toggleAttribute("hidden", top); $("topTools").toggleAttribute("hidden", !top);   // SVG không có thuộc tính .hidden nên phải dùng attribute
   $("tabTop").setAttribute("aria-selected", top); $("tabSide").setAttribute("aria-selected", !top);
   store.set("replayView2d", v);
 }
