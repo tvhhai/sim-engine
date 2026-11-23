@@ -36,7 +36,7 @@ class ScriptedPolicyHybrid(BasePolicy):
         if self._active is not self.v1 or self.v1._phase != 10 or self.v1.unreachable:
             return False
         box, bowl = self.env.get_box_pos(), self.env.get_bowl_pos()
-        in_bowl = np.linalg.norm(box[:2] - bowl[:2]) < config.BOWL_INNER_RADIUS
+        in_bowl = np.linalg.norm(box[:2] - bowl[:2]) < self.env.bowl_inner
         on_table = box[2] < config.BOX_DEFAULT_POS[2] + 0.015
         return not in_bowl and on_table and not box_sampling.is_unreachable(box[:2])
 

@@ -12,7 +12,7 @@ from ..env import SO101PickPlaceEnv
 from .. import config
 from ..policies import default_policy
 from ..tools.make_replay import Recorder, write_replay
-from .scene import in_workspace, normalize_objects
+from .scene import in_workspace, normalize_bowl, normalize_objects
 from .store import StudioStore
 
 LAB_SEED = 2147483647
@@ -39,6 +39,7 @@ class LabRun:
         keys = ("pan", "lift", "elbow", "wflex", "wroll", "grip", "bx", "by", "byaw", "wx", "wy")
         objects = pose.get("objects")
         target_id = pose.get("target_id")
+        bowl = pose.get("bowl")
         pose = {key: float(pose[key]) for key in keys}
         if not all(math.isfinite(value) for value in pose.values()):
             raise ValueError("Tọa độ và góc phải là số hữu hạn")
@@ -46,6 +47,7 @@ class LabRun:
             raise ValueError("Hộp và bát phải nằm trong hệ tọa độ ±45 cm")
         if objects is not None:
             pose["objects"] = normalize_objects(objects, target_id)
+            pose["bowl"] = normalize_bowl(bowl)
             target = next(obj for obj in pose["objects"] if obj["body"] == "box")
             pose.update(target_id=target["id"], bx=target["x"], by=target["y"], byaw=target["yaw"])
         with self.lock:
@@ -80,7 +82,8 @@ class LabRun:
             case_tmp.write_text(json.dumps(case, ensure_ascii=False, indent=2), encoding="utf-8")
             os.replace(case_tmp, case_path)
             env = SO101PickPlaceEnv(render_images=False, end_on_success=False,
-                                    lab_objects=pose.get("objects"), target_id=pose.get("target_id"))
+                                    lab_objects=pose.get("objects"), target_id=pose.get("target_id"),
+                                    lab_bowl=pose.get("bowl"))
             episode = Recorder(env, default_policy(env)).run(LAB_SEED, options=options)
             episode.update(name="lab", group="mixed", tags=["LAB · lần chạy mới nhất"])
             episode["initial_options"] = options

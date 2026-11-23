@@ -81,3 +81,27 @@ class LabSceneTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ObjectAndBowlConfigTests(unittest.TestCase):
+    def test_sizes_and_bowl_are_applied_to_the_model(self):
+        import mujoco
+        env = SO101PickPlaceEnv(render_images=False, lab_objects=[
+            {"id": "a", "type": "sphere", "x": .15, "y": 0, "yaw": 0, "size": .04, "color": "#30a46c"}],
+            lab_bowl={"color": "#ff0000", "radius": .06, "height": .05})
+        m = env.model
+        geom = m.geom("box_geom")
+        self.assertAlmostEqual(float(geom.size[0]), .02)                      # đường kính 4 cm -> bán kính 2 cm
+        self.assertAlmostEqual(float(m.geom("bowl_base").size[0]), .06)
+        self.assertAlmostEqual(float(m.geom("bowl_wall_00").size[2]), .025)   # nửa chiều cao tường
+        self.assertAlmostEqual(env.bowl_inner, .057)
+        self.assertEqual(env.bowl_height, .05)
+        self.assertAlmostEqual(float(m.mat_rgba[m.material("bowl_mat").id][0]), 1.0)
+
+    def test_invalid_size_and_bowl_are_rejected(self):
+        from sim_engine.studio.scene import normalize_bowl
+        with self.assertRaises(ValueError):
+            normalize_objects([{"id": "a", "type": "box", "x": 0, "y": 0, "yaw": 0, "size": .2}])
+        with self.assertRaises(ValueError):
+            normalize_bowl({"radius": .5})
+        self.assertEqual(normalize_bowl(None)["radius"], .045)

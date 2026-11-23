@@ -32,7 +32,7 @@ class SO101PickPlaceEnv(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": config.CONTROL_FREQ}
 
     def __init__(self, render_mode=None, render_images=True, end_on_success=True,
-                 box_range=None, bowl_range=None, lab_objects=None, target_id=None):
+                 box_range=None, bowl_range=None, lab_objects=None, target_id=None, lab_bowl=None):
         # render_images=False: không render ảnh camera trong obs -> chạy nhanh hơn nhiều
         # (policy viết tay không cần ảnh nên thường tắt đi)
         # Kẹp THẬT: hộp chỉ được giữ bằng va chạm và ma sát thật của hai hàm kẹp (không có kẹp giả / snap-grasp).
@@ -51,10 +51,14 @@ class SO101PickPlaceEnv(gym.Env):
 
         # Nạp mô hình MuJoCo từ file XML (robot, bàn, hộp, bát, camera)
         self.lab_objects = []
+        # Bát: bán kính lòng và chiều cao tường dùng để chấm "hộp trong bát" (mặc định lấy từ config; Lab có thể đổi cỡ và màu bát)
+        self.bowl_inner, self.bowl_height, self.bowl_color = config.BOWL_INNER_RADIUS, config.BOWL_HEIGHT, "#3366d9"
         if lab_objects is not None:
-            from .studio.scene import normalize_objects, scene_model
+            from .studio.scene import BOWL_WALL, normalize_bowl, normalize_objects, scene_model
             self.lab_objects = normalize_objects(lab_objects, target_id)
-            self.model = scene_model(self.lab_objects)
+            bowl = normalize_bowl(lab_bowl)
+            self.model = scene_model(self.lab_objects, bowl)
+            self.bowl_inner, self.bowl_height, self.bowl_color = bowl["radius"] - BOWL_WALL, bowl["height"], bowl["color"]
         else:
             self.model = mujoco.MjModel.from_xml_path(config.SCENE_XML)
         # Độ gập của giá đỡ camera cổ tay (body wrist_cam_arm gập quanh trục x của chốt): đặt theo config
@@ -221,7 +225,7 @@ class SO101PickPlaceEnv(gym.Env):
             joint = self.model.body_jntadr[body]
             adr = self.model.jnt_qposadr[joint]
             half = np.radians(obj["yaw"]) / 2
-            self.data.qpos[adr:adr + 7] = [obj["x"], obj["y"], 0.42 + config.BOX_HALF, np.cos(half), 0, 0, np.sin(half)]
+            self.data.qpos[adr:adr + 7] = [obj["x"], obj["y"], 0.42 + obj["size"] / 2, np.cos(half), 0, 0, np.sin(half)]
 
         # Lab preview/blocked trials can skip settling to preserve the exact edited pose.
         for _ in range(0 if opts.get("skip_settle") else 50):
@@ -356,9 +360,9 @@ class SO101PickPlaceEnv(gym.Env):
         ee_pos = self.data.site_xpos[self._ee_site].copy()
 
         horizontal_dist = np.linalg.norm(box_pos[:2] - bowl_pos[:2])
-        rim_z = bowl_pos[2] + config.BOWL_HEIGHT
+        rim_z = bowl_pos[2] + self.bowl_height
         box_speed = float(np.linalg.norm(self.data.qvel[self._box_dof_adr:self._box_dof_adr + 3]))
-        in_xy = horizontal_dist < config.BOWL_INNER_RADIUS
+        in_xy = horizontal_dist < self.bowl_inner
         in_z = bowl_pos[2] < box_pos[2] < rim_z - config.BOX_IN_BOWL_MARGIN
         released = not self._grasped
         settled = box_speed < config.SETTLED_SPEED

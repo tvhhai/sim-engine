@@ -765,7 +765,7 @@ class ScriptedPolicy(BasePolicy):
             return
         # "trong bát" chỉ xét theo chiều ngang: hộp nằm trong lòng bát nhưng còn hơi nghiêng/gác lên thành (z cao hơn vài mm)
         # sẽ tự nằm xuống, KHÔNG được coi là rơi ra ngoài (đo thấy gây gắp lại sai ở một số seed)
-        in_bowl = np.linalg.norm(box_pos[:2] - bowl_pos[:2]) < config.BOWL_INNER_RADIUS
+        in_bowl = np.linalg.norm(box_pos[:2] - bowl_pos[:2]) < self.env.bowl_inner
         pan = self.data.xpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "shoulder")]
         r = float(np.linalg.norm(box_pos[:2] - pan[:2]))
         on_table = box_pos[2] < config.BOX_DEFAULT_POS[2] + 0.015      # nằm trên bàn, không gác trên miệng bát
@@ -857,7 +857,7 @@ class ScriptedPolicy(BasePolicy):
 
     def _clear_height(self, xy):
         """Độ cao đầu tay để xoay roll mà không quét vào bát: cao hơn miệng bát một chút, lấy mức đầu tiên IK với tới được."""
-        rim = self.env.get_bowl_pos()[2] + config.BOWL_HEIGHT
+        rim = self.env.get_bowl_pos()[2] + self.env.bowl_height
         for margin in self.ROLL_CLEAR_MARGINS:
             z = rim + margin
             target = np.array([xy[0], xy[1], z])

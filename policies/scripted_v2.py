@@ -606,7 +606,7 @@ class ScriptedPolicyV2(BasePolicy):
         if self._still < self.SETTLE_STILL_STEPS and self._settle_wait < self.SETTLE_WAIT_MAX:
             self._settle_wait += 1
             return
-        in_bowl = np.linalg.norm(box[:2] - self.env.get_bowl_pos()[:2]) < config.BOWL_INNER_RADIUS
+        in_bowl = np.linalg.norm(box[:2] - self.env.get_bowl_pos()[:2]) < self.env.bowl_inner
         on_table = box[2] < config.BOX_DEFAULT_POS[2] + 0.015
         if not in_bowl and on_table and self._regrasps < self.MAX_REGRASPS:
             self._regrasps += 1

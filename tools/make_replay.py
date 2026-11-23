@@ -415,9 +415,10 @@ def write_replay(env, episodes, out, policy_name):
     # Thông tin cố định của cảnh để HTML vẽ đúng tỷ lệ
     scene = {
         "bowl": r3(env.get_bowl_pos()),
-        "bowl_radius": config.BOWL_INNER_RADIUS,   # ngưỡng ngang để vào bát = lòng bát (tâm hộp phải nằm trong vòng này)
-        "bowl_height": config.BOWL_HEIGHT,
-        "bowl_inner": config.BOWL_INNER_RADIUS,      # lòng bát: tâm hộp phải cách tâm bát ít hơn mức này
+        "bowl_radius": env.bowl_inner,   # ngưỡng ngang để vào bát = lòng bát (tâm hộp phải nằm trong vòng này)
+        "bowl_height": env.bowl_height,
+        "bowl_color": env.bowl_color,
+        "bowl_inner": env.bowl_inner,      # lòng bát: tâm hộp phải cách tâm bát ít hơn mức này
         "settled_speed": config.SETTLED_SPEED,       # hộp phải chậm hơn mức này (m/s) mới tính là nằm yên
         "box_half": config.BOX_HALF,
         "unreachable_region": unreachable_region(),   # giới hạn đỏ dùng chung với policy

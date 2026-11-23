@@ -37,7 +37,7 @@ from ..env import SO101PickPlaceEnv
 from ..tools.make_replay import arm_model_export, bowl_geom_list, pick_scan_points, unreachable_region
 from .api import handle_get as studio_get, handle_post as studio_post
 from .runner import LabRun
-from .scene import normalize_objects
+from .scene import normalize_bowl, normalize_objects
 
 ARM = ["base", "shoulder", "upper_arm", "lower_arm", "wrist", "gripper"]
 JAW = "moving_jaw_so101_v1"      # hàm kẹp di động (hàm cố định thuộc body "gripper")
@@ -70,8 +70,9 @@ def skew(a):
 
 
 class Lab:
-    def __init__(self, lab_objects=None, target_id=None):
-        self.env = SO101PickPlaceEnv(render_images=False, lab_objects=lab_objects, target_id=target_id)
+    def __init__(self, lab_objects=None, target_id=None, lab_bowl=None):
+        self.env = SO101PickPlaceEnv(render_images=False, lab_objects=lab_objects, target_id=target_id, lab_bowl=lab_bowl)
+        self.bowl_cfg = normalize_bowl(lab_bowl)
         self.m, self.d = self.env.model, self.env.data
         m = self.m
         self.lock = threading.Lock()
@@ -104,9 +105,10 @@ class Lab:
 
     def set_scene(self, request):
         objects = normalize_objects(request["objects"], request.get("target_id"))
-        signature = lambda items: [(o["id"], o["type"], o["color"], o["body"]) for o in items]
-        if signature(objects) != signature(self.env.lab_objects):
-            replacement = Lab(objects, request.get("target_id"))
+        signature = lambda items: [(o["id"], o["type"], o["color"], o["body"], o["size"]) for o in items]
+        bowl = normalize_bowl(request.get("bowl"))
+        if signature(objects) != signature(self.env.lab_objects) or bowl != self.bowl_cfg:
+            replacement = Lab(objects, request.get("target_id"), bowl)
             old = self.env
             keep = {key: getattr(self, key) for key in ("lock", "runner", "reach", "reach_status", "exact_model")}
             self.__dict__.update(replacement.__dict__)
@@ -121,7 +123,7 @@ class Lab:
             body = self.m.body(obj["body"]).id
             adr = self.m.jnt_qposadr[self.m.body_jntadr[body]]
             half = math.radians(obj["yaw"]) / 2
-            self.d.qpos[adr:adr + 7] = [obj["x"], obj["y"], TABLE_TOP_Z + config.BOX_HALF, math.cos(half), 0, 0, math.sin(half)]
+            self.d.qpos[adr:adr + 7] = [obj["x"], obj["y"], TABLE_TOP_Z + obj["size"] / 2, math.cos(half), 0, 0, math.sin(half)]
         mujoco.mj_forward(self.m, self.d)
 
     # ---------- đặt tư thế và đọc số liệu ----------
@@ -130,7 +132,8 @@ class Lab:
         d.qpos[self.qadr] = np.radians([p["pan"], p["lift"], p["elbow"], p["wflex"], p["wroll"]])
         d.qpos[self.fl] = p["grip"]
         yaw = math.radians(p["byaw"])
-        d.qpos[self.box_adr:self.box_adr + 3] = [p["bx"], p["by"], TABLE_TOP_Z + config.BOX_HALF]
+        size = next((o["size"] for o in self.env.lab_objects if o["body"] == "box"), 2 * config.BOX_HALF)
+        d.qpos[self.box_adr:self.box_adr + 3] = [p["bx"], p["by"], TABLE_TOP_Z + size / 2]
         d.qpos[self.box_adr + 3:self.box_adr + 7] = [math.cos(yaw / 2), 0, 0, math.sin(yaw / 2)]
         d.qvel[:] = 0
         self.m.body_pos[self.bowl][:2] = [p["wx"], p["wy"]]
