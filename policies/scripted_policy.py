@@ -116,6 +116,9 @@ class ScriptedPolicy(BasePolicy):
     PAN_LIMIT_NEAR_DEG = 100.0
     PAN_LIMIT_TRIGGER = 0.010
     PAN_LIMIT_ERR_OK = 0.004
+    CAM_LIFT_CHECK = True          # kiểm tra camera cổ tay cả dọc đường NHẤC hộp (phase 5): hộp sát đế, camera quay vào trong sẽ quét vai / cánh tay trên khi khớp 3 mở ra
+    LIFT_SIM_STEPS = 70            # tối đa chừng này bước khi mô phỏng đường nhấc (_lift_cam_clearance)
+    CAM_LIFT_MARGIN = 0.002        # camera cách vai / cánh tay trên / đế tối thiểu chừng này (m) ở các độ cao nhấc
     CAM_CLEARANCE_MARGIN = 0.010   # camera phải cách vai/cánh tay/đế/bàn tối thiểu chừng này (m)
     BOWL_CLEARANCE_MARGIN = 0.010   # hàm kẹp (mở hết cỡ) phải cách bát tối thiểu chừng này (m) ở tư thế chuẩn bị kẹp và tư thế kẹp
     JAW_STUCK_STEPS = 6        # hàm CỐ ĐỊNH nằm trên đỉnh hộp (chạm hộp, đầu tay còn cao hơn đáy > 1,2 cm) liền chừng này bước ở phase 3 thì nhấc lên, đổi roll rồi hạ lại (như khi chạm bát). Seed 1001/1003: hàm đè lên hộp, phase 3 hết hạn
@@ -1054,6 +1057,37 @@ class ScriptedPolicy(BasePolicy):
         fromto = np.zeros(6)
         return min(mujoco.mj_geomDistance(self.model, ik, a, w, 0.06, fromto) for a, w in self._cam_pairs)
 
+    def _lift_cam_clearance(self, q_grasp, roll):
+        """Mô phỏng HÌNH HỌC phase 5 từ tư thế kẹp: mỗi bước giải IK tới (x, y hiện tại, độ cao an toàn) rồi đưa lệnh khớp tới đó theo đúng
+        làm mượt và giới hạn tốc độ của phase 5; trả khoảng cách camera nhỏ nhất (m) tới vai / cánh tay trên / đế / bàn dọc đường nhấc.
+        Phải mô phỏng từng bước vì tay không đi thẳng đứng: hộp sát đế thì độ cao an toàn gần như ngoài tầm, IK kéo tay vào phía đế và camera
+        quay vào trong sẽ quét vai (seed 4: roll +81° chạm vai 35 bước). Không chạy vật lý, chỉ động học nên rẻ."""
+        saved = self._phase
+        self._phase = 5
+        ik = self._ik_data
+        q = np.array(q_grasp, dtype=float)
+        smoothed = self._to_action(q)
+        alpha = self._phase_smoothing.get(5, 0.7)
+        lo, hi = self.env._ctrl_ranges[:5].T
+        clear = 1e9
+        try:
+            for _ in range(self.LIFT_SIM_STEPS):
+                ik.qpos[:] = self.data.qpos[:]
+                ik.qpos[self._qpos_adr] = q
+                self._fk(ik)
+                ee = ik.site_xpos[self._ee_site].copy()
+                if ee[2] >= self._safe_z - 0.02:
+                    break
+                q_ik = self._solve_ik(np.array([ee[0], ee[1], self._safe_z]), roll=roll, q0=q)
+                step = np.clip(alpha * (self._to_action(q_ik) - smoothed), -self.LIFT_STEP_LIMIT, self.LIFT_STEP_LIMIT)
+                smoothed = smoothed + step
+                q = (smoothed + 1.0) / 2.0 * (hi - lo) + lo
+                q[4] = roll
+                clear = min(clear, self._cam_geom_distance(q))
+        finally:
+            self._phase = saved
+        return clear
+
     def _jaw_box_distance(self, q5):
         """Khoảng cách nhỏ nhất (m) từ các khâu tay + hàm kẹp mở hết cỡ tới HỘP ở tư thế q5 (trên bản sao IK); âm = hàm cắm vào hộp, tức là khi hạ sẽ đẩy hộp."""
         ik = self._ik_data
@@ -1095,7 +1129,7 @@ class ScriptedPolicy(BasePolicy):
                 r = roll + k * math.pi / 2
                 if not lo + 0.05 <= r <= hi - 0.05:
                     continue
-                clear, cam_clear, jaw_clear = 1e9, 1e9, 1e9
+                clear, cam_clear, jaw_clear, lift_clear = 1e9, 1e9, 1e9, 1e9
                 for z in (self._pre_grasp_z, self._grasp_z):
                     above = np.array([box[0], box[1], z])
                     q = self._solve_ik(above, roll=r)
@@ -1110,6 +1144,8 @@ class ScriptedPolicy(BasePolicy):
                         cam_clear = min(cam_clear, self._cam_geom_distance(q))
                     if need_jaw:
                         jaw_clear = min(jaw_clear, self._jaw_box_distance(q))
+                if need_cam and self.CAM_LIFT_CHECK:                   # đường nhấc: IK tới độ cao an toàn BẮT ĐẦU TỪ tư thế kẹp (như lúc nhấc thật), rồi nội suy khớp
+                    lift_clear = self._lift_cam_clearance(q.copy(), r)   # q: tư thế kẹp (cuối vòng for trên)
                 if self.PREDICT_PATH:                                  # đường xoay: từ roll hiện tại tới r, ở độ cao lơ lửng phía trên hộp
                     hover = self._p1_z if self._p1_z is not None else self._pre_grasp_z + 0.02
                     for f in (0.25, 0.5, 0.75, 1.0):
@@ -1122,7 +1158,8 @@ class ScriptedPolicy(BasePolicy):
                         if need_cam:
                             cam_clear = min(cam_clear, self._cam_geom_distance(q))
                 # điểm theo từng điều kiện (đơn vị = mức tối thiểu, >= 1 là đạt): bát, camera (cứng), hàm kẹp-hộp (mềm)
-                hard = min(clear / self.BOWL_CLEARANCE_MARGIN if need_bowl else 1e9, cam_clear / self.CAM_CLEARANCE_MARGIN if need_cam else 1e9)
+                hard = min(clear / self.BOWL_CLEARANCE_MARGIN if need_bowl else 1e9, cam_clear / self.CAM_CLEARANCE_MARGIN if need_cam else 1e9,
+                           lift_clear / self.CAM_LIFT_MARGIN if need_cam and self.CAM_LIFT_CHECK else 1e9)
                 jaw_s = jaw_clear / self.JAW_BOX_MARGIN if need_jaw else 1e9
                 results.append((r, min(hard, jaw_s), hard, jaw_s))
         finally:
@@ -1143,7 +1180,7 @@ class ScriptedPolicy(BasePolicy):
         self._pred_changed = abs(pick[0] - roll) > 1e-6
         return pick[0]
 
-    def _solve_ik(self, target_pos, roll=None, limits=None):
+    def _solve_ik(self, target_pos, roll=None, limits=None, q0=None):
         """IK: tìm góc khớp (radian) của 5 khớp để đầu tay (ee_site) tới target_pos.
 
         Chạy trên bản sao dữ liệu `_ik_data` nên không làm robot thật cử động. Chỉ tính HÌNH HỌC:
@@ -1167,6 +1204,8 @@ class ScriptedPolicy(BasePolicy):
         ik = self._ik_data
         # Bắt đầu từ tư thế thật hiện tại, nên lời giải "gần" tư thế đang có
         ik.qpos[:] = self.data.qpos[:]
+        if q0 is not None:                                         # bắt đầu từ tư thế cho trước (vd tư thế kẹp) thay vì tư thế thật hiện tại
+            ik.qpos[self._qpos_adr] = q0
         ik.qvel[:] = 0
         free0 = np.ones(5)
         if roll is not None:                                       # khoá wrist_roll ở góc `roll`: IK chỉ dùng 4 khớp còn lại
