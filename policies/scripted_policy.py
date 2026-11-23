@@ -120,6 +120,10 @@ class ScriptedPolicy(BasePolicy):
     # Nhấc hộp sát đế: dời đích RA NGOÀI theo bán kính tới r >= LIFT_MIN_R (mở khớp 3 ra khi nhấc thay vì để IK kéo tay vào phía đế, nơi camera cọ vào vai).
     # Đo 274 + 500 seed: 274/274 và 499/500 như cũ; camera xuyên 8 -> 3 và 1 -> 0 seed; số bước TB 184,2 -> 182,3 và 169,3 -> 168,2.
     # 14 cm: -0,4 / -1,4 bước; 18 cm: hộp ở 18 cm nhanh hơn nhưng 17 seed chậm hơn; 24 cm: hỏng 202, 207. None = nhấc thẳng như cũ
+    # Bóng nhanh hơn mức này (m/s) thì nâng tay và đợi đứng yên rồi mới hạ (chỉ áp cho bóng). Đo 774 seed bóng 3 cm: bật 0,005 -> sửa 4 seed nhưng làm
+    # hỏng thêm 33 (760 -> 731): bóng còn rung nhẹ lúc tiếp cận nên tay chờ vô ích rồi hết giờ. Nên TẮT (None); thử ngưỡng khác trước khi bật.
+    REST_SPEED = None
+    REST_WAIT_MAX = 80             # tối đa chừng này bước đợi trong một ván
     LIFT_MIN_R = 0.16
     LIFT_EXT_RISE = 0.015          # m: hộp lên cao chừng này rồi mới bắt đầu dời ra ngoài (tránh kéo hộp lê trên bàn)
     LIFT_SIM_STEPS = 70            # tối đa chừng này bước khi mô phỏng đường nhấc (_lift_cam_clearance)
@@ -221,6 +225,8 @@ class ScriptedPolicy(BasePolicy):
         self._phase_step = 0            # đã ở phase này bao nhiêu bước (dùng cho timeout và chờ)
         self._retries = 0               # đã thử kẹp lại bao nhiêu lần (phase 4 quay về phase 2)
         self._max_retries = 2           # tối đa bao nhiêu lần thử lại
+        self._rest_wait = 0
+        self._profile_alt = False       # bóng: đang dùng cấu hình kẹp của hộp thay vì của bóng (xem _switch_object_profile)
         self._last_finger = None        # độ mở ngón ở bước trước (để biết ngón đã ngừng khép chưa)
         self._gripper_target = 1.0      # lệnh kẹp: +1 mở, -1 đóng
         self._current_joint_targets = None   # góc khớp đích mà IK vừa tính (radian)
@@ -284,8 +290,32 @@ class ScriptedPolicy(BasePolicy):
         self._grasp_z = self.GRASP_Z   # độ cao kẹp: đầu tay ngang tâm hộp
         self._place_z = self.PLACE_Z   # độ cao thả hộp vào bát
 
+    def _apply_object_profile(self):
+        """Cấu hình kẹp theo VẬT cần gắp. Hộp: giữ nguyên mọi thông số đã chỉnh. Bóng: không có mặt phẳng nên không căn roll theo mặt hộp,
+        và kẹp ở đúng đường kính (đầu tay ngang tâm bóng, thấp hơn 1 mm) thay vì thấp hơn tâm 5 mm như hộp: ở độ cao của hộp hàm di động chạm
+        bóng ở nửa trên và ép bóng xuống, nên khi nhấc bóng trượt ra. Đo 43 seed bóng hỏng + 60 seed đạt: căn roll tắt + nâng 4 mm -> sửa 39/43, không hỏng thêm."""
+        if getattr(self.env, "target_type", "box") != "sphere":
+            return
+        if self._profile_alt:                                   # cấu hình của hộp (dùng khi cấu hình bóng đã thử mà hỏng)
+            self.GRASP_ALIGN = type(self).GRASP_ALIGN
+            self._grasp_z, self._pre_grasp_z = self.GRASP_Z, 0.46
+            return
+        self.GRASP_ALIGN = False
+        self._grasp_z = 0.42 + self.env.target_size / 2 - 0.001
+        self._pre_grasp_z = self._grasp_z + 0.03
+
+    def _switch_object_profile(self):
+        """Kẹp bóng hỏng (không kẹp được hoặc tuột khi nhấc): lần thử kế tiếp đổi sang cấu hình kia (bóng <-> hộp). Vài seed (khớp 1 sát giới hạn,
+        sát đế) chỉ đạt với căn roll và độ cao của hộp, số còn lại chỉ đạt với cấu hình bóng; thử lần lượt cả hai thay vì chọn một."""
+        if getattr(self.env, "target_type", "box") == "sphere":
+            self._profile_alt = not self._profile_alt
+            self._apply_object_profile()
+            self._plan = None
     def reset(self):
         """Gọi mỗi đầu episode: đưa policy về phase 0."""
+        self._profile_alt = False
+        self._rest_wait = 0
+        self._apply_object_profile()
         self._phase = 0
         self._phase_step = 0
         self._retries = 0
@@ -351,6 +381,7 @@ class ScriptedPolicy(BasePolicy):
                 self._abort_unreachable_pick()
             elif self._lost_steps > 3 and self._regrasps < 2:
                 self._regrasps += 1
+                self._switch_object_profile()
                 self._place_retract_target = None
                 self._lost_steps = 0
                 self._phase, self._phase_step = 1, 0
@@ -421,7 +452,27 @@ class ScriptedPolicy(BasePolicy):
         if self._phase == 2 and self.PREDICT_BOWL_ROLL and self.PREDICT_PRETURN:
             self._maybe_preturn(box_pos, ee_pos)
 
+    def _rest_hold(self, ee_pos):
+        """Bóng đang lăn (bị hàm đẩy hoặc vừa va chạm): nâng tay lên độ cao lơ lửng ngay trên chỗ đang đứng và ĐỢI bóng đứng yên rồi mới hạ gắp
+        (hạ tiếp khi bóng còn lăn thì hàm đuổi theo và đẩy bóng đi xa hơn). Chỉ áp cho bóng; tối đa REST_WAIT_MAX bước cho cả ván. Trả True nếu bước này dành cho việc đợi."""
+        if (self.REST_SPEED is None or getattr(self.env, "target_type", "box") != "sphere" or self._rest_wait >= self.REST_WAIT_MAX):
+            return False
+        adr = self.env._box_dof_adr
+        if float(np.linalg.norm(self.data.qvel[adr:adr + 3])) <= self.REST_SPEED:
+            return False
+        self._rest_wait += 1
+        if self._phase == 3:                                      # đang hạ: quay lại phase 2 (lơ lửng) để hạ lại từ trên
+            self._phase, self._phase_step, self._plan = 2, 0, None
+        hz = self._pre_grasp_z + self.HOVER_ABOVE
+        self._gripper_target = 1.0
+        self._current_joint_targets = self._solve_ik(np.array([ee_pos[0], ee_pos[1], max(float(ee_pos[2]), hz)]))
+        if self._roll_hold is not None:
+            self._current_joint_targets[4] = self._roll_hold
+        return True
+
     def _lower_to_box(self, ee_pos, height):
+        if self._rest_hold(ee_pos):
+            return
         if self.PLANNED_DESCENT and not self._dragged and self._box_pan_r() < self.PLAN_R_MAX:
             if self._phase == 2:
                 self._descent_hover(ee_pos)
@@ -530,6 +581,7 @@ class ScriptedPolicy(BasePolicy):
             self._last_finger = None
             if self._retries < self._max_retries:
                 self._retries += 1
+                self._switch_object_profile()
                 self._phase, self._phase_step = 2, 0     # thử lại từ phase 2
                 self._roll_hold = None                   # hộp có thể đã xoay: chọn lại roll
             else:

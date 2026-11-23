@@ -53,12 +53,15 @@ class SO101PickPlaceEnv(gym.Env):
         self.lab_objects = []
         # Bát: bán kính lòng và chiều cao tường dùng để chấm "hộp trong bát" (mặc định lấy từ config; Lab có thể đổi cỡ và màu bát)
         self.bowl_inner, self.bowl_height, self.bowl_color = config.BOWL_INNER_RADIUS, config.BOWL_HEIGHT, "#3366d9"
+        self.target_type, self.target_size = "box", 2 * config.BOX_HALF     # vật cần gắp: "box" (cạnh) hoặc "sphere" (đường kính)
         if lab_objects is not None:
             from .studio.scene import BOWL_WALL, normalize_bowl, normalize_objects, scene_model
             self.lab_objects = normalize_objects(lab_objects, target_id)
             bowl = normalize_bowl(lab_bowl)
             self.model = scene_model(self.lab_objects, bowl)
             self.bowl_inner, self.bowl_height, self.bowl_color = bowl["radius"] - BOWL_WALL, bowl["height"], bowl["color"]
+            target = next(o for o in self.lab_objects if o["body"] == "box")
+            self.target_type, self.target_size = target["type"], target["size"]
         else:
             self.model = mujoco.MjModel.from_xml_path(config.SCENE_XML)
         # Độ gập của giá đỡ camera cổ tay (body wrist_cam_arm gập quanh trục x của chốt): đặt theo config
