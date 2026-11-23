@@ -117,6 +117,11 @@ class ScriptedPolicy(BasePolicy):
     PAN_LIMIT_TRIGGER = 0.010
     PAN_LIMIT_ERR_OK = 0.004
     CAM_LIFT_CHECK = True          # kiểm tra camera cổ tay cả dọc đường NHẤC hộp (phase 5): hộp sát đế, camera quay vào trong sẽ quét vai / cánh tay trên khi khớp 3 mở ra
+    # Nhấc hộp sát đế: dời đích RA NGOÀI theo bán kính tới r >= LIFT_MIN_R (mở khớp 3 ra khi nhấc thay vì để IK kéo tay vào phía đế, nơi camera cọ vào vai).
+    # Đo 274 + 500 seed: 274/274 và 499/500 như cũ; camera xuyên 8 -> 3 và 1 -> 0 seed; số bước TB 184,2 -> 182,3 và 169,3 -> 168,2.
+    # 14 cm: -0,4 / -1,4 bước; 18 cm: hộp ở 18 cm nhanh hơn nhưng 17 seed chậm hơn; 24 cm: hỏng 202, 207. None = nhấc thẳng như cũ
+    LIFT_MIN_R = 0.16
+    LIFT_EXT_RISE = 0.015          # m: hộp lên cao chừng này rồi mới bắt đầu dời ra ngoài (tránh kéo hộp lê trên bàn)
     LIFT_SIM_STEPS = 70            # tối đa chừng này bước khi mô phỏng đường nhấc (_lift_cam_clearance)
     CAM_LIFT_MARGIN = 0.002        # camera cách vai / cánh tay trên / đế tối thiểu chừng này (m) ở các độ cao nhấc
     CAM_CLEARANCE_MARGIN = 0.010   # camera phải cách vai/cánh tay/đế/bàn tối thiểu chừng này (m)
@@ -228,6 +233,7 @@ class ScriptedPolicy(BasePolicy):
         self._stall = 0                 # số bước liền không tiến thêm
         self.last_exit = None           # lý do thoát phase ở bước này: arrived / stall / timeout (None = vẫn trong phase)
         self._p1_z = None               # độ cao đích của phase 1 (hạ thấp nếu độ cao an toàn nằm ngoài tầm với)
+        self._lift_xy0, self._lift_z0 = None, None   # vị trí đầu tay lúc bắt đầu nhấc (xem _lift_xy)
         self._lift_z = None             # độ cao đích của phase 5 (nhấc hộp), cũng hạ thấp khi hộp sát đế
         self._bowl_hits = 0             # số bước liền tay đang chạm bát khi hạ xuống kẹp
         self._jaw_stuck = 0             # số bước liền hàm cố định đè lên hộp khi hạ xuống kẹp
@@ -298,6 +304,7 @@ class ScriptedPolicy(BasePolicy):
         self._settle_wait = 0
         self._still = 0
         self._best_dist, self._stall, self.last_exit, self._p1_z, self._lift_z = 0.0, 0, None, None, None
+        self._lift_xy0, self._lift_z0 = None, None
         self._bowl_hits, self._roll_flips, self._roll_pref, self._roll_stage, self._roll_z = 0, 0, None, None, None
         self._jaw_stuck = 0
         self._align_steps = 0
@@ -569,11 +576,27 @@ class ScriptedPolicy(BasePolicy):
         # Nhấc thẳng lên (giữ nguyên x, y của tay). Sát đế thì độ cao an toàn nằm ngoài tầm với: nhấc tới độ cao tới được
         if self._drag_box(ee_pos):
             return
-        if self._phase_step == 0 or self._lift_z is None:
+        if self._phase_step == 0 or self._lift_z is None or self._lift_xy0 is None:
             self._lift_z = self._reachable_z(ee_pos[:2], z_lo=self._grasp_z + 0.04) if self.PHASE5_ADAPTIVE_Z else self._safe_z
-        target = np.array([ee_pos[0], ee_pos[1], self._lift_z])
+            self._lift_xy0, self._lift_z0 = np.array(ee_pos[:2], dtype=float), float(ee_pos[2])
+        target = np.array([*self._lift_xy(self._lift_xy0, self._lift_z0, ee_pos), self._lift_z])
         self._gripper_target = -1.0
         self._move_toward(target, ee_pos, threshold=0.02)
+
+    def _lift_xy(self, xy0, z0, cur):
+        """Điểm (x, y) đích khi nhấc: giữ nguyên x, y; hộp sát đế (r < LIFT_MIN_R) thì dời dần RA NGOÀI theo hướng bán kính tới r = LIFT_MIN_R
+        khi hộp đã lên LIFT_EXT_RISE trở đi. Độ cao an toàn gần như ngoài tầm với của hộp sát đế nên nhấc thẳng làm IK kéo tay vào phía đế,
+        khớp 3 gập lại và camera cọ vào vai; phase 6 vốn duỗi tay ra tới bát, nên duỗi sớm trong lúc nhấc không tốn thêm đường."""
+        cur_xy, z = np.asarray(cur[:2], dtype=float), float(cur[2])
+        if self.LIFT_MIN_R is None:
+            return cur_xy                                          # như cũ: x, y đích = x, y hiện tại của tay
+        pan = np.array(config.PICK_PAN_XY)
+        v = xy0 - pan
+        r0 = float(np.linalg.norm(v))
+        if r0 < 1e-6 or r0 >= self.LIFT_MIN_R:
+            return cur_xy
+        ramp = min(1.0, max(0.0, (z - z0) / self.LIFT_EXT_RISE))
+        return pan + v / r0 * (r0 + (self.LIFT_MIN_R - r0) * ramp)
 
     def _box_pan_r(self):
         """Khoảng cách ngang (m) từ hộp tới trục khớp 1."""
@@ -1071,15 +1094,18 @@ class ScriptedPolicy(BasePolicy):
         alpha = self._phase_smoothing.get(5, 0.7)
         lo, hi = self.env._ctrl_ranges[:5].T
         clear = 1e9
+        xy0 = z0 = None
         try:
             for _ in range(self.LIFT_SIM_STEPS):
                 ik.qpos[:] = self.data.qpos[:]
                 ik.qpos[self._qpos_adr] = q
                 self._fk(ik)
                 ee = ik.site_xpos[self._ee_site].copy()
+                if xy0 is None:
+                    xy0, z0 = ee[:2].copy(), float(ee[2])
                 if ee[2] >= self._safe_z - 0.02:
                     break
-                q_ik = self._solve_ik(np.array([ee[0], ee[1], self._safe_z]), roll=roll, q0=q)
+                q_ik = self._solve_ik(np.array([*self._lift_xy(xy0, z0, ee), self._safe_z]), roll=roll, q0=q)
                 step = np.clip(alpha * (self._to_action(q_ik) - smoothed), -self.LIFT_STEP_LIMIT, self.LIFT_STEP_LIMIT)
                 smoothed = smoothed + step
                 q = (smoothed + 1.0) / 2.0 * (hi - lo) + lo
