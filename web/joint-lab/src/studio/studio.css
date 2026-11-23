@@ -663,3 +663,100 @@ html[data-mantine-color-scheme="light"] .global-run-status {
     display: none;
   }
 }
+
+/* ---- Lab: mọi thông tin trong một khung nhìn (không cuộn trang): bản đồ / 3D | vật thể | bát, khớp, số liệu ---- */
+.studio-content.screen-lab {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.screen-lab .screen-toolbar {
+  padding: 8px 20px;
+  flex-shrink: 0;
+}
+.screen-lab .lab-workspace {
+  flex: 1;
+  min-height: 0;
+  padding: 10px 16px 12px;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.8fr) minmax(280px, 0.75fr);
+  align-items: stretch;
+  max-width: none;
+}
+.screen-lab .main-column,
+.screen-lab .controls-column {
+  min-height: 0;
+  gap: 10px;
+}
+.screen-lab .controls-column {
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.screen-lab .lab-tabs {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.screen-lab .lab-tabs .mantine-Tabs-panel {
+  flex: 1;
+  min-height: 0;
+  padding-top: 8px;
+}
+.screen-lab .lab-tabs .panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.screen-lab .panel-heading {
+  min-height: 38px;
+  padding: 6px 12px;
+}
+.screen-lab .lab-tabs .top-view {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 12px;
+  max-width: none;
+  width: 100%;
+  display: flex;
+}
+.screen-lab .lab-tabs .top-view svg {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  width: 100%;
+  height: 100%;
+}
+.screen-lab .lab-tabs .scene-canvas,
+.screen-lab .lab-workspace .scene-canvas {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+.screen-lab .object-row {
+  padding: 8px 10px;
+}
+.screen-lab .object-row .mantine-InputWrapper-label {
+  font-size: 11px;
+}
+@media (max-width: 1250px) {
+  .screen-lab .lab-workspace {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.8fr);
+    overflow-y: auto;
+  }
+  .screen-lab .controls-secondary {
+    grid-column: 1 / -1;
+    overflow: visible;
+  }
+}
+.screen-lab .controls-column > * {
+  flex-shrink: 0;
+}
+.screen-lab .lab-tabs .top-view {
+  flex-direction: column;
+  align-items: stretch;
+}
+.screen-lab .lab-tabs .top-view .map-legend {
+  padding: 4px 8px 0;
+  flex-shrink: 0;
+}

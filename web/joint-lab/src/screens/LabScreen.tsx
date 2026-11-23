@@ -230,11 +230,14 @@ export default function LabScreen() {
               onChange={setScene}
             />
           )}
+        </aside>
+        <aside className="controls-column controls-secondary">
           {visible.bowl && (
             <Panel title="Vị trí bát" badge="Giới hạn vùng">
-              <Stack p="md" gap="sm">
+              <Stack p="sm" gap="xs">
                 <Group grow>
                   <NumberInput
+                    size="xs"
                     label="Bát X (cm)"
                     value={Number(
                       ((scene.pose.wx - meta.pick_region.pan[0]) * 100).toFixed(
@@ -251,6 +254,7 @@ export default function LabScreen() {
                     step={0.5}
                   />
                   <NumberInput
+                    size="xs"
                     label="Bát Y (cm)"
                     value={Number(
                       ((scene.pose.wy - meta.pick_region.pan[1]) * 100).toFixed(
@@ -269,6 +273,7 @@ export default function LabScreen() {
                 </Group>
                 <Group grow>
                   <NumberInput
+                    size="xs"
                     label="Bán kính (cm)"
                     description="3 – 9"
                     value={Number((scene.bowl.radius * 100).toFixed(1))}
@@ -280,6 +285,7 @@ export default function LabScreen() {
                     step={0.5}
                   />
                   <NumberInput
+                    size="xs"
                     label="Cao (cm)"
                     description="2 – 8"
                     value={Number((scene.bowl.height * 100).toFixed(1))}
@@ -292,6 +298,7 @@ export default function LabScreen() {
                   />
                 </Group>
                 <ColorInput
+                  size="xs"
                   label="Màu bát"
                   value={scene.bowl.color}
                   onChange={(v) => /^#[0-9a-f]{6}$/i.test(v) && setScene({ ...scene, bowl: { ...scene.bowl, color: v } })}

@@ -73,9 +73,10 @@ export function ObjectPanel({
   }
   return (
     <Panel title="Vật thể" badge={`${scene.objects.length} / 5`}>
-      <Stack gap="md" p="md">
+      <Stack gap="xs" p="sm">
         <Group grow align="end">
           <Select
+            size="xs"
             label="Loại"
             value={kind}
             onChange={setKind}
@@ -86,6 +87,7 @@ export function ObjectPanel({
             allowDeselect={false}
           />
           <NumberInput
+            size="xs"
             label="Số lượng"
             value={count}
             onChange={setCount}
@@ -96,6 +98,7 @@ export function ObjectPanel({
         </Group>
         <Group grow align="end">
           <NumberInput
+            size="xs"
             label={kind === "sphere" ? "Đường kính (cm)" : "Cạnh hộp (cm)"}
             description="2 – 6"
             value={size}
@@ -105,6 +108,7 @@ export function ObjectPanel({
             step={0.5}
           />
         <NumberInput
+            size="xs"
           label="Góc xoay hộp mới (°)"
           description="0° là hộp thẳng trục; hộp vuông lặp lại sau 90°"
           value={kind === "sphere" ? 0 : yaw}
@@ -117,6 +121,7 @@ export function ObjectPanel({
         </Group>
         <Group align="end" wrap="nowrap">
           <ColorInput
+            size="xs"
             eyeDropperButtonProps={{ "aria-label": "Lấy màu cho vật mới" }}
             label="Màu vật mới"
             value={color}
@@ -137,6 +142,7 @@ export function ObjectPanel({
           vật còn lại có va chạm thật.
         </Text>
         <Select
+            size="xs"
           label="Vật cần gắp"
           value={scene.target_id}
           onChange={(value) => {
@@ -200,6 +206,7 @@ export function ObjectPanel({
             </Group>
             <Group grow>
               <NumberInput
+            size="xs"
                 label="X (cm)"
                 aria-label={`Vật ${i + 1} X (cm)`}
                 value={Math.round((obj.x - region.pan[0]) * 1000) / 10}
@@ -211,6 +218,7 @@ export function ObjectPanel({
                 step={0.5}
               />
               <NumberInput
+            size="xs"
                 label="Y (cm)"
                 aria-label={`Vật ${i + 1} Y (cm)`}
                 value={Math.round((obj.y - region.pan[1]) * 1000) / 10}
@@ -225,6 +233,7 @@ export function ObjectPanel({
             {selected === obj.id && (
               <Group grow mt="xs">
                 <ColorInput
+            size="xs"
                   eyeDropperButtonProps={{
                     "aria-label": "Lấy màu cho vật đang chọn",
                   }}
@@ -237,6 +246,7 @@ export function ObjectPanel({
                   swatches={PALETTE}
                 />
                 <NumberInput
+            size="xs"
                   label="Xoay (°)"
                   value={obj.yaw}
                   onChange={(v) => update(obj.id, { yaw: Number(v) })}
@@ -244,6 +254,7 @@ export function ObjectPanel({
                   max={180}
                 />
                 <NumberInput
+            size="xs"
                   label={obj.type === "sphere" ? "Đường kính (cm)" : "Cạnh (cm)"}
                   value={Number(((obj.size ?? 0.03) * 100).toFixed(1))}
                   onChange={(v) => {
