@@ -81,12 +81,16 @@ describe("Synchronized replay interpolation", () => {
     t.set(pose(7), sample(7, 1010, 32, false), true);
     expect(read(t, 1011).p.x).toBe(7);
   });
-  it("never invents interpolation across dropped steps or a different episode", () => {
-    const t = moving();
-    t.set(pose(9), sample(9), true);
-    expect(read(t, 1001).p.x).toBe(9);
-    t.set(pose(-4), { ...sample(10), stream: "baseline/10" }, true);
-    expect(read(t, 1002).p.x).toBe(-4);
+  it("interpolates across a few dropped steps but never across a long jump or a different episode", () => {
+    const short = moving();
+    short.set(pose(4), sample(4), true);            // bỏ qua 2 bước: vẫn nội suy từ bước trước
+    expect(read(short, 1001).p.x).toBeLessThan(4);
+    const long = moving();
+    long.set(pose(20), sample(20), true);           // nhảy xa (tua): đặt thẳng tới đích
+    expect(read(long, 1001).p.x).toBe(20);
+    const other = moving();
+    other.set(pose(-4), { ...sample(10), stream: "baseline/10" }, true);
+    expect(read(other, 1002).p.x).toBe(-4);
   });
   it("clamps outside the sample interval to avoid overshoot and extrapolation", () => {
     expect(sampleProgress(sample(1), 900)).toBe(0);

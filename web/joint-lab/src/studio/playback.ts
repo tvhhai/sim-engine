@@ -1,5 +1,7 @@
 import { Matrix4, Quaternion, Vector3 } from "three";
 import type { BodyPose, PlaybackSample } from "../types";
+// Khung hình vẽ chậm hơn một bước điều khiển (32 ms) thì phát bỏ qua vài bước: vẫn nội suy (từ bước trước tới bước mới) thay vì nhảy cóc
+export const MAX_SKIP = 8;
 export const playbackNow = () => performance.timeOrigin + performance.now();
 export const sampleProgress = (sample: PlaybackSample, now: number) =>
   Math.max(
@@ -68,7 +70,8 @@ export class PoseTween {
         sample?.continuous &&
         this.initialized &&
         previous?.stream === sample.stream &&
-        sample.step === previous.step + 1
+        sample.step > previous.step &&
+        sample.step - previous.step <= MAX_SKIP
       );
     if (!animate || !sample) this.active = false;
     this.sample = sample;
