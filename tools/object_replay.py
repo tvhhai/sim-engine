@@ -7,6 +7,9 @@ Cách dùng (đứng ở thư mục chứa sim_engine, đã kích hoạt .venv):
 
 Vật được đặt đúng vị trí hộp của từng seed (bát theo seed). Kết quả: results/replays/<tên>.html và .json; Studio liệt kê mọi file
 trong results/replays/ ở danh sách "Nguồn replay".
+
+Seed THEO DÕI (results/object_pins.json, theo loại vật): luôn được ghi dù đã thành công, để xem lại các seed đã sửa. Seed hỏng mới
+được tự thêm vào; không tự bỏ seed nào (sửa tay file đó nếu muốn bỏ).
 """
 
 import argparse
@@ -86,10 +89,27 @@ def record_seed(args):
     return ep, env.bowl_color
 
 
+PINS = paths.RESULTS / "object_pins.json"
+
+
+def load_pins(kind):
+    try:
+        return [int(s) for s in json.load(open(PINS, encoding="utf-8")).get(kind, [])]
+    except FileNotFoundError:
+        return []
+
+
+def save_pins(kind, seeds):
+    data = json.load(open(PINS, encoding="utf-8")) if PINS.exists() else {}
+    data[kind] = sorted(set(int(s) for s in seeds))
+    with open(PINS, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Chạy các seed với vật không phải hộp và ghi replay để quan sát")
     parser.add_argument("--kind", choices=["sphere", "box"], default="sphere")
-    parser.add_argument("--size", type=float, default=0.03, help="cạnh hộp / đường kính bóng (m)")
+    parser.add_argument("--size", type=float, default=0.04, help="cạnh hộp / đường kính bóng (m)")
     parser.add_argument("--seeds", default=None, help="ví dụ 63,87,2299: ghi thẳng các seed này, không chấm cả bộ")
     parser.add_argument("--sweep-json", default=None, help="kết quả chấm đã có (list {seed, ok}) để khỏi chấm lại")
     parser.add_argument("--ok-sample", type=int, default=12, help="số seed thành công (cách đều) ghi thêm để đối chứng")
@@ -115,8 +135,13 @@ def main():
         bad = [r["seed"] for r in rows if not r["ok"]]
         good = [r["seed"] for r in rows if r["ok"]]
         print(f"{args.kind} {args.size * 100:g} cm: gắp được {len(good)}/{len(rows)}; hỏng {len(bad)}")
+        pins = load_pins(args.kind)
+        save_pins(args.kind, pins + bad)                      # seed hỏng mới vào danh sách theo dõi, seed cũ giữ nguyên
+        fixed = [s for s in pins if s in set(good)]
         step = max(1, len(good) // max(1, args.ok_sample))
-        jobs = [(s, "Hỏng") for s in bad] + [(s, "Đối chứng thành công") for s in good[::step][:args.ok_sample]]
+        sample = [s for s in good[::step][:args.ok_sample] if s not in set(fixed)]
+        jobs = [(s, "Hỏng") for s in bad] + [(s, "Theo dõi: đã sửa") for s in fixed] + [(s, "Đối chứng thành công") for s in sample]
+        print(f"theo dõi {len(pins)} seed, trong đó {len(fixed)} seed đã thành công (vẫn ghi để xem lại)")
     with ctx.Pool(args.workers) as pool:
         results = pool.map(record_seed, [(s, args.kind, args.size, label) for s, label in jobs], chunksize=2)
     episodes = [ep for ep, _ in results]
