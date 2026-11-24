@@ -1,4 +1,5 @@
 import type { PickZones, ScanPoint, StopRegion } from "./zones";
+import type { XYViewData } from "./components/topViewGeometry";
 export type Vec3 = [number, number, number];
 export type Item = {
   id: string;
@@ -54,6 +55,7 @@ export type PlaybackSample = {
   continuous: boolean;
 };
 export type ReplayViewState = {
+  xy?: XYViewData;
   poses: Record<string, BodyPose>;
   objects: Item[];
   bowl: Vec3;

@@ -760,3 +760,59 @@ html[data-mantine-color-scheme="light"] .global-run-status {
   padding: 4px 8px 0;
   flex-shrink: 0;
 }
+
+/* Keep each Lab setting's label and controls on one compact row. */
+.lab-joint-row {
+  display: grid;
+  grid-template-columns: 82px minmax(50px, 1fr) 76px;
+  align-items: center;
+  gap: 10px;
+}
+.xy-region-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+}
+html[data-mantine-color-scheme="light"] .xy-view {
+  --xy-table: #e6d7b5;
+}
+.lab-joint-row > .mantine-Text-root {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.lab-object-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lab-object-details {
+  margin-top: 6px;
+}
+.lab-object-panel .mantine-InputWrapper-root {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  align-items: center;
+  gap: 2px 8px;
+  min-width: 0;
+  flex: 1;
+}
+.lab-object-panel .mantine-InputWrapper-label {
+  grid-column: 1;
+  grid-row: 1;
+  font-size: 11px;
+  margin: 0;
+}
+.lab-object-panel .mantine-Input-wrapper {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+.lab-object-panel .mantine-InputWrapper-description {
+  grid-column: 2;
+  grid-row: 2;
+  margin: 0;
+  font-size: 10px;
+}

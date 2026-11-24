@@ -1010,7 +1010,7 @@ function render() {
   const fs = F(), fr = fs[i];
   const focus3d=window.STUDIO_WEBGL && document.documentElement.classList.contains('studio-focus3d');
   const projectionDue=!window.STUDIO_WEBGL || !timer || performance.now()-studioProjectionAt>=66;
-  if(!focus3d && projectionDue){drawTop(fr, fs);drawSide(fr, fs);studioProjectionAt=performance.now();}
+  if(!focus3d && projectionDue){if(!window.STUDIO_WEBGL)drawTop(fr, fs);drawSide(fr, fs);studioProjectionAt=performance.now();}
   draw3d(fr, fs); drawCams(fr);
   if(!focus3d){drawInfo(fr, fs);drawChk(fr);}
   $("rng").value = i;

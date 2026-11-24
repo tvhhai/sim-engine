@@ -73,9 +73,9 @@ export function ObjectPanel({
     if (added[0]) onSelect(added[0].id);
   }
   return (
-    <Panel title="Vật thể" badge={`${scene.objects.length} / 5`}>
+    <Panel title="Vật thể" badge={`${scene.objects.length} / 5`} className="lab-object-panel">
       <Stack gap="xs" p="sm">
-        <Group grow align="end">
+        <div className="lab-object-fields">
           <Select
             size="xs"
             label="Loại"
@@ -96,8 +96,8 @@ export function ObjectPanel({
             max={Math.max(1, 5 - scene.objects.length)}
             allowDecimal={false}
           />
-        </Group>
-        <Group grow align="end">
+        </div>
+        <div className="lab-object-fields">
           <NumberInput
             size="xs"
             label={kind === "sphere" ? "Đường kính (cm)" : "Cạnh hộp (cm)"}
@@ -119,7 +119,7 @@ export function ObjectPanel({
           max={180}
           step={5}
         />
-        </Group>
+        </div>
         <Group align="end" wrap="nowrap">
           <ColorInput
             size="xs"
@@ -205,7 +205,7 @@ export function ObjectPanel({
                 </ActionIcon>
               </Group>
             </Group>
-            <Group grow>
+            <div className="lab-object-fields">
               <NumberInput
             size="xs"
                 label="X (cm)"
@@ -230,9 +230,9 @@ export function ObjectPanel({
                 max={38.5 - region.pan[1] * 100}
                 step={0.5}
               />
-            </Group>
+            </div>
             {selected === obj.id && (
-              <Group grow mt="xs">
+              <div className="lab-object-fields lab-object-details">
                 <ColorInput
             size="xs"
                   eyeDropperButtonProps={{
@@ -266,7 +266,7 @@ export function ObjectPanel({
                   max={maxObjectSize(scene.bowl) * 100}
                   step={0.5}
                 />
-              </Group>
+              </div>
             )}
           </div>
         ))}

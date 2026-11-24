@@ -16,6 +16,7 @@ import {
   Title,
 } from "@mantine/core";
 import { useLocalStorage } from "@mantine/hooks";
+import { useMemo, useState } from "react";
 import {
   RotateCcw,
   SlidersHorizontal,
@@ -29,6 +30,7 @@ import { JOINTS } from "../types";
 import { reachable } from "../workspace";
 import { Panel } from "../components/Panel";
 import { TopView } from "../components/TopView";
+import { labTopView } from "../components/topViewGeometry";
 import { SceneView } from "../components/LazySceneView";
 import { ObjectPanel } from "../components/ObjectPanel";
 import { useStudio } from "../studio/StudioContext";
@@ -57,7 +59,11 @@ export default function LabScreen() {
     settings,
   } = useStudio();
   const [labTab, setLabTab] = useLocalStorage({ key: "sim-studio-lab-tab", defaultValue: "scene" });
-  if (!scene || !meta || !model)
+  const [showRegion, setShowRegion] = useState(true);
+  const topView = useMemo(() => scene && meta && model ? labTopView(scene, snapshot, model, {
+    region: meta.pick_region, stop: meta.unreachable_region, scan: meta.pick_scan,
+  }) : null, [scene, snapshot, model, meta]);
+  if (!scene || !meta || !model || !topView)
     return (
       <div className="screen-empty">
         <Loader color="teal" />
@@ -158,16 +164,18 @@ export default function LabScreen() {
             </Tabs.List>
             {showScene && (
               <Tabs.Panel value="scene" pt="sm">
-                <Panel title="Tọa độ XY" badge="Kéo hộp, bóng, bát">
+                <Panel title="Nhìn từ trên · XY (m)" badge="Kéo hộp, bóng, bát" tools={
+                  <label className="xy-region-toggle"><input type="checkbox" checked={showRegion} onChange={(e) => setShowRegion(e.currentTarget.checked)} /> Vùng gắp</label>
+                }>
+                  <div className="top-view">
                   <TopView
-                    scene={scene}
-                    region={meta.pick_region}
-                    zones={zones}
-                    snapshot={snapshot}
+                    data={topView}
+                    showRegion={showRegion}
                     selected={selected}
                     onSelect={setSelected}
                     onMove={move}
                   />
+                  </div>
                 </Panel>
               </Tabs.Panel>
             )}
@@ -331,30 +339,10 @@ export default function LabScreen() {
                 </ActionIcon>
               }
             >
-              <Stack p="md" gap="lg">
+              <Stack p="sm" gap="sm">
                 {JOINTS.map(([key, label], i) => (
-                  <div key={key}>
-                    <Group justify="space-between" mb={8}>
-                      <Text size="sm">{label}</Text>
-                      <NumberInput
-                        aria-label={`${label} (độ)`}
-                        w={90}
-                        size="xs"
-                        value={Number(scene.pose[key].toFixed(1))}
-                        onChange={(v) =>
-                          setJoint(
-                            key,
-                            Math.max(
-                              meta.limits[i][0],
-                              Math.min(meta.limits[i][1], Number(v)),
-                            ),
-                          )
-                        }
-                        min={meta.limits[i][0]}
-                        max={meta.limits[i][1]}
-                        step={0.5}
-                      />
-                    </Group>
+                  <div key={key} className="lab-joint-row">
+                    <Text size="sm">{label}</Text>
                     <Slider
                       aria-label={label}
                       min={meta.limits[i][0]}
@@ -364,21 +352,47 @@ export default function LabScreen() {
                       onChange={(v) => setJoint(key, v)}
                       label={(v) => `${v.toFixed(1)}°`}
                     />
+                    <NumberInput
+                      aria-label={`${label} (độ)`}
+                      size="xs"
+                      value={Number(scene.pose[key].toFixed(1))}
+                      onChange={(v) =>
+                        setJoint(
+                          key,
+                          Math.max(
+                            meta.limits[i][0],
+                            Math.min(meta.limits[i][1], Number(v)),
+                          ),
+                        )
+                      }
+                      min={meta.limits[i][0]}
+                      max={meta.limits[i][1]}
+                      step={0.5}
+                    />
                   </div>
                 ))}
                 <div>
-                  <Text size="sm" mb="sm">
-                    Hàm kẹp · {((scene.pose.grip * 180) / Math.PI).toFixed(1)}°
-                  </Text>
-                  <Slider
-                    aria-label="Độ mở hàm kẹp"
-                    min={meta.gclose}
-                    max={meta.gopen}
-                    step={0.01}
-                    value={scene.pose.grip}
-                    onChange={(v) => setJoint("grip", v)}
-                  />
-                  <Group justify="space-between" mt="sm">
+                  <div className="lab-joint-row">
+                    <Text size="sm">Hàm kẹp</Text>
+                    <Slider
+                      aria-label="Độ mở hàm kẹp"
+                      min={meta.gclose}
+                      max={meta.gopen}
+                      step={0.01}
+                      value={scene.pose.grip}
+                      onChange={(v) => setJoint("grip", v)}
+                    />
+                    <NumberInput
+                      aria-label="Hàm kẹp (độ)"
+                      size="xs"
+                      value={Number(((scene.pose.grip * 180) / Math.PI).toFixed(1))}
+                      min={(meta.gclose * 180) / Math.PI}
+                      max={(meta.gopen * 180) / Math.PI}
+                      step={0.5}
+                      onChange={(v) => setJoint("grip", Math.max(meta.gclose, Math.min(meta.gopen, Number(v) * Math.PI / 180)))}
+                    />
+                  </div>
+                  <Group justify="space-between" mt={4}>
                     <Button
                       size="compact-xs"
                       variant="subtle"

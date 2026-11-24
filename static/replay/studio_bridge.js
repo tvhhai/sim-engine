@@ -3,6 +3,15 @@
   const params = new URLSearchParams(location.search);
   const sourceKey = params.get('source') || 'lab';
   let sample = null;
+  let xy = null, xyAt = -Infinity;
+  // React owns the XY viewport, just as it owns the two WebGL viewports.
+  const oldTop = $('top');
+  const topSlot = document.createElement('div');
+  topSlot.id = 'top';
+  topSlot.setAttribute('role', 'tabpanel');
+  topSlot.setAttribute('aria-label', 'Hình chiếu XY cố định');
+  topSlot.toggleAttribute('hidden', oldTop.hasAttribute('hidden'));
+  oldTop.replaceWith(topSlot);
   const mainSlot = document.createElement('div');
   mainSlot.id = 'studio-three-main';
   $('c3').hidden = true;
@@ -16,6 +25,7 @@
   threeStyle.textContent += '.studio-focus3d .hd,.studio-focus3d .c-small,.studio-focus3d .col,.studio-focus3d .logcard{display:none}.studio-focus3d .main{display:block;height:100dvh;padding:8px;box-sizing:border-box}.studio-focus3d .c-3d{height:100%;display:flex;flex-direction:column}.studio-focus3d .cv{height:auto;flex:1;min-height:180px}';
   threeStyle.textContent += '.studio-focus3d #app{height:100dvh;padding:0;gap:0}.studio-focus3d .main{flex:1 1 auto}';
   document.head.append(threeStyle);
+  threeStyle.textContent += '#top{display:flex;min-height:0}#top>.xy-view{flex:1;min-height:0;width:100%;height:100%}';
   // Studio owns source, episode, status and fullscreen controls. Keep transport and view controls here.
   const cleanStyle=document.createElement('style');
   cleanStyle.textContent='.hd,.c-3d>h2,#topFs{display:none!important}.c-3d{padding:0!important;overflow:hidden!important}.cv .viewbar{top:10px;left:10px;max-width:calc(100% - 20px)}.wrap{padding:10px;gap:10px}.canvas-caption{display:none}.studio-focus3d .main{padding:0}.studio-focus3d #app{padding:10px}.studio-focus3d .cv{min-height:200px}';
@@ -37,6 +47,33 @@
   note.className = 'note';
   note.textContent = 'Tọa độ hiển thị theo đế: XY tại trục khớp 1, Z = 0 trên mặt bàn. Điều kiện vật lý và ngưỡng Z của env dùng world MuJoCo.';
   $('info').before(note);
+  const xyObject = (obj, k) => ({...obj,id:obj.id||`object-${k+1}`,size:obj.size||S.box_half*2,x:obj.pos[0],y:obj.pos[1],yaw:obj.yaw||0});
+  function xyFrame(fr, fs) {
+    const world = armWorld(fr);
+    const hulls = Object.entries(world).map(([name, v]) => {
+      const points=[];
+      for(let k=0;k<v.length;k+=6)points.push([v[k],v[k+1]]);
+      return {points:hull2(points),color:linkColor(fr,name,true)};
+    });
+    const paths=[], ghosts=[];
+    for(const [enabled,end,color,past] of [[OPT.past,pastStart(),'var(--past)',true],[OPT.future,futureEnd(),'var(--future)',false]]) {
+      if(!enabled || end===i)continue;
+      const segment=fs.slice(Math.min(end,i),Math.max(end,i)+1);
+      if(OPT.path) {
+        if(past)paths.push({points:segment.map(f=>f.ee),color,width:3,opacity:.95});
+        if(dist(segment[0].box,segment[segment.length-1].box)>.003)paths.push({points:segment.map(f=>f.box),color:'var(--box)',width:past?2.5:3,opacity:past?.85:1,dash:past?undefined:'5 3'});
+        if(!past)paths.push({points:segment.map(f=>f.ee),color,width:3.2,dash:'6 3',dots:true});
+      }
+      ghostIdx(i,end).slice().reverse().forEach(k=>ghosts.push({joints:[...fs[k].arm,fs[k].ee],color,opacity:(past?.75:.8)-.35*Math.abs(k-i)/Math.max(1,Math.abs(end-i)),label:`${k>i?'+':''}${k-i}`}));
+    }
+    return {
+      origin:S.pick_region?.pan||S.reach?.base||fr.arm[1].slice(0,2),table:S.table.slice(0,2),
+      objects:replayObjects(fr).map(xyObject),initialObject:xyObject(replayObjects(fs[0])[0],0),
+      bowl:{pos:S.bowl,color:S.bowl_color,radius:S.bowl_radius,geoms:S.bowl_geoms},
+      ee:fr.ee,target:fr.tg,zones:S.pick_region?{region:S.pick_region,stop:S.unreachable_region||null,scan:S.pick_scan||[]}:null,
+      arm:{joints:[...fr.arm,fr.ee],hulls,colors:S.arm_bodies.map(name=>fr.ct.includes(name)?'var(--bad)':fr.tb.includes(name)?TABLEC:touchBowl(fr,name)?BOWLC:'var(--arm)')},paths,ghosts,
+    };
+  }
   const publish = (fr, fs) => {
     const stream=sourceKey+'/'+ep;
     if(!sample || sample.stream!==stream || sample.step!==i){
@@ -63,7 +100,10 @@
       if(OPT.path && to>from)lines.push({points:fs.slice(from,to+1).filter((_,k)=>k%Math.max(1,Math.ceil((to-from)/150))===0||k===to-from).map(f=>f.ee),color,opacity:.65});
       ghostIdx(i,from===i?to:from).forEach(k=>lines.push({points:[...fs[k].arm,fs[k].ee],color,opacity:.18}));
     }
-    parent.postMessage({type:'studio-replay-scene',source:sourceKey,scene:{poses,objects:replayObjects(fr).map((obj,k)=>({...obj,id:obj.id||`object-${k+1}`,x:obj.pos[0],y:obj.pos[1],yaw:obj.yaw||0})),bowl:S.bowl,bowlColor:S.bowl_color,bowlGeoms:S.bowl_geoms,ee:fr.ee,origin,region:S.pick_region,zones:S.pick_region?{region:S.pick_region,stop:S.unreachable_region||null,scan:S.pick_scan||[]}:null,showRegion:$('showReach').checked,sensor:SHOW_CAM?camera:null,camera:{...CAM,t:[...CAM.t]},target:fr.tg,lines,contacts:{box:fr.ct,table:fr.tb,bowl:fr.bc||[],cam:fr.cc||[]},playing:!!timer,sample:{...sample,continuous:!!timer&&sample.continuous}}},location.origin);
+    if(!document.documentElement.classList.contains('studio-focus3d') && (!timer || performance.now()-xyAt>=66)) {
+      xy=xyFrame(fr,fs);xyAt=performance.now();
+    }
+    parent.postMessage({type:'studio-replay-scene',source:sourceKey,scene:{xy,poses,objects:replayObjects(fr).map((obj,k)=>({...obj,id:obj.id||`object-${k+1}`,x:obj.pos[0],y:obj.pos[1],yaw:obj.yaw||0})),bowl:S.bowl,bowlColor:S.bowl_color,bowlGeoms:S.bowl_geoms,ee:fr.ee,origin,region:S.pick_region,zones:S.pick_region?{region:S.pick_region,stop:S.unreachable_region||null,scan:S.pick_scan||[]}:null,showRegion:$('showReach').checked,sensor:SHOW_CAM?camera:null,camera:{...CAM,t:[...CAM.t]},target:fr.tg,lines,contacts:{box:fr.ct,table:fr.tb,tablePts:fr.tp||[],bowl:fr.bc||[],cam:fr.cc||[]},playing:!!timer,sample:{...sample,continuous:!!timer&&sample.continuous}}},location.origin);
   };
   window.studioRender = publish;
   const notify = () => parent.postMessage({type:'studio-replay-state',source:sourceKey,episode:ep,step:i,playing:!!timer}, location.origin);

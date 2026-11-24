@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { SceneView } from "./LazySceneView";
+import { TopView } from "./TopView";
 import type { Model, ReplayViewState, ViewCamera } from "../types";
 
 export function ReplayWebGL({
@@ -16,6 +17,7 @@ export function ReplayWebGL({
     () => ({
       main: document.getElementById("studio-three-main"),
       sensor: document.getElementById("studio-three-camera"),
+      top: document.getElementById("top"),
     }),
     [document],
   );
@@ -42,6 +44,7 @@ export function ReplayWebGL({
   };
   return (
     <>
+      {slots.top && scene.xy && createPortal(<TopView data={scene.xy} showRegion={scene.showRegion} />, slots.top)}
       {slots.main &&
         createPortal(
           <SceneView
