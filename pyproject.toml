@@ -22,12 +22,14 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["diffusers", "transformers", "torchvision"]
 test = ["pytest>=8"]
+# Phần AI (learning/): LeRobot + PyTorch bản CUDA, cài riêng theo docs/so_tay_ai.md
+learning = ["lerobot[dataset,training]>=0.7"]
 
 # The repo root *is* the `sim_engine` package (flat layout), so map the package
 # name onto the root directory instead of searching for a sim_engine/ subfolder.
 [tool.setuptools]
 package-dir = {"sim_engine" = "."}
-packages = ["sim_engine", "sim_engine.policies", "sim_engine.tools", "sim_engine.studio", "sim_engine.workflows", "sim_engine.ui"]
+packages = ["sim_engine", "sim_engine.policies", "sim_engine.tools", "sim_engine.studio", "sim_engine.workflows", "sim_engine.ui", "sim_engine.learning"]
 
 [tool.setuptools.package-data]
 sim_engine = ["assets/*.xml", "assets/so101/*.stl", "results/*.json", "static/replay/*", "static/studio/*.html", "static/studio/assets/*", "docs/*.md", "docs/image/*"]

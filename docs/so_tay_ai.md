@@ -27,7 +27,38 @@ Vai trò của policy viết tay từ giờ: **thầy giáo**. Nó làm mẫu, m
 | 5 | Đa dạng hoá: nhiều cỡ, màu, ánh sáng; hộp + bóng | Gắp được cả cỡ chưa từng thấy (vd 3,5 cm) | `learning/configs/` |
 | 6 (sau) | DAgger, RL tinh chỉnh, SmolVLA nhận lệnh chữ, chạy tay thật | | |
 
-`learning/`, `datasets/`, `outputs/` sẽ được tạo ở chặng 1-2.
+`learning/` đã có. Dữ liệu và checkpoint nằm ở ổ D (`D:/vla/datasets`, `D:/vla/outputs`) vì ổ C gần đầy.
+
+### Công cụ và lệnh (máy hiện tại: GTX 1650 4 GB)
+
+| Công cụ | Để làm gì | Ở đâu |
+|---|---|---|
+| Python 3.12 venv riêng cho AI | Không đụng venv của Studio | `D:/vla/venv-lerobot` |
+| PyTorch bản CUDA 12.6 | Chạy mạng trên GPU | trong venv trên |
+| LeRobot 0.7 (`lerobot[dataset,training]`) | Định dạng dataset, train ACT | trong venv trên |
+| `learning/record_dataset.py` | Ghi dataset từ thầy giáo | chặng 1 |
+| `learning/configs/*.yaml` + `learning/train.py` | Một file YAML = một thí nghiệm train | chặng 2 |
+| `learning/eval_policy.py` | Bài kiểm tra trên bộ seed cố định | chặng 3 |
+
+Cài lại từ đầu (PowerShell / Git Bash):
+
+```bash
+uv venv --python 3.12 D:/vla/venv-lerobot
+uv pip install --python D:/vla/venv-lerobot/Scripts/python.exe --index-strategy unsafe-best-match \
+    --extra-index-url https://download.pytorch.org/whl/cu126 "torch==2.14.1+cu126" "torchvision==0.29.1+cu126" \
+    "lerobot[dataset,training]==0.7.0" -e <đường dẫn tới sim-engine>
+```
+
+Chạy (dùng `D:/vla/venv-lerobot/Scripts/python.exe`):
+
+```bash
+python -m sim_engine.learning.record_dataset --episodes 200 --kind box --size 0.04 --root D:/vla/datasets/so101_box4_v1 --repo-id local/so101_box4_v1
+python -m sim_engine.learning.train learning/configs/act_box4_v1.yaml
+python -m sim_engine.learning.eval_policy --policy D:/vla/outputs/train/act_box4_v1/checkpoints/last/pretrained_model --limit 100
+```
+
+Số đo lần đầu: ghi 200 ván mất 21 phút (bỏ 7 ván hỏng), 34 823 khung hình, 182 MB. Train ACT 52 triệu tham số, batch 8:
+2,8 bước / giây, GPU dùng 1,3 GB, 20 000 bước khoảng 2 giờ. Trên Windows, `torchcodec` chưa đọc được video nên LeRobot tự dùng `pyav`.
 
 ## 3. Thư mục nào làm gì
 

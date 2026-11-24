@@ -1,0 +1,21 @@
+# Thí nghiệm đầu tiên: ACT bản nhỏ, hộp 4 cm, 200 ván thành công của policy viết tay (seed 3000+).
+# Chạy: python -m sim_engine.learning.train learning/configs/act_box4_v1.yaml
+# Mỗi khoá dưới đây thành một tham số --khoá=giá_trị của lerobot-train.
+
+dataset.repo_id: local/so101_box4_v1
+dataset.root: D:/vla/datasets/so101_box4_v1
+dataset.video_backend: pyav            # torchcodec trên Windows chưa giải mã được video, dùng pyav
+policy.type: act
+policy.device: cuda
+policy.push_to_hub: false
+policy.use_amp: true                   # tính nửa độ chính xác: nhanh hơn, vừa GPU 4 GB
+policy.chunk_size: 50                  # mỗi lần đoán 50 action tới (~1,7 s)
+policy.n_action_steps: 20              # chỉ làm 20 action đầu rồi đoán lại, để phản ứng kịp khi hộp lệch
+policy.optimizer_lr: 0.00003
+output_dir: D:/vla/outputs/train/act_box4_v1
+job_name: act_box4_v1
+batch_size: 8
+steps: 20000
+save_freq: 5000
+log_freq: 100
+num_workers: 2
