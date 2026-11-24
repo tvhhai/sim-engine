@@ -1131,6 +1131,22 @@ const panCam = (dr, du, dfw = 0) => {                       // dịch điểm nh
 const zoomCam = k => { CAM.dist = Math.max(0.1, Math.min(5, CAM.dist * k)); };
 const centerOnHand = () => { const fr = F()[i]; if (fr && fr.ee) { CAM.t = [fr.ee[0], fr.ee[1], fr.ee[2]]; CAM.follow = false; syncFollow(); redraw3(); } };
 $("bFollow").onclick = () => { CAM.follow = !CAM.follow; syncFollow(); redraw3(); };
+// Nhớ lựa chọn hiển thị qua F5 và qua lần mở sau: quá khứ / tương lai / đường đi, phạm vi, số cánh tay mờ và camera bám tay
+// (tốc độ và bật tắt ảnh camera cổ tay đã được lưu riêng ở replaySpeed và showArmCam)
+{
+  const saveOpts = () => store.set("replayOpts", JSON.stringify({ ...OPT, follow: CAM.follow }));
+  try {
+    const o = JSON.parse(store.get("replayOpts") || "null");
+    if (o) {
+      for (const [k, id] of [["past", "oPast"], ["future", "oFut"], ["path", "oPath"]]) if (typeof o[k] === "boolean") { OPT[k] = o[k]; $(id).checked = o[k]; }
+      if (["1", "5", "15", "phase", "end"].includes(o.hz)) { OPT.hz = o.hz; $("oHz").value = o.hz; $("oEv").disabled = o.hz === "1"; }
+      if ([1, 3, 5, 10].includes(o.every)) { OPT.every = o.every; $("oEv").value = String(o.every); }
+      if (typeof o.follow === "boolean") { CAM.follow = o.follow; syncFollow(); }
+    }
+  } catch (e) {}
+  document.querySelector(".opts").addEventListener("change", saveOpts);
+  $("bFollow").addEventListener("click", saveOpts);
+}
 $("zIn").onclick = () => { zoomCam(0.8); redraw3(); };
 $("zOut").onclick = () => { zoomCam(1.25); redraw3(); };
 // phím giữ liên tục: vòng lặp theo khung hình, dt-based nên mượt và không phụ thuộc tốc độ lặp phím của hệ điều hành

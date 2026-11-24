@@ -19,6 +19,8 @@ import {
 import {
   Bookmark,
   Download,
+  ChevronLeft,
+  ChevronRight,
   Expand,
   FlaskConical,
   RefreshCw,
@@ -37,6 +39,11 @@ import {
   ZONE_FILTERS,
 } from "../studio/replayFilters";
 
+// Tốc độ phát người dùng đã chọn trong khung replay (lưu localStorage replaySpeed), ưu tiên hơn tốc độ mặc định trong Settings
+const savedSpeed = () => {
+  const v = Number(localStorage.getItem("replaySpeed"));
+  return [0.1, 0.25, 0.5, 1, 1.5, 2, 3, 4].includes(v) ? v : undefined;
+};
 export default function ReplayScreen() {
   const {
     route,
@@ -58,6 +65,11 @@ export default function ReplayScreen() {
   // Bộ lọc danh sách episode (giống replay canvas): kết quả và vùng của vị trí hộp, lưu trên trình duyệt
   const [resultFilter, setResultFilter] = useLocalStorage({ key: "sim-studio-replay-result", defaultValue: "all" }),
     [zoneFilter, setZoneFilter] = useLocalStorage({ key: "sim-studio-replay-zone", defaultValue: "all" });
+  // Nhớ nguồn / seed / bước đang xem: mở lại Replay (không kèm tham số) thì quay về đúng chỗ
+  const [lastView, setLastView] = useLocalStorage<{ source: string; episode: number; step: number } | null>({
+    key: "sim-studio-replay-last",
+    defaultValue: null,
+  });
   const [confirmDelete, setConfirmDelete] = useState(false),
     [deleting, setDeleting] = useState(false);
   const [note, setNote] = useState(""),
@@ -103,6 +115,19 @@ export default function ReplayScreen() {
       label: item.title,
     })),
   ];
+  // Nhảy nhanh sang seed trước / sau trong danh sách đang lọc (vòng tròn), không phải mở danh sách chọn
+  const stepEpisode = (direction: number) => {
+    const list = shownEpisodes.filter((e) => e.matches);
+    if (!list.length) return;
+    const at = list.findIndex((e) => e.index === episode);
+    const next =
+      at < 0
+        ? direction > 0
+          ? list[0]
+          : list[list.length - 1]
+        : list[(at + direction + list.length) % list.length];
+    change({ episode: next.index, step: 0 });
+  };
   const change = (
     values: Record<string, string | number | undefined>,
     replace = false,
@@ -125,6 +150,21 @@ export default function ReplayScreen() {
     }
     route.navigate("replay", next, replace);
   };
+  const hasParams = !!route.params.get("source");
+  const restored = useRef(false);
+  useEffect(() => {
+    // Mở Replay không kèm tham số (menu, F5 ở #/replay): quay về nguồn / seed / bước đã xem lần trước nếu còn tồn tại
+    if (restored.current || hasParams || !sourceOptions.length) return;
+    restored.current = true;
+    const saved = lastView;
+    const target = saved && catalog.sources.find((item) => item.id === saved.source);
+    if (saved && target && saved.episode < target.episodes.length)
+      route.navigate("replay", { source: saved.source, episode: saved.episode, step: saved.step, view: mode }, true);
+  }, [hasParams, sourceOptions.length]);
+  useEffect(() => {
+    if (hasParams && !(lastView?.source === source && lastView.episode === episode && lastView.step === step))
+      setLastView({ source, episode, step });
+  }, [hasParams, source, episode, step]);
   // Only changing source/reloading replaces the document. Scrubbing is synchronized by messages.
   const iframeUrl = useMemo(
     () =>
@@ -143,7 +183,7 @@ export default function ReplayScreen() {
     source,
     episode,
     step,
-    speed: settings.defaultSpeed,
+    speed: savedSpeed() ?? settings.defaultSpeed,
     theme: colorScheme,
     autoPlay: settings.autoPlay,
     mode,
@@ -152,7 +192,7 @@ export default function ReplayScreen() {
     source,
     episode,
     step,
-    speed: settings.defaultSpeed,
+    speed: savedSpeed() ?? settings.defaultSpeed,
     theme: colorScheme,
     autoPlay: settings.autoPlay,
     mode,
@@ -175,7 +215,7 @@ export default function ReplayScreen() {
             type: "studio-replay-command",
             episode: c.episode,
             step: c.step,
-            speed: c.speed,
+            speed: savedSpeed() ?? c.speed,
             theme: c.theme,
             play: c.autoPlay,
             focus3d: c.mode === "3d",
@@ -227,7 +267,7 @@ export default function ReplayScreen() {
       frame.current?.contentWindow?.postMessage(
         {
           type: "studio-replay-command",
-          speed: settings.defaultSpeed,
+          speed: savedSpeed() ?? settings.defaultSpeed,
           theme: colorScheme,
         },
         location.origin,
@@ -301,12 +341,34 @@ export default function ReplayScreen() {
                 data={ZONE_FILTERS}
                 allowDeselect={false}
               />
-              <EpisodePicker
-                label={`Episode / seed (${shownEpisodes.filter((e) => e.matches).length}/${selectedSource.episodes.length})`}
-                items={shownEpisodes}
-                value={episode}
-                onChange={(index) => change({ episode: index, step: 0 })}
-              />
+              <Group gap={4} align="end" wrap="nowrap">
+                <Tooltip label="Seed trước (trong bộ lọc)">
+                  <ActionIcon
+                    aria-label="Seed trước"
+                    variant="default"
+                    size={36}
+                    onClick={() => stepEpisode(-1)}
+                  >
+                    <ChevronLeft size={18} />
+                  </ActionIcon>
+                </Tooltip>
+                <EpisodePicker
+                  label={`Episode / seed (${shownEpisodes.filter((e) => e.matches).length}/${selectedSource.episodes.length})`}
+                  items={shownEpisodes}
+                  value={episode}
+                  onChange={(index) => change({ episode: index, step: 0 })}
+                />
+                <Tooltip label="Seed sau (trong bộ lọc)">
+                  <ActionIcon
+                    aria-label="Seed sau"
+                    variant="default"
+                    size={36}
+                    onClick={() => stepEpisode(1)}
+                  >
+                    <ChevronRight size={18} />
+                  </ActionIcon>
+                </Tooltip>
+              </Group>
             </>
           )}
           <SegmentedControl
