@@ -20,7 +20,9 @@ def in_workspace(xy):
             and region["angle_min_deg"] - 1e-8 <= angle <= region["angle_max_deg"] + 1e-8)
 
 
-DEFAULT_SIZE, MIN_SIZE, MAX_SIZE = 0.03, 0.02, 0.06          # cạnh hộp / đường kính bóng (m)
+# cạnh hộp / đường kính bóng (m). Tối đa 4 cm: quét 45 seed, hộp 3,5 cm 45/45, 4 cm 43/45, 4,5 cm 35/45, 5 cm 24/45
+DEFAULT_SIZE, MIN_SIZE, MAX_SIZE = 0.03, 0.02, 0.04
+BOWL_FIT_MARGIN = 0.02                                        # đường kính lòng bát >= cỡ vật + 2 cm
 BOWL_WALL = 0.003                                             # nửa độ dày tường bát (m)
 DEFAULT_BOWL = {"color": "#3366d9", "radius": 0.045, "height": 0.04}   # radius = bán kính tới TÂM tường; lòng bát = radius - BOWL_WALL
 
@@ -38,6 +40,14 @@ def normalize_bowl(bowl=None):
     if not (0.03 <= cfg["radius"] <= 0.09 and 0.02 <= cfg["height"] <= 0.08):
         raise ValueError("Bát: bán kính 3-9 cm, chiều cao 2-8 cm")
     return cfg
+
+
+def check_bowl_fits(objects, bowl):
+    """Bát phải chứa được vật lớn nhất: đường kính lòng bát >= cỡ vật + BOWL_FIT_MARGIN."""
+    biggest = max((o["size"] for o in objects), default=DEFAULT_SIZE)
+    inner = 2 * (bowl["radius"] - BOWL_WALL)
+    if inner < biggest + BOWL_FIT_MARGIN - 1e-9:
+        raise ValueError(f"Bát quá nhỏ cho vật {biggest * 100:.1f} cm: cần bán kính >= {((biggest + BOWL_FIT_MARGIN) / 2 + BOWL_WALL) * 100:.1f} cm")
 
 
 def normalize_objects(objects, target_id=None):

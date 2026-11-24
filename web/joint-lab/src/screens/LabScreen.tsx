@@ -32,7 +32,7 @@ import { TopView } from "../components/TopView";
 import { SceneView } from "../components/LazySceneView";
 import { ObjectPanel } from "../components/ObjectPanel";
 import { useStudio } from "../studio/StudioContext";
-import { bowlGeoms, downloadJson, parseScene } from "../studio/scene";
+import { bowlGeoms, downloadJson, minBowlRadius, parseScene } from "../studio/scene";
 import { toBase } from "../studio/coordinates";
 export default function LabScreen() {
   const {
@@ -275,12 +275,12 @@ export default function LabScreen() {
                   <NumberInput
                     size="xs"
                     label="Bán kính (cm)"
-                    description="3 – 9"
+                    description={`${(minBowlRadius(scene.objects) * 100).toFixed(1)} – 9 (chứa được vật)`}
                     value={Number((scene.bowl.radius * 100).toFixed(1))}
                     onChange={(v) =>
-                      setScene({ ...scene, bowl: { ...scene.bowl, radius: Math.max(0.03, Math.min(0.09, Number(v) / 100 || 0.045)) } })
+                      setScene({ ...scene, bowl: { ...scene.bowl, radius: Math.max(minBowlRadius(scene.objects), Math.min(0.09, Number(v) / 100 || 0.045)) } })
                     }
-                    min={3}
+                    min={minBowlRadius(scene.objects) * 100}
                     max={9}
                     step={0.5}
                   />

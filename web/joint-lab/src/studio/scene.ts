@@ -1,7 +1,10 @@
 import type { Bowl, BowlGeom, Item, Meta, Pose, Scene } from "../types";
 import { JOINTS } from "../types";
 export const DEFAULT_SIZE = 0.03;
-export const SIZE_RANGE = [0.02, 0.06] as const;
+// Cỡ vật tối đa 4 cm: quét 45 seed, hộp 3,5 cm 45/45, 4 cm 43/45, 4,5 cm 35/45, 5 cm 24/45 (hai hàm SO-101 không ôm nổi vật lớn hơn)
+export const SIZE_RANGE = [0.02, 0.04] as const;
+// Bát phải chứa được vật: đường kính lòng bát >= cỡ vật + BOWL_FIT_MARGIN (chừa chỗ cho hai hàm kẹp khi thả)
+export const BOWL_FIT_MARGIN = 0.02;
 export const DEFAULT_BOWL: Bowl = { color: "#3366d9", radius: 0.045, height: 0.04 };
 export const BOWL_WALL = 0.003;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -21,6 +24,15 @@ export function bowlGeoms(bowl: Bowl): BowlGeom[] {
     return { type: "box", pos: [r * Math.cos(a), r * Math.sin(a), h / 2] as [number, number, number], size: [BOWL_WALL, half, h / 2] as [number, number, number], yaw: a };
   });
   return [{ type: "cylinder", pos: [0, 0, 0], size: [r, 0.003, 0], yaw: 0 }, ...walls];
+}
+// Cỡ vật lớn nhất mà bát hiện tại chứa được (m), trong SIZE_RANGE
+export function maxObjectSize(bowl: Bowl): number {
+  return clamp(2 * (bowl.radius - BOWL_WALL) - BOWL_FIT_MARGIN, SIZE_RANGE[0], SIZE_RANGE[1]);
+}
+// Bán kính bát nhỏ nhất chứa được vật lớn nhất trong cảnh (m)
+export function minBowlRadius(objects: Item[]): number {
+  const biggest = Math.max(DEFAULT_SIZE, ...objects.map((o) => o.size ?? DEFAULT_SIZE));
+  return Math.max(0.03, Math.ceil(((biggest + BOWL_FIT_MARGIN) / 2 + BOWL_WALL) * 200) / 200);
 }
 export function parseScene(input: unknown, meta: Meta): Scene {
   if (!input || typeof input !== "object")

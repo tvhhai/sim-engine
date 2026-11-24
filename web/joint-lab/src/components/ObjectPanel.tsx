@@ -12,6 +12,7 @@ import {
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type { Item, Region, Scene } from "../types";
+import { maxObjectSize } from "../studio/scene";
 import { reachable } from "../workspace";
 import { Panel } from "./Panel";
 // Màu chọn nhanh cho vật mới: đỏ, xanh, vàng (vật mới lần lượt lấy màu kế tiếp)
@@ -63,7 +64,7 @@ export function ObjectPanel({
         x: -0.1 + (scene.objects.length + i) * 0.055,
         y: 0.12,
         yaw: kind === "sphere" ? 0 : Number(yaw) || 0,
-        size: Math.max(0.02, Math.min(0.06, (Number(size) || 3) / 100)),
+        size: Math.max(0.02, Math.min(maxObjectSize(scene.bowl), (Number(size) || 3) / 100)),
       }),
     );
     onChange({ ...scene, objects: [...scene.objects, ...added] });
@@ -100,11 +101,11 @@ export function ObjectPanel({
           <NumberInput
             size="xs"
             label={kind === "sphere" ? "Đường kính (cm)" : "Cạnh hộp (cm)"}
-            description="2 – 6"
+            description={`2 – ${(maxObjectSize(scene.bowl) * 100).toFixed(1)} (theo bát)`}
             value={size}
             onChange={setSize}
             min={2}
-            max={6}
+            max={maxObjectSize(scene.bowl) * 100}
             step={0.5}
           />
         <NumberInput
@@ -259,10 +260,10 @@ export function ObjectPanel({
                   value={Number(((obj.size ?? 0.03) * 100).toFixed(1))}
                   onChange={(v) => {
                     const cm = Number(v);
-                    if (Number.isFinite(cm)) update(obj.id, { size: Math.max(0.02, Math.min(0.06, cm / 100)) });
+                    if (Number.isFinite(cm)) update(obj.id, { size: Math.max(0.02, Math.min(maxObjectSize(scene.bowl), cm / 100)) });
                   }}
                   min={2}
-                  max={6}
+                  max={maxObjectSize(scene.bowl) * 100}
                   step={0.5}
                 />
               </Group>

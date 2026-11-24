@@ -55,9 +55,10 @@ class SO101PickPlaceEnv(gym.Env):
         self.bowl_inner, self.bowl_height, self.bowl_color = config.BOWL_INNER_RADIUS, config.BOWL_HEIGHT, "#3366d9"
         self.target_type, self.target_size = "box", 2 * config.BOX_HALF     # vật cần gắp: "box" (cạnh) hoặc "sphere" (đường kính)
         if lab_objects is not None:
-            from .studio.scene import BOWL_WALL, normalize_bowl, normalize_objects, scene_model
+            from .studio.scene import BOWL_WALL, check_bowl_fits, normalize_bowl, normalize_objects, scene_model
             self.lab_objects = normalize_objects(lab_objects, target_id)
             bowl = normalize_bowl(lab_bowl)
+            check_bowl_fits(self.lab_objects, bowl)
             self.model = scene_model(self.lab_objects, bowl)
             self.bowl_inner, self.bowl_height, self.bowl_color = bowl["radius"] - BOWL_WALL, bowl["height"], bowl["color"]
             target = next(o for o in self.lab_objects if o["body"] == "box")
