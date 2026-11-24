@@ -291,17 +291,23 @@ class ScriptedPolicy(BasePolicy):
         self._place_z = self.PLACE_Z   # độ cao thả hộp vào bát
 
     def _apply_object_profile(self):
-        """Cấu hình kẹp theo VẬT cần gắp. Hộp: giữ nguyên mọi thông số đã chỉnh. Bóng: không có mặt phẳng nên không căn roll theo mặt hộp,
-        và kẹp ở đúng đường kính (đầu tay ngang tâm bóng, thấp hơn 1 mm) thay vì thấp hơn tâm 5 mm như hộp: ở độ cao của hộp hàm di động chạm
-        bóng ở nửa trên và ép bóng xuống, nên khi nhấc bóng trượt ra. Đo 43 seed bóng hỏng + 60 seed đạt: căn roll tắt + nâng 4 mm -> sửa 39/43, không hỏng thêm."""
-        if getattr(self.env, "target_type", "box") != "sphere":
+        """Cấu hình kẹp theo VẬT cần gắp (loại và cỡ). Hộp 3 cm: giữ nguyên mọi thông số đã chỉnh.
+        - Cỡ: điểm ee lệch khỏi tâm vật GRASP_SIDE_OFFSET = 7 mm + nửa cỡ (22 mm cho vật 3 cm: tâm vật nằm sát mặt hàm cố định), và độ cao kẹp
+          bám tâm vật (hộp: thấp hơn tâm 5 mm; 0,43 m ứng với hộp 3 cm), nên đổi cỡ không làm hàm cố định đè lên vật.
+        - Bóng: không có mặt phẳng nên không căn roll theo mặt hộp, và kẹp ở đúng đường kính (đầu tay ngang tâm bóng, thấp hơn 1 mm): ở độ cao của
+          hộp hàm di động chạm bóng ở nửa trên và ép bóng xuống, nên khi nhấc bóng trượt ra. Đo 43 seed bóng hỏng + 60 seed đạt: căn roll tắt + nâng 4 mm
+          -> sửa 39/43, không hỏng thêm."""
+        kind, size = getattr(self.env, "target_type", "box"), float(getattr(self.env, "target_size", 0.03))
+        if kind != "sphere" and abs(size - 0.03) < 1e-6:
             return
-        if self._profile_alt:                                   # cấu hình của hộp (dùng khi cấu hình bóng đã thử mà hỏng)
+        self.GRASP_SIDE_OFFSET = 0.007 + size / 2
+        if kind != "sphere" or self._profile_alt:               # hộp (cỡ khác 3 cm) hoặc cấu hình hộp khi cấu hình bóng đã thử mà hỏng
             self.GRASP_ALIGN = type(self).GRASP_ALIGN
-            self._grasp_z, self._pre_grasp_z = self.GRASP_Z, 0.46
+            self._grasp_z = 0.42 + size / 2 - 0.005
+            self._pre_grasp_z = self._grasp_z + 0.03
             return
         self.GRASP_ALIGN = False
-        self._grasp_z = 0.42 + self.env.target_size / 2 - 0.001
+        self._grasp_z = 0.42 + size / 2 - 0.001
         self._pre_grasp_z = self._grasp_z + 0.03
 
     def _switch_object_profile(self):
