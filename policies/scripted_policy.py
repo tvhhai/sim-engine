@@ -111,7 +111,8 @@ class ScriptedPolicy(BasePolicy):
     DRAG_TARGET = 0.33
     DRAG_LIFT = 0.004          # nhấc nhẹ khi kéo để bớt ma sát với bàn (m)
     STAGED_LIFT = True         # phase 0: nâng khớp khuỷu (3) và cổ tay lên trước, khớp vai (2) chỉ nâng sau khi cánh tay đã cao (seed 2164: vai nâng trước quét trúng bóng sát đế)
-    STAGED_LIFT_R_MAX = 0.14   # chỉ áp cho vật sát đế (r < 14 cm): xa hơn, nâng kiểu cũ vẫn ổn và nâng theo giai đoạn làm hỏng vài seed xa (đo 774 seed)
+    STAGED_LIFT_R_MAX = None   # None = áp cho mọi vị trí vật; số (m) = chỉ áp khi vật cách trục khớp 1 nhỏ hơn
+    DRAG_UP_SPHERE = 0.02      # bóng xa: kẹp xong NHẤC THẲNG lên chừng này rồi mới kéo về (kéo sát bàn bóng lăn khỏi hai hàm, seed 1019)
     STAGED_LIFT_ELBOW_DEG = 6.0
     STAGED_LIFT_MAX_STEPS = 30
     DRAG_RELEASE_STEPS = 12
@@ -255,7 +256,8 @@ class ScriptedPolicy(BasePolicy):
         self._far_roll = None           # roll cho hộp xa (đặt ở reset)
         self._far_fix_key, self._far_fix_roll = None, None   # vị trí hộp và roll đã chốt cho hộp r >= FAR_FIXED_R (xem _far_fixed_roll)
         self._pan_key, self._pan_roll = None, None   # (vị trí hộp, roll gốc) đã xét và roll thay thế cho hộp sát giới hạn khớp 1 (xem _pan_limit_roll)
-        self._drag, self._drag_n, self._drag_goal, self._dragged = None, 0, None, False   # kéo hộp xa vào trong (xem _drag_box)
+        self._drag, self._drag_n, self._drag_goal, self._dragged = None, 0, None, False
+        self._drag_goal_after = None   # kéo hộp xa vào trong (xem _drag_box)
         self._plan = None               # kế hoạch đường hạ: roll, điểm kẹp G, độ cao lơ lửng (xem _make_descent_plan)
         self._via_done = False          # phase 6 đã đi qua điểm trung gian (bát lệch quá VIA_ANGLE_DEG)
         self._tcp_goal = None
@@ -354,6 +356,7 @@ class ScriptedPolicy(BasePolicy):
         self._far_fix_key, self._far_fix_roll = None, None
         self._pan_key, self._pan_roll = None, None
         self._drag, self._drag_n, self._drag_goal, self._dragged = None, 0, None, False
+        self._drag_goal_after = None
         self._plan = None
         self._tcp_goal = None
         # Hộp nằm ngoài giới hạn góc hoặc bán kính gắp: không thử gắp, về home ngay (phase 10) thay vì chờ hết hạn từng phase
@@ -445,7 +448,7 @@ class ScriptedPolicy(BasePolicy):
         # Nhấc thẳng lên từ home (giữ nguyên x, y; chỉ đổi z)
         self._gripper_target = 1.0
         target = np.array([self._home_ee[0], self._home_ee[1], self._safe_z])
-        if self.STAGED_LIFT and self._phase_step < self.STAGED_LIFT_MAX_STEPS and self._box_pan_r() < self.STAGED_LIFT_R_MAX:
+        if self.STAGED_LIFT and self._phase_step < self.STAGED_LIFT_MAX_STEPS and (self.STAGED_LIFT_R_MAX is None or self._box_pan_r() < self.STAGED_LIFT_R_MAX):
             q = self._solve_ik(target)
             now = self.data.qpos[self._qpos_adr]
             if abs(float(now[2] - q[2])) > math.radians(self.STAGED_LIFT_ELBOW_DEG):
@@ -687,11 +690,25 @@ class ScriptedPolicy(BasePolicy):
             r_t = r - (self._box_pan_r() - self.DRAG_TARGET)                 # tay dời đúng quãng hộp cần dời
             self._drag_goal = np.array([*(pan + v * (r_t / r)), ee_pos[2] + self.DRAG_LIFT])
             self._drag, self._dragged = "pull", True
+            if getattr(self.env, "target_type", "box") == "sphere" and self.DRAG_UP_SPHERE:
+                self._drag = "up"                                              # bóng: nhấc lên trước, kéo về sau
+                self._drag_goal_after = self._drag_goal + np.array([0, 0, self.DRAG_UP_SPHERE - self.DRAG_LIFT])
+                self._drag_goal = np.array([ee_pos[0], ee_pos[1], ee_pos[2] + self.DRAG_UP_SPHERE])
+        if self._drag == "up":
+            self._gripper_target = -1.0
+            self._move_toward(self._drag_goal, ee_pos, threshold=0.006, timeout_steps=20)
+            if self._phase != 5 or self.last_exit:
+                self._phase, self._phase_step, self.last_exit = 5, 0, None
+                self._drag, self._drag_goal = "pull", self._drag_goal_after
+            return True
         if self._drag == "pull":
             self._gripper_target = -1.0
             self._move_toward(self._drag_goal, ee_pos, threshold=0.006, timeout_steps=120)
             if self._phase != 5 or self.last_exit:                            # tới nơi hoặc hết hạn: ở lại phase 5, sang nhả
                 self._phase, self._phase_step = 5, 0
+                if self._drag_goal_after is not None and self.env._grasped:   # bóng đã được mang trên không và vẫn đang kẹp: nhấc tiếp luôn, không nhả gắp lại
+                    self._drag, self._drag_goal_after, self.last_exit = None, None, None
+                    return True
                 self._drag, self._drag_n = "release", 0
             return True
         if self._drag == "release":
