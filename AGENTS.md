@@ -1,0 +1,71 @@
+# sim-engine: hướng dẫn cho agent
+
+Mô phỏng MuJoCo cánh tay SO-101 gắp vật bỏ vào bát. Fork của `RajatDandekar/sim-engine`. Làm việc trên nhánh `my-work`, giữ `main` giống
+upstream. Người dùng nói tiếng Việt: trả lời, comment và docstring viết tiếng Việt; tên biến, commit message viết tiếng Anh.
+
+## Chạy và kiểm tra
+
+Đứng ở thư mục cha của `sim-engine/` (gói Python tên `sim_engine`). Python: `C:/Users/Admin/.venvs/sim-engine/Scripts/python.exe`.
+
+```bash
+python -m pytest                                   # trong sim-engine/: test Python
+python -m sim_engine.studio                        # Studio + Lab: http://127.0.0.1:8765
+python -m sim_engine.tools.make_replay             # replay chuẩn -> results/replay.json
+python -m sim_engine.tools.object_replay --kind sphere   # replay bóng (mặc định 4 cm)
+cd web/joint-lab && pnpm install && pnpm build     # build Studio vào static/studio (luôn dùng pnpm)
+pnpm test                                          # test giao diện (vitest)
+```
+
+## Bản đồ thư mục
+
+| Đường dẫn | Vai trò | Ghi chú |
+|---|---|---|
+| `env.py`, `config.py`, `box_sampling.py`, `paths.py` | Env Gymnasium, hằng số, vị trí vật theo seed, đường dẫn | Mọi hằng số dùng chung ở `config.py` |
+| `assets/` | MJCF + mesh SO-101, bàn, hộp, bát | Theo quy ước MuJoCo Menagerie |
+| `policies/` | `scripted_policy.py` (V1), `scripted_v2.py`, `scripted_hybrid.py` (mặc định) + khung MLP/ACT/Diffusion/SmolVLA | Policy viết tay = bộ sinh dữ liệu demo |
+| `tools/` | CLI chẩn đoán: replay, chấm seed, quét vùng gắp, xem từng bước | `python -m sim_engine.tools.<tên>` |
+| `workflows/` | Ghi demo (HDF5), train, eval | `python -m sim_engine record|train|eval` |
+| `studio/` | Máy chủ Python của Studio (API, chạy Lab, lịch sử chạy) | |
+| `web/joint-lab/` | Mã nguồn giao diện Studio (React, Mantine, Three.js) | Sửa ở đây, không sửa `static/studio/` |
+| `static/studio/` | Bản build của `web/joint-lab` | Sinh ra bởi `pnpm build` |
+| `static/replay/` | Trang replay canvas cũ, Studio nhúng qua iframe + `studio_bridge.js` | |
+| `results/` | Dữ liệu sinh ra có commit: quét vùng, seed replay (`replay_pins.json`), seed theo dõi (`object_pins.json`) | `replay.*`, `replays/`, `studio/` chỉ ở máy |
+| `datasets/`, `outputs/` | Dataset và checkpoint huấn luyện | Bỏ qua trong git |
+
+Kế hoạch phần AI (theo cách LeRobot và các repo SO-101 sim tổ chức), thêm khi bắt đầu:
+
+```
+learning/                      # cầu nối sang LeRobot, chỉ chứa mã
+    lerobot_env.py             # bọc env: observation.state, observation.images.{front,wrist}, action (6 chiều chuẩn LeRobot)
+    record_dataset.py          # chạy policy viết tay, CHỈ giữ ván thành công, ghi LeRobotDataset vào datasets/<repo_id>/
+    eval_policy.py             # chạy checkpoint LeRobot trên bộ seed cố định, so với policy viết tay, ghi replay
+    configs/act_box4.yaml      # tham số train (policy, dataset, số bước)
+datasets/<repo_id>/            # LeRobotDataset v3 (gitignore)
+outputs/train/<run>/           # checkpoint của lerobot-train (gitignore)
+```
+
+## Quy tắc làm việc
+
+- **Đánh giá thay đổi policy bằng quét cả bộ seed**, không bằng một seed. Bộ chuẩn: seed 0-199, `config.BOX_FIXED_SEEDS` >= 200, 2000-2499
+  (774 seed). Báo số trước/sau cho hộp và bóng, liệt kê seed mới hỏng và mới sửa.
+- **Sửa theo yêu cầu thì giữ lại**, kể cả khi làm hỏng vài seed khác: ghi seed hỏng vào danh sách theo dõi rồi điều tra dần, không âm thầm
+  bỏ thay đổi. Seed đã sửa vẫn phải xem lại được trong replay (`results/object_pins.json`, `results/replay_pins.json`).
+- Điều tra lỗi theo `systematic-debugging`: dựng lại ván, in timeline phase / tiếp xúc (`tools/trace_episode.py`, `Recorder` trong
+  `tools/make_replay.py`), tìm nguyên nhân gốc trước khi sửa.
+- Thông số mới của policy là hằng số lớp có comment ghi lý do và số đo (seed, tỉ lệ trước/sau).
+- Giới hạn Lab: vật 2-4 cm (hai hàm SO-101 không ôm nổi vật lớn hơn: hộp 4,5 cm chỉ 35/45); lòng bát >= cỡ vật + 2 cm. Kiểm tra ở cả
+  `studio/scene.py` và `web/joint-lab/src/studio/scene.ts`.
+- Nhiều agent có thể sửa cùng lúc: trước khi commit xem `git diff`, chỉ stage phần của mình (lọc hunk), không commit bản build lẫn việc dở
+  của người khác.
+- Commit nhỏ theo từng tính năng, push lên `my-work`. Không thêm dòng Co-Authored-By.
+
+## Tham khảo
+
+- [LeRobot](https://github.com/huggingface/lerobot): định dạng dataset, `lerobot-record`, `lerobot-train`, ACT / Diffusion / SmolVLA.
+- [Soarm101_Mujoco](https://github.com/asdqwe9501/Soarm101_Mujoco): expert viết tay -> dữ liệu -> SmolVLA, công cụ phân tích kẹp hỏng.
+- [SinfonIA SO-101 MuJoCo](https://github.com/SinfonIAUniandes/lerobot_robot_so101_mujoco): bọc sim thành `Robot` của LeRobot.
+- [SO101 SimStudio](https://github.com/rocPAI-Forge/so101-simstudio): chia labs / configs / tools / tests.
+- [so101-nexus](https://github.com/johnsutor/so101-nexus): bộ env nhiều nhiệm vụ đăng ký Gymnasium, PPO + BC.
+- [Buttergipfeli/robotics](https://github.com/Buttergipfeli/robotics): expert -> ACT chỉ từ dữ liệu sim -> chạy trên SO-101 thật.
+- [so101-policy-lab](https://github.com/noah-wardlow/so101-policy-lab): expert, ACT chạy trong trình duyệt, so sánh nhiều policy cùng cảnh.
+- [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie): quy ước MJCF và mesh.

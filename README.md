@@ -8,6 +8,72 @@ Simulate a SO-101 robot arm performing pick-and-place tasks. Record demonstratio
 
 ---
 
+## Bản fork này (tvhhai/sim-engine)
+
+Repo này là **fork** của [RajatDandekar/sim-engine](https://github.com/RajatDandekar/sim-engine) (remote `upstream`).
+Mọi việc của bản fork nằm ở nhánh **`my-work`**; nhánh `main` được giữ giống bản gốc để dễ kéo cập nhật từ upstream.
+Nút "Compare & pull request" trên GitHub chỉ là gợi ý mở PR khi vừa push một nhánh: không cần bấm. Khi muốn `my-work` thành bản
+chính thì mở PR `my-work` -> `main` **trong chính repo này** (chú ý chọn base repository là `tvhhai/sim-engine`, không phải repo gốc).
+
+### Thư mục
+
+| Thư mục | Là gì |
+|---|---|
+| `env.py`, `config.py`, `box_sampling.py`, `paths.py` | Môi trường MuJoCo (Gymnasium), hằng số, vị trí hộp theo seed, đường dẫn dùng chung |
+| `assets/` | Mô hình MJCF và mesh của SO-101, bàn, hộp, bát |
+| `policies/` | Policy: viết tay (`scripted_policy` V1, `scripted_v2`, `scripted_hybrid` = mặc định) và khung cho MLP / ACT / Diffusion / SmolVLA |
+| `tools/` | Công cụ dòng lệnh: replay, chấm seed, quét vùng gắp, xem từng bước, viewer |
+| `workflows/` | Ghi dữ liệu demo (HDF5), huấn luyện, đánh giá (`python -m sim_engine record/train/eval`) |
+| `app.py`, `ui/` | Giao diện OpenCV gốc của upstream (menu, ghi demo bằng tay) |
+| `studio/` | **Máy chủ Python** của Sim Studio: API, chạy Lab, lưu lịch sử chạy (`python -m sim_engine.studio`) |
+| `web/joint-lab/` | **Mã nguồn** giao diện Studio (React + Mantine + Three.js, build bằng pnpm) |
+| `static/` | File tĩnh máy chủ phát ra: `static/studio/` = bản **build** của `web/joint-lab` (sinh ra, không sửa tay); `static/replay/` = trang replay canvas cũ (Studio nhúng lại) |
+| `results/` | Dữ liệu sinh ra: quét vùng gắp, danh sách seed replay, seed theo dõi (`object_pins.json`). `replay.*`, `replays/`, `studio/` chỉ ở máy, không commit |
+| `docs/` | Hướng dẫn tiếng Việt và hình |
+| `tests/` | Kiểm thử (`python -m pytest`) |
+
+### Lệnh hay dùng
+
+```bash
+python -m sim_engine.studio                                   # Studio + Lab ở http://127.0.0.1:8765
+python -m sim_engine.tools.make_replay                        # replay chuẩn (results/replay.json)
+python -m sim_engine.tools.object_replay --kind sphere        # replay bóng 4 cm: seed hỏng + seed theo dõi + đối chứng
+python -m sim_engine.tools.select_seeds                       # chấm lại và chọn seed cho replay
+python -m sim_engine record -n 50                             # ghi dữ liệu demo bằng policy viết tay
+```
+
+### Policy viết tay hiện tại (mặc định `scripted_hybrid`)
+
+V1 (`ScriptedPolicy`, IK DLS, phase 0-11) chạy trước; V1 bỏ cuộc mà vật còn trên bàn trong tầm thì V2 (planner) gắp tiếp. Các bước chính:
+nâng tay từ home (khuỷu + cổ tay trước, vai sau) -> tới trên vật ở độ cao tới được -> hạ theo kế hoạch (roll khoá song song mặt hộp,
+tránh bát) -> kẹp -> nhấc (vật sát đế thì dời ra ngoài khi nhấc; vật xa r >= 40 cm thì kéo vào: hộp kéo trượt rồi nhả gắp lại, bóng nhấc
+2 cm rồi mang trên không) -> mang tới bát -> hạ, thả -> rút lên, chờ vật nằm yên, rơi ra ngoài thì gắp lại (tối đa 2 lần) -> về home.
+Hồ sơ theo vật: bóng kẹp ngang tâm, hộp kẹp thấp hơn tâm 5 mm; khoảng lệch kẹp = 7 mm + nửa cỡ vật.
+
+Quét 774 seed (0-199, seed cố định >= 200, 2000-2499), vật đặt đúng vị trí hộp của từng seed:
+
+| Bộ | Thành công | Hỏng |
+|---|---|---|
+| Env chuẩn, hộp 3 cm | 767 / 774 (99,1 %) | 245, 1016, 1018, 1022, 2101, 2325, 2428 |
+| Bóng 3 cm | 765 / 774 (98,8 %) | 8, 23, 152, 209, 214, 1014, 1016, 2325, 2326 |
+| Hộp 4 cm | 729 / 774 (94,2 %) | 45 seed, phần lớn kẹp ở tầm xa hoặc hàm cố định đè lên hộp |
+| Bóng 4 cm | 763 / 774 (98,6 %) | 55, 152, 201, 205, 209, 1015, 1016, 1018, 2263, 2317, 2326 |
+
+Theo cỡ hộp (45 seed): 2 cm 44, 2,5 cm 44, 3 cm 45, 3,5 cm 45, 4 cm 43, 4,5 cm 35, 5 cm 24. Lab vì vậy giới hạn vật 2-4 cm.
+
+### Sang policy học (AI)
+
+Policy viết tay dùng làm "chuyên gia" sinh dữ liệu: chỉ giữ ván thành công, ghi thành LeRobotDataset (ảnh camera trước + cổ tay, góc
+khớp, action), train ACT trước rồi SmolVLA bằng LeRobot, đánh giá trên cùng bộ seed. Bố cục dự kiến:
+
+```
+learning/                  # mã cầu nối LeRobot: lerobot_env.py, record_dataset.py, eval_policy.py, configs/
+datasets/<repo_id>/        # LeRobotDataset (không commit)
+outputs/train/<run>/       # checkpoint (không commit)
+```
+
+---
+
 ## Table of Contents
 
 1. [Quick Start](#quick-start)
@@ -28,7 +94,7 @@ Simulate a SO-101 robot arm performing pick-and-place tasks. Record demonstratio
 ### 1. Install
 
 ```bash
-git clone https://github.com/RajatDandekar/sim-engine.git
+git clone -b my-work https://github.com/tvhhai/sim-engine.git
 cd sim-engine
 pip install -e .
 ```
@@ -53,7 +119,7 @@ That's it. The UI will open.
 ### Sim Studio: replay, Lab, run history and settings
 
 ```bash
-python -m sim_engine.joint_lab
+python -m sim_engine.studio
 ```
 
 Open http://127.0.0.1:8765. The React Studio uses Mantine UI and Three.js,
@@ -401,9 +467,8 @@ The training pipeline automatically:
 
 ### File Structure
 
-- `tools/` contains replay generation, seed selection, diagnostics, and viewers.
-- `workflows/` contains demonstration recording, training, and evaluation.
-- Top-level command modules forward to these packages so existing `python -m sim_engine.<command>` examples still work.
+- `tools/` contains replay generation, seed selection, diagnostics, and viewers (`python -m sim_engine.tools.<name>`).
+- `workflows/` contains demonstration recording, training, and evaluation (`python -m sim_engine record|train|eval`).
 
 ```
 sim_engine/
@@ -414,8 +479,8 @@ sim_engine/
     env.py                     # SO101PickPlaceEnv (Gymnasium environment)
     renderer.py                # MuJoCo offscreen camera rendering
     dataset.py                 # HDF5 recorder + PyTorch Dataset loader
-    ik_controller.py           # Jacobian-based inverse kinematics
     tools/                     # Debugging, replay, and viewers
+        object_replay.py       # replay with a ball / other-size box at each seed's box position
         viewer.py
         check_scripted.py
         make_replay.py
@@ -450,7 +515,9 @@ sim_engine/
     policies/
         base.py                # BasePolicy abstract class
         random_policy.py       # Random actions (baseline)
-        scripted_policy.py     # Waypoint IK controller (generates demos)
+        scripted_policy.py     # V1: waypoint IK controller (phases 0-11)
+        scripted_v2.py         # V2 planner, takes over when V1 gives up
+        scripted_hybrid.py     # default policy: V1 then V2
         mlp_policy.py          # Simple MLP (fully working example)
         act_policy.py          # ACT skeleton with TODOs
         diffusion_policy.py    # Diffusion Policy skeleton with TODOs
