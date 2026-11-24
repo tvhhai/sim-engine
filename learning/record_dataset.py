@@ -21,8 +21,8 @@ Muốn dữ liệu khác thì sửa ở đâu:
     - thêm ván / đổi vật / cỡ vật      -> tham số dòng lệnh (--episodes, --kind, --size)
     - thầy giáo gắp sai hay vụng       -> sửa policies/ (AI giỏi nhất cũng chỉ ngang thầy)
     - muốn ghi thêm ván ở vùng xa      -> đổi cách chọn seed trong main() (hiện chạy seed liên tiếp)
-    - thêm nhiễu để AI học cách sửa sai -> run_episode() (vd thỉnh thoảng cộng nhiễu vào action trước env.step, nhưng vẫn ghi action
-                                          ĐÚNG của thầy vào khung hình)
+    - camera / toạ độ vật đưa vào        -> --cameras top,wrist   --env-state
+    - thêm nhiễu để AI học cách sửa sai -> --noise 0.02 (đẩy tay lệch, ghi lệnh ĐÚNG của thầy ở chỗ lệch; xem run_episode)
 """
 
 import argparse
@@ -32,27 +32,45 @@ import json
 import time
 from pathlib import Path
 
+import numpy as np
+
 from .. import config
 from ..policies import default_policy
 from . import sim_setup
 
+# Nhiễu khi ghi (--noise): action là thang [-1, 1] trên cả biên độ khớp (~3,8 rad), nên 0,02 ~ 2 độ ~ 1-1,5 cm ở đầu kẹp.
+NOISE_START_PROB = 0.03                         # mỗi bước có 3 % khả năng bắt đầu một lần đẩy lệch (~1 lần mỗi 33 bước)
+NOISE_STEPS = 10                                # mỗi lần đẩy lệch kéo dài 10 bước (~0,3 s) để tay lệch thật, rồi thầy kéo về
 
-def run_episode(seed, kind, size, color, task):
+
+def run_episode(seed, kind, size, color, task, cameras=sim_setup.DEFAULT_CAMERAS, env_state=False, noise=0.0, rng=None):
     """Chạy thầy giáo một ván có ảnh. Trả (thành công?, danh sách khung hình).
 
     Khung hình chưa được ghi vào dataset ngay: phải chờ hết ván mới biết thành công hay không.
+    noise > 0: thỉnh thoảng làm tay lệch khỏi đường thầy chọn (xem NOISE_*), nhưng khung hình vẫn ghi lệnh ĐÚNG của thầy ở
+    trạng thái đã lệch đó -> AI được thấy "lệch rồi thì sửa thế này" (ý tưởng của DART / DAgger).
     """
-    env, options = sim_setup.make_env(seed, kind, size, color)   # env có hộp ở vị trí của seed, bật render ảnh
+    env, options = sim_setup.make_env(seed, kind, size, color, images=bool(cameras))   # env có hộp ở vị trí của seed
     policy = default_policy(env)                                  # thầy giáo: policy viết tay mặc định (scripted_hybrid)
     obs, _ = env.reset(seed=seed, options=options)                # đặt tay về home, đặt hộp và bát; obs = quan sát đầu tiên
     policy.reset()                                                # xoá trạng thái cũ của thầy (phase về 0)
-    frames, info = [], {}
-    for _ in range(config.MAX_EPISODE_STEPS):                     # tối đa 500 bước (~16 giây)
+    frames, info, push = [], {}, None
+    for t in range(config.MAX_EPISODE_STEPS):                     # tối đa 500 bước (~16 giây)
         with contextlib.redirect_stdout(io.StringIO()):           # thầy giáo in nhiều dòng debug; nuốt đi cho log gọn
             action = policy.select_action({"state": obs["state"], "images": {}, "task": task})
             # thầy KHÔNG nhìn ảnh ("images": {}): nó đọc vị trí hộp thẳng từ mô phỏng. Ảnh chỉ để ghi lại cho AI học.
-        frames.append(sim_setup.to_frame(obs, action, task))     # ghi cặp (quan sát TRƯỚC khi làm, lệnh thầy ra) = 1 ví dụ
-        obs, _, _, truncated, info = env.step(action)             # làm lệnh đó: mô phỏng chạy tiếp 1 bước, trả quan sát mới
+        # ghi cặp (quan sát TRƯỚC khi làm, lệnh thầy ra) = 1 ví dụ
+        frames.append(sim_setup.to_frame(env, obs, action, task, cameras, env_state))
+        executed = action
+        if noise > 0 and not env._grasped:                       # chỉ đẩy lệch lúc chưa kẹp: lệch lúc đang cầm dễ làm rơi vật
+            if push is None and rng.random() < NOISE_START_PROB:
+                push = [rng.normal(0, noise, 5), NOISE_STEPS]    # độ lệch cho 5 khớp, giữ trong NOISE_STEPS bước
+            if push is not None:
+                executed = action.copy()
+                executed[:5] = action[:5] + push[0]               # làm lệnh đã lệch; khung hình vẫn ghi lệnh đúng của thầy
+                push[1] -= 1
+                push = push if push[1] > 0 else None
+        obs, _, _, truncated, info = env.step(executed)           # làm lệnh: mô phỏng chạy tiếp 1 bước, trả quan sát mới
         if truncated or policy._phase > 10:                       # hết giờ, hoặc thầy đã xong (phase 11 = đã về home)
             break
     _, info, _ = env.settle(action, info)                         # chờ hộp nằm yên trong bát rồi mới chấm thành công
@@ -71,7 +89,13 @@ def main():
     parser.add_argument("--seed-start", type=int, default=sim_setup.TRAIN_SEED_START)
     parser.add_argument("--root", required=True, help="thư mục dataset (chưa tồn tại)")
     parser.add_argument("--repo-id", default="local/so101_dataset")   # tên dataset kiểu Hugging Face; "local/..." = không đẩy lên mạng
+    parser.add_argument("--cameras", default=",".join(sim_setup.DEFAULT_CAMERAS),
+                        help="camera đưa vào dataset, cách nhau dấu phẩy: front, wrist, top; để trống = không ảnh")
+    parser.add_argument("--env-state", action="store_true", help="thêm toạ độ thật của vật và bát (thí nghiệm, robot thật không có)")
+    parser.add_argument("--noise", type=float, default=0.0, help="độ lệch đẩy tay khi ghi (vd 0.02); 0 = không đẩy")
     args = parser.parse_args()
+    cameras = tuple(c for c in args.cameras.split(",") if c)
+    rng = np.random.default_rng(0)                                # nhiễu cố định theo seed 0: chạy lại ra cùng dataset
 
     # Import LeRobot ở trong hàm (không ở đầu file): môi trường Studio không cài LeRobot vẫn import được module này.
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
@@ -79,12 +103,12 @@ def main():
     task = sim_setup.TASKS[args.kind].format(color=args.color_name)   # vd "Pick up the red box and place it in the bowl"
     # Tạo dataset rỗng. robot_type chỉ là nhãn mô tả. use_videos=True: ảnh lưu thành mp4.
     # streaming_encoding=True: nén video song song trong lúc ván kế đang chạy (nhanh hơn ~5 lần so với nén sau mỗi ván).
-    ds = LeRobotDataset.create(args.repo_id, sim_setup.FPS, sim_setup.features(), root=args.root, robot_type="so101_follower",
-                               use_videos=True, streaming_encoding=True)
+    ds = LeRobotDataset.create(args.repo_id, sim_setup.FPS, sim_setup.features(cameras, args.env_state), root=args.root,
+                               robot_type="so101_follower", use_videos=bool(cameras), streaming_encoding=bool(cameras))
     log, seed, t0 = {"kept": [], "failed": []}, args.seed_start, time.time()
     try:
         while len(log["kept"]) < args.episodes:                  # chạy tới khi đủ số ván THÀNH CÔNG
-            ok, frames = run_episode(seed, args.kind, args.size, args.color, task)
+            ok, frames = run_episode(seed, args.kind, args.size, args.color, task, cameras, args.env_state, args.noise, rng)
             if ok:
                 for frame in frames:
                     ds.add_frame(frame)                           # đưa từng khung vào bộ đệm của ván hiện tại
@@ -99,7 +123,8 @@ def main():
     finally:
         # finally: chạy cả khi bấm Ctrl+C giữa chừng -> các ván đã lưu vẫn dùng được.
         ds.finalize()                                             # đóng file video / parquet, ghi thống kê vào meta/
-        log.update(kind=args.kind, size=args.size, task=task, seconds=round(time.time() - t0))
+        log.update(kind=args.kind, size=args.size, task=task, cameras=list(cameras), env_state=args.env_state, noise=args.noise,
+                   seconds=round(time.time() - t0))
         (Path(args.root) / "record_log.json").write_text(json.dumps(log, indent=1), encoding="utf-8")
     print(f"Xong: {len(log['kept'])} ván, {sum(k['frames'] for k in log['kept'])} khung hình -> {args.root}")
 
