@@ -87,4 +87,4 @@ giữ danh sách seed theo dõi; seed hỏng mới tự được thêm vào.
 
 Dùng policy viết tay làm chuyên gia: chỉ giữ ván thành công, ghi thành LeRobotDataset (camera trước + cổ tay, góc khớp, action), train
 ACT rồi SmolVLA bằng LeRobot, đánh giá trên cùng bộ seed. Mã sẽ đặt ở `learning/`, dữ liệu ở `datasets/`, checkpoint ở `outputs/train/`
-(hai thư mục sau không commit). Quy ước cho agent: [`AGENTS.md`](AGENTS.md).
+(hai thư mục sau không commit). Lộ trình, thư mục, gặp lỗi thì làm gì, từ điển: [`docs/so_tay_ai.md`](docs/so_tay_ai.md). Quy ước cho agent: [`AGENTS.md`](AGENTS.md).
