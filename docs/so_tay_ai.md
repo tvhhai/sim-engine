@@ -70,7 +70,37 @@ Notebook tự làm: nối Drive (`MyDrive/vla`), clone nhánh `my-work`, cài Le
 train, đánh giá 100 seed, chép replay lên Drive. Checkpoint lưu thẳng lên Drive nên Colab ngắt cũng không mất; ô 6b train tiếp.
 
 Lưu ý: code Colab lấy từ GitHub, nên sửa code ở máy nhà phải **push** trước rồi chạy lại ô 3 (`git pull`).
-Trên Colab không có màn hình, MuJoCo vẽ ảnh bằng `MUJOCO_GL=egl` (notebook đã đặt sẵn).
+Trên Colab không có màn hình, MuJoCo vẽ ảnh bằng `MUJOCO_GL=egl` **và** file khai báo driver EGL của NVIDIA (ô 3 tự tạo). Thiếu
+file đó MuJoCo vẽ bằng CPU (`llvmpipe`): 0,85 s mỗi ảnh, ghi một ván mất 150 s thay vì 4,5 s.
+Để qua đêm: dùng ô 9 (chạy nền bằng `nohup`), không xếp hàng ô 5-6-7: trang mất kết nối là hàng chờ ô bị mất.
+Đo được (T4 High-RAM, 2,7 đơn vị / giờ): ghi 200 ván ~15 phút; train batch 32 được 1,7 bước / giây (30 000 bước ~4 giờ 50 phút).
+A100 và L4 thường hết máy; T4 dễ có máy nhất.
+
+### Kết quả các thí nghiệm ACT (hộp 4 cm, 2026-11-24/25)
+
+Chấm trên 100 seed cách đều trong bộ 774 seed (policy viết tay: ~94 %; gần 99,6 %, xa 81,5 %). Chạy trên GPU nên mỗi lần chấm lệch
+vài % (v1: 26 rồi 19 cùng một checkpoint); chênh dưới ~5 % chưa kết luận được.
+
+| Thí nghiệm (config) | Đầu vào | Học (batch x bước) | Thành công | Gần r<37 | Xa r>=37 |
+|---|---|---|---|---|---|
+| `act_box4_v1` | camera trước + cổ tay | 8 x 20k | 19-26 % | 37 % | 3 % |
+| `act_box4_wrist` | chỉ camera cổ tay | 8 x 20k | **3 %** | 3 % | 3 % |
+| `act_box4_state` | toạ độ thật vật, bát (không ảnh) | 8 x 20k | 10-17 % (30 seed) | | |
+| `act_box4_state_long` | toạ độ thật vật, bát | 32 x 40k | 39-42 % | 49 % | 19 % |
+| `act_box4_topwrist` | camera trên cao + cổ tay | 8 x 20k | **36-39 %** | 40 % | 28 % |
+| `act_box4_topwrist_noise` | như trên, dữ liệu có đẩy lệch | 8 x 20k | 19 % | 19 % | 19 % |
+| `act_box4_topwrist` (Colab) | camera trên cao + cổ tay | 32 x 30k | **40 %** | 49 % | 22 % |
+
+Rút ra:
+1. **Camera phải thấy vật ngay từ đầu ván.** Ở home camera cổ tay không thấy hộp: chỉ cổ tay 3 %. Camera trước thấy hộp ~6x6 điểm
+   ảnh: 19-26 %, vùng xa 3 %. Camera trên cao (hộp ~12x12 điểm ảnh): 36-40 %, vùng xa 22-28 %.
+2. **Train thiếu.** Checkpoint 5k / 10k / 20k của v1: 0 / 2 / 6 trên 30 seed. Bản toạ độ: 8 x 20k được 10-17 %, 32 x 40k được 39-42 %.
+3. **Biết chính xác vật ở đâu vẫn chỉ ~40 %.** Lỗi còn lại ở điều khiển: AI chậm hơn thầy, nhả kẹp theo "thời gian" chứ chưa theo
+   "vị trí" (seed 3000: nhả khi hộp còn cách tâm bát 2-3 cm, cao 4 cm). Cần thêm dữ liệu và học lâu hơn nữa.
+4. **Đẩy lệch kiểu đơn giản làm tệ đi (36 -> 19 %).** ACT đoán chuỗi 50 action; trong dữ liệu có nhiễu, các action sau là phản ứng
+   với những lần bị đẩy ngẫu nhiên tiếp theo, mạng không đoán được. Muốn dạy sửa sai thì nên dùng DAgger (cho AI tự chạy, thầy sửa
+   ở chỗ AI lệch) thay vì đẩy ngẫu nhiên.
+5. **Đi một mạch 50 action** (`--n-action-steps 50`) thường bằng hoặc tốt hơn đoán lại sau 20 bước; đoán lại sau 5 bước tệ hẳn.
 
 ## 3. Thư mục nào làm gì
 
