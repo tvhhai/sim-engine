@@ -110,6 +110,10 @@ class ScriptedPolicy(BasePolicy):
     DRAG_R = 0.40
     DRAG_TARGET = 0.33
     DRAG_LIFT = 0.004          # nhấc nhẹ khi kéo để bớt ma sát với bàn (m)
+    STAGED_LIFT = True         # phase 0: nâng khớp khuỷu (3) và cổ tay lên trước, khớp vai (2) chỉ nâng sau khi cánh tay đã cao (seed 2164: vai nâng trước quét trúng bóng sát đế)
+    STAGED_LIFT_R_MAX = 0.14   # chỉ áp cho vật sát đế (r < 14 cm): xa hơn, nâng kiểu cũ vẫn ổn và nâng theo giai đoạn làm hỏng vài seed xa (đo 774 seed)
+    STAGED_LIFT_ELBOW_DEG = 6.0
+    STAGED_LIFT_MAX_STEPS = 30
     DRAG_RELEASE_STEPS = 12
     DRAG_RAISE = 0.03          # nhấc tay lên chừng này sau khi nhả rồi mới gắp lại (m)
     PAN_LIMIT_ROLL = True
@@ -441,6 +445,16 @@ class ScriptedPolicy(BasePolicy):
         # Nhấc thẳng lên từ home (giữ nguyên x, y; chỉ đổi z)
         self._gripper_target = 1.0
         target = np.array([self._home_ee[0], self._home_ee[1], self._safe_z])
+        if self.STAGED_LIFT and self._phase_step < self.STAGED_LIFT_MAX_STEPS and self._box_pan_r() < self.STAGED_LIFT_R_MAX:
+            q = self._solve_ik(target)
+            now = self.data.qpos[self._qpos_adr]
+            if abs(float(now[2] - q[2])) > math.radians(self.STAGED_LIFT_ELBOW_DEG):
+                # giai đoạn 1: khuỷu và cổ tay tới góc đích, vai (khớp 2) giữ ở tư thế home; xong mới nâng vai
+                q[1] = config.HOME_QPOS_RAD[1]
+                self._current_joint_targets = q
+                self.motion_target = (target.copy(), 0.02)
+                self._phase_step += 1
+                return
         self._move_toward(target, ee_pos, threshold=0.02)
 
     def _approach_box(self, box_pos, ee_pos):
