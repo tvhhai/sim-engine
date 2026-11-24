@@ -260,6 +260,19 @@ class Recorder:
                     names.add(mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, other))
         return sorted(n for n in names if n)
 
+    def table_points(self):
+        """Toạ độ (x, y, z) các điểm tay chạm bàn hoặc sàn, để Studio tô tím lên mặt bàn."""
+        env_bodies = {mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, n) for n in ("box", "bowl")}
+        pts = []
+        for i in range(self.data.ncon):
+            c = self.data.contact[i]
+            b1, b2 = self.model.geom_bodyid[c.geom1], self.model.geom_bodyid[c.geom2]
+            if b1 in self.skip_bodies or b2 in self.skip_bodies:
+                other = b2 if b1 in self.skip_bodies else b1
+                if other not in self.skip_bodies and other not in env_bodies:
+                    pts.append(r3(c.pos))
+        return pts[:12]
+
     def bowl_contacts(self):
         """Tên các khúc tay / ngón kẹp đang chạm bát (không tính bàn và hộp)."""
         bowl_b = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "bowl")
@@ -299,6 +312,7 @@ class Recorder:
             "ik": ik_deg,                                # 5 góc khớp đích do IK tính (độ), None nếu phase chờ
             "ie": ik_err,                                # sai số IK (m): tay dự đoán so với đích
             "jq": self.joint_deg(),                      # 5 góc khớp thật (độ)
+            "tp": self.table_points(),                   # điểm chạm bàn (toạ độ thế giới)
             "tb": self.table_contacts(),                 # khúc tay đang chạm bàn
             "cc": self.cam_contacts(),                   # khâu đang chạm camera cổ tay (vai, cánh tay trên, bàn...)
             "t": step,                                   # tổng số bước đã chạy

@@ -68,7 +68,7 @@ export type ReplayViewState = {
   camera: ViewCamera;
   target: Vec3 | null;
   lines: { points: Vec3[]; color: string; opacity: number }[];
-  contacts: { box: string[]; table: string[]; bowl: string[]; cam?: string[] };
+  contacts: { box: string[]; table: string[]; tablePts?: Vec3[]; bowl: string[]; cam?: string[] };
   playing: boolean;
   sample: PlaybackSample;
 };

@@ -231,7 +231,7 @@ let SM = p => p;                                        // ánh xạ điểm wor
 const ARMCOL = "#e8b923";
 function linkColor(fr, nm, main) {                       // đỏ = chạm hộp, cam = chạm bàn, tím = chạm bát
   if (!main) return ARMCOL;
-  return (fr.ct || []).includes(nm) ? "#e5484d" : (fr.tb || []).includes(nm) ? "#f59e0b" : touchBowl(fr, nm) ? BOWLC : ARMCOL;
+  return (fr.ct || []).includes(nm) ? "#e5484d" : (fr.tb || []).includes(nm) ? TABLEC : touchBowl(fr, nm) ? BOWLC : ARMCOL;
 }
 // Thứ tự vẽ theo tâm tam giác (painter) không phân biệt được ống kính nhỏ nhô ra khỏi mặt hộp camera với các tam giác lớn của mặt đó,
 // nên mặt hộp che mất ống kính (hình "chiếc miệng"). Ống kính (nhóm màu có cờ 2) được kéo gần người xem thêm LENS_BIAS khi sắp xếp.
@@ -266,7 +266,8 @@ function armHulls(fr, fx, fy, a, b) {              // bóng 2D của từng link
   }
   return s;
 }
-const BOWLC = "#a855f7";                              // màu nhãn "đang chạm bát"
+const BOWLC = "#ec4899";                              // màu nhãn "đang chạm bát" (hồng)
+const TABLEC = "#a855f7";                             // màu "đang chạm bàn" (tím)
 const touchBowl = (fr, nm) => (fr.bc || []).includes(nm);
 function wallCorners(g) {                             // 4 góc của tấm tường nhìn từ trên (x, y)
   const [a, c] = g.size, co = Math.cos(g.yaw), si = Math.sin(g.yaw);
@@ -286,7 +287,7 @@ function armSeg(fr, fx, fy, a, b, w, op, red, col) {
   for (let k = 0; k < A.length - 1; k++) {
     const nm = S.arm_bodies[k];                       // đoạn k nằm giữa khớp k và khớp k+1, mang tên link nm
     const hit = red && fr.ct.includes(nm), tb = red && fr.tb.includes(nm), bw = red && touchBowl(fr, nm);
-    const c = hit ? "var(--bad)" : tb ? "var(--warn)" : bw ? BOWLC : (col || "var(--arm)");
+    const c = hit ? "var(--bad)" : tb ? TABLEC : bw ? BOWLC : (col || "var(--arm)");
     s += `<line x1="${fx(A[k][0])}" y1="${fy(A[k][1])}" x2="${fx(A[k+1][0])}" y2="${fy(A[k+1][1])}" stroke="${c}" stroke-width="${red ? 2.2 : w}" stroke-linecap="round" opacity="${hit || tb || bw ? 1 : red ? .9 : op}"/>`;
   }
   if (red) for (let k = 1; k <= 5; k++)                // đánh số khớp 1..5 trên cánh tay chính
@@ -634,7 +635,7 @@ function drawInfo(fr, fs) {
     S.joints.map((jn, k) => {
       const link = S.arm_bodies[k + 1], a = fr.ik ? fr.ik[k] : null, dv = a === null ? null : a - fr.jq[k], ad = Math.abs(dv), cls = dv === null ? "" : ad > 15 ? "hlb" : ad > 5 ? "hlw" : "";
       const st = (fr.ct.includes(link) ? ' <span class="badge bad">chạm HỘP</span>' : "") +
-        (fr.tb.includes(link) ? ' <span class="badge" style="background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)">chạm bàn</span>' : "") +
+        (fr.tb.includes(link) ? ` <span class="badge" style="background:color-mix(in srgb,${TABLEC} 20%,transparent);color:${TABLEC}">chạm bàn</span>` : "") +
         (touchBowl(fr, link) ? ` <span class="badge" style="background:color-mix(in srgb,${BOWLC} 20%,transparent);color:${BOWLC}">chạm BÁT</span>` : "");
       return `<tr><td><b>${k + 1}</b></td><td title="${jn}">${JSHORT[jn] || jn}</td><td class="r mono">${a === null ? "—" : a.toFixed(1)}</td><td class="r mono">${fr.jq[k].toFixed(1)}</td><td class="r mono ${cls}">${dv === null ? "—" : (dv >= 0 ? "+" : "") + dv.toFixed(1)}</td><td class="mono">${link.replace("_link", "")}${st}</td></tr>`;
     }).join("") + `</tbody></table>`;
@@ -871,10 +872,10 @@ function draw3d(fr, fs) {
       const nm = S.arm_bodies[k], hit = main && f.ct.includes(nm), tb = main && f.tb.includes(nm), bw = main && touchBowl(f, nm);
       g.save();
       g.lineCap = "round";
-      const color = hit ? K.bad : tb ? K.warn : bw ? BOWLC : (col || K.arm);
+      const color = hit ? K.bad : tb ? TABLEC : bw ? BOWLC : (col || K.arm);
       line(A[k], A[k+1], color, main ? 2.4 : lw, main ? .95 : al);
       g.restore();
-      if (hit || tb || bw) { const m = [0,1,2].map(a => (A[k][a] + A[k+1][a]) / 2); txt(m, nm + (hit ? " CHẠM HỘP" : tb ? " chạm bàn" : " chạm BÁT"), hit ? K.bad : tb ? K.warn : BOWLC, 11, "left"); }
+      if (hit || tb || bw) { const m = [0,1,2].map(a => (A[k][a] + A[k+1][a]) / 2); txt(m, nm + (hit ? " CHẠM HỘP" : tb ? " chạm bàn" : " chạm BÁT"), hit ? K.bad : tb ? TABLEC : BOWLC, 11, "left"); }
     }
     if (main) {
       for (let k = 1; k <= 5; k++) {

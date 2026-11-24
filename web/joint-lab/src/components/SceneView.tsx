@@ -84,7 +84,7 @@ const Robot = memo(function Robot({
     [parts],
   );
   useEffect(() => {
-    // Màu khâu đang va chạm: đỏ = chạm hộp, cam = chạm bàn, tím = chạm bát, lục lam = chạm camera cổ tay (hoặc chính camera khi đang chạm).
+    // Màu khâu đang va chạm: đỏ = chạm hộp, tím = chạm bàn, hồng = chạm bát, lục lam = chạm camera cổ tay (hoặc chính camera khi đang chạm).
     // Pha thẳng vào màu vật liệu (60%) cộng phát sáng, vì cánh tay màu vàng nên chỉ phát sáng thì rất nhạt.
     const cam = contacts?.cam ?? [];
     parts.forEach((part) =>
@@ -92,9 +92,9 @@ const Robot = memo(function Robot({
         const tint = contacts?.box.includes(part.name)
           ? "#ff2d2d"
           : contacts?.table.includes(part.name)
-            ? "#ff8a00"
+            ? "#a855f7"
             : contacts?.bowl.includes(part.name)
-              ? "#b04dff"
+              ? "#ec4899"
               : cam.includes(part.name) || (cam.length > 0 && part.name === "wrist_cam_arm")
                 ? "#12d6e0"
                 : null;
@@ -324,6 +324,13 @@ export function SceneView({
             <meshBasicMaterial color="#6dc6ff" wireframe />
           </mesh>
         )}
+        {!sensor &&
+          (contacts?.tablePts ?? []).map((p, k) => (
+            <mesh key={k} position={[p[0], p[1], p[2] + 0.001]}>
+              <sphereGeometry args={[0.007, 12, 12]} />
+              <meshBasicMaterial color="#a855f7" />
+            </mesh>
+          ))}
         <Robot
           model={model}
           poses={poses}
