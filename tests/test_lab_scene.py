@@ -100,8 +100,14 @@ class ObjectAndBowlConfigTests(unittest.TestCase):
 
     def test_invalid_size_and_bowl_are_rejected(self):
         from sim_engine.studio.scene import normalize_bowl
+        # cỡ ngoài 2-4 cm (vd cảnh lưu từ trước có hộp 6 cm) được kẹp về giới hạn; cỡ không phải số thì báo lỗi
+        self.assertEqual(normalize_objects([{"id": "a", "type": "box", "x": 0, "y": 0, "yaw": 0, "size": .06}])[0]["size"], .04)
         with self.assertRaises(ValueError):
-            normalize_objects([{"id": "a", "type": "box", "x": 0, "y": 0, "yaw": 0, "size": .2}])
+            normalize_objects([{"id": "a", "type": "box", "x": 0, "y": 0, "yaw": 0, "size": float("nan")}])
         with self.assertRaises(ValueError):
             normalize_bowl({"radius": .5})
+        from sim_engine.studio.scene import check_bowl_fits
+        with self.assertRaises(ValueError):                       # bát bán kính 3 cm (lòng 5,4 cm) không chứa nổi hộp 4 cm + 2 cm chừa
+            check_bowl_fits([{"size": .04}], normalize_bowl({"radius": .03}))
+        check_bowl_fits([{"size": .04}], normalize_bowl({"radius": .033}))
         self.assertEqual(normalize_bowl(None)["radius"], .045)

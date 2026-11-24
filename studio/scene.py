@@ -66,8 +66,9 @@ def normalize_objects(objects, target_id=None):
             raise ValueError("Loại hoặc màu vật thể không hợp lệ")
         values = {key: float(obj.get(key, 0)) for key in ("x", "y", "yaw")}
         values["size"] = float(obj.get("size", DEFAULT_SIZE))          # hộp: cạnh; bóng: đường kính (m)
-        if not MIN_SIZE <= values["size"] <= MAX_SIZE:
-            raise ValueError(f"Kích thước vật phải từ {MIN_SIZE * 100:.0f} đến {MAX_SIZE * 100:.0f} cm")
+        if not math.isfinite(values["size"]):
+            raise ValueError("Kích thước vật không hợp lệ")
+        values["size"] = min(MAX_SIZE, max(MIN_SIZE, values["size"]))   # cảnh lưu từ trước có thể có vật 6 cm: kẹp về 2-4 cm thay vì báo lỗi
         if not all(math.isfinite(v) for v in values.values()):
             raise ValueError("Tọa độ và góc phải hữu hạn")
         if abs(values["x"]) > config.TABLE_HALF[0] or abs(values["y"]) > config.TABLE_HALF[1]:

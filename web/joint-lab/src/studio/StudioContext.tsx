@@ -26,7 +26,7 @@ import { constrainBowl } from "../workspace";
 import { DEFAULT_SETTINGS, parseSettings } from "./settings";
 import type { Settings } from "./settings";
 import { navigate, useRoute } from "./router";
-import { NEW_OBJECT_SIZE, parseBowl, parseScene, request } from "./scene";
+import { clampSize, NEW_OBJECT_SIZE, parseBowl, parseScene, request } from "./scene";
 const DEFAULT_POSE: Pose = {
   pan: 0,
   lift: 0,
@@ -125,7 +125,8 @@ function useStudioController() {
           p[key] = Math.max(m.limits[i][0], Math.min(m.limits[i][1], p[key]));
         });
         p.grip = Math.max(m.gclose, Math.min(m.gopen, p.grip));
-        const objects = saved?.objects || [
+        // cảnh lưu từ trước có thể có vật ngoài giới hạn hiện tại (vd hộp 6 cm): kẹp cỡ về SIZE_RANGE
+        const objects = saved?.objects?.map((o) => ({ ...o, size: clampSize(o.size) })) || [
           {
             id: "object-1",
             type: "box" as const,

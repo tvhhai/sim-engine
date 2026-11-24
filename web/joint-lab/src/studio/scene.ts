@@ -26,6 +26,11 @@ export function bowlGeoms(bowl: Bowl): BowlGeom[] {
   });
   return [{ type: "cylinder", pos: [0, 0, 0], size: [r, 0.003, 0], yaw: 0 }, ...walls];
 }
+// Cỡ vật (m) kẹp về SIZE_RANGE; thiếu hoặc không hợp lệ thì lấy DEFAULT_SIZE
+export function clampSize(size: unknown): number {
+  const v = Number(size);
+  return Number.isFinite(v) && v > 0 ? clamp(v, SIZE_RANGE[0], SIZE_RANGE[1]) : DEFAULT_SIZE;
+}
 // Cỡ vật lớn nhất mà bát hiện tại chứa được (m), trong SIZE_RANGE
 export function maxObjectSize(bowl: Bowl): number {
   return clamp(2 * (bowl.radius - BOWL_WALL) - BOWL_FIT_MARGIN, SIZE_RANGE[0], SIZE_RANGE[1]);
@@ -69,7 +74,7 @@ export function parseScene(input: unknown, meta: Meta): Scene {
       x: item.x,
       y: item.y,
       yaw: item.yaw,
-      size: Number.isFinite(item.size) ? clamp(Number(item.size), SIZE_RANGE[0], SIZE_RANGE[1]) : DEFAULT_SIZE,
+      size: clampSize(item.size),
     };
   });
   const pose = {} as Pose;
