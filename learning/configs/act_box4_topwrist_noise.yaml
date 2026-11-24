@@ -1,0 +1,26 @@
+# Như act_box4_topwrist nhưng dữ liệu ghi có nhiễu (--noise 0.02): tay bị đẩy lệch, thầy kéo về. Thí nghiệm: AI có học được cách tự sửa khi lệch không?
+# Chạy: python -m sim_engine.learning.train learning/configs/act_box4_topwrist_noise.yaml
+# Mọi tham số khác giữ giống act_box4_v1.yaml để chỉ khác đúng một thứ: đầu vào của mạng.
+
+# --- Dữ liệu ---
+dataset.repo_id: local/so101_box4_topwrist_noise           # tên dataset (khớp --repo-id lúc ghi)
+dataset.root: D:/vla/datasets/so101_box4_topwrist_noise    # thư mục dataset (khớp --root lúc ghi)
+dataset.video_backend: pyav                    # torchcodec trên Windows chưa giải mã được video, dùng pyav
+
+# --- Mạng ---
+policy.type: act                               # Action Chunking Transformer: ResNet18 đọc ảnh + transformer đoán chuỗi action
+policy.device: cuda                            # train trên GPU
+policy.push_to_hub: false                      # không đẩy mô hình lên Hugging Face
+policy.use_amp: true                           # tính nửa độ chính xác: nhanh hơn, vừa GPU 4 GB
+policy.chunk_size: 50                          # mỗi lần đoán 50 action tới (~1,7 s)
+policy.n_action_steps: 20                      # chỉ làm 20 action đầu rồi đoán lại, để phản ứng kịp khi hộp lệch
+policy.optimizer_lr: 0.00003                   # tốc độ học: lớn quá thì loss nhảy lung tung, nhỏ quá thì học chậm
+
+# --- Nơi lưu và cách chạy ---
+output_dir: D:/vla/outputs/train/act_box4_topwrist_noise   # checkpoint lưu ở <output_dir>/checkpoints/<bước>/pretrained_model
+job_name: act_box4_topwrist_noise
+batch_size: 8                                  # số khung hình mỗi bước học; lớn hơn ổn định hơn nhưng tốn GPU
+steps: 20000                                   # số bước học (~4,6 lượt qua toàn bộ 34.823 khung)
+save_freq: 5000                                # cứ 5000 bước lưu một checkpoint
+log_freq: 100                                  # cứ 100 bước in loss một lần
+num_workers: 2                                 # số tiến trình đọc / giải mã video song song

@@ -15,6 +15,7 @@ File này KHÔNG chứa vòng lặp train. Vòng lặp nằm trong LeRobot (lệ
 Ta chỉ cần chọn tham số. Vì vậy khi muốn "sửa train", thường là tạo file YAML mới trong learning/configs/, không sửa file này.
 """
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -32,7 +33,10 @@ def main():
     # Khoá đã gõ thêm trên dòng lệnh thì bỏ bản trong YAML, để bản dòng lệnh thắng.
     args = [f"--{k}={str(v).lower() if isinstance(v, bool) else v}" for k, v in cfg.items() if k not in overridden] + extra
     # lerobot-train.exe nằm cạnh python.exe trong thư mục Scripts của venv (Windows); Linux/Mac không có ".exe".
+    # Colab: python ở /usr/bin nhưng pip đặt lệnh ở /usr/local/bin -> không thấy cạnh python thì tìm trong PATH.
     exe = Path(sys.executable).with_name("lerobot-train.exe" if sys.platform == "win32" else "lerobot-train")
+    if not exe.exists():
+        exe = Path(shutil.which("lerobot-train") or exe)
     print(" ".join([exe.name, *args]), flush=True)   # in lệnh thật sự chạy, để copy chạy tay hoặc ghi vào sổ thí nghiệm
     sys.exit(subprocess.call([str(exe), *args]))     # chạy và trả mã lỗi của nó (0 = thành công)
 

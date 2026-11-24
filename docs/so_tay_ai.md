@@ -60,6 +60,18 @@ python -m sim_engine.learning.eval_policy --policy D:/vla/outputs/train/act_box4
 Số đo lần đầu: ghi 200 ván mất 21 phút (bỏ 7 ván hỏng), 34 823 khung hình, 182 MB. Train ACT 52 triệu tham số, batch 8:
 2,8 bước / giây, GPU dùng 1,3 GB, 20 000 bước khoảng 2 giờ. Trên Windows, `torchcodec` chưa đọc được video nên LeRobot tự dùng `pyav`.
 
+### Chạy trên Google Colab
+
+Notebook dựng sẵn: [`learning/colab/so101_act_colab.ipynb`](../learning/colab/so101_act_colab.ipynb). Mở thẳng từ GitHub:
+<https://colab.research.google.com/github/tvhhai/sim-engine/blob/my-work/learning/colab/so101_act_colab.ipynb>
+
+Cần chuẩn bị: tài khoản Colab (Pro cho GPU A100 / L4), Google Drive còn ~1 GB trống. Không cần cài gì ở máy nhà.
+Notebook tự làm: nối Drive (`MyDrive/vla`), clone nhánh `my-work`, cài LeRobot, ghi dataset (hoặc giải nén zip đã có trên Drive),
+train, đánh giá 100 seed, chép replay lên Drive. Checkpoint lưu thẳng lên Drive nên Colab ngắt cũng không mất; ô 6b train tiếp.
+
+Lưu ý: code Colab lấy từ GitHub, nên sửa code ở máy nhà phải **push** trước rồi chạy lại ô 3 (`git pull`).
+Trên Colab không có màn hình, MuJoCo vẽ ảnh bằng `MUJOCO_GL=egl` (notebook đã đặt sẵn).
+
 ## 3. Thư mục nào làm gì
 
 ### Phần đã có
