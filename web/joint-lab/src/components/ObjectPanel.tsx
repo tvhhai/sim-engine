@@ -12,7 +12,7 @@ import {
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type { Item, Region, Scene } from "../types";
-import { maxObjectSize } from "../studio/scene";
+import { maxObjectSize, NEW_OBJECT_SIZE } from "../studio/scene";
 import { reachable } from "../workspace";
 import { Panel } from "./Panel";
 // Màu chọn nhanh cho vật mới: đỏ, xanh, vàng (vật mới lần lượt lấy màu kế tiếp)
@@ -33,7 +33,7 @@ export function ObjectPanel({
   const [kind, setKind] = useState<string | null>("box"),
     [color, setColor] = useState(PALETTE[0]),
     [yaw, setYaw] = useState<string | number>(0),
-    [size, setSize] = useState<string | number>(3),
+    [size, setSize] = useState<string | number>(NEW_OBJECT_SIZE * 100),
     [count, setCount] = useState<string | number>(1),
     [undo, setUndo] = useState<Scene | null>(null);
   function update(id: string, patch: Partial<Item>) {
@@ -64,7 +64,7 @@ export function ObjectPanel({
         x: -0.1 + (scene.objects.length + i) * 0.055,
         y: 0.12,
         yaw: kind === "sphere" ? 0 : Number(yaw) || 0,
-        size: Math.max(0.02, Math.min(maxObjectSize(scene.bowl), (Number(size) || 3) / 100)),
+        size: Math.max(0.02, Math.min(maxObjectSize(scene.bowl), (Number(size) || NEW_OBJECT_SIZE * 100) / 100)),
       }),
     );
     onChange({ ...scene, objects: [...scene.objects, ...added] });

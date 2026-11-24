@@ -1,6 +1,7 @@
 import type { Bowl, BowlGeom, Item, Meta, Pose, Scene } from "../types";
 import { JOINTS } from "../types";
-export const DEFAULT_SIZE = 0.03;
+export const DEFAULT_SIZE = 0.03; // cỡ của vật lưu từ trước chưa có trường size (giữ 3 cm để mở lại đúng cảnh cũ)
+export const NEW_OBJECT_SIZE = 0.04; // cỡ mặc định cho vật mới thêm trong Lab
 // Cỡ vật tối đa 4 cm: quét 45 seed, hộp 3,5 cm 45/45, 4 cm 43/45, 4,5 cm 35/45, 5 cm 24/45 (hai hàm SO-101 không ôm nổi vật lớn hơn)
 export const SIZE_RANGE = [0.02, 0.04] as const;
 // Bát phải chứa được vật: đường kính lòng bát >= cỡ vật + BOWL_FIT_MARGIN (chừa chỗ cho hai hàm kẹp khi thả)

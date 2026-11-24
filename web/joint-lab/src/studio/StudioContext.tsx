@@ -26,7 +26,7 @@ import { constrainBowl } from "../workspace";
 import { DEFAULT_SETTINGS, parseSettings } from "./settings";
 import type { Settings } from "./settings";
 import { navigate, useRoute } from "./router";
-import { DEFAULT_SIZE, parseBowl, parseScene, request } from "./scene";
+import { NEW_OBJECT_SIZE, parseBowl, parseScene, request } from "./scene";
 const DEFAULT_POSE: Pose = {
   pan: 0,
   lift: 0,
@@ -133,7 +133,7 @@ function useStudioController() {
             x: p.bx,
             y: p.by,
             yaw: p.byaw,
-            size: DEFAULT_SIZE,
+            size: NEW_OBJECT_SIZE,
           },
         ];
         setMeta(m);
