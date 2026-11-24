@@ -1,11 +1,11 @@
 """Chạy policy TỪNG BƯỚC bằng phím bấm, vừa xem cửa sổ vừa xem log, để quan sát chậm.
 
 Cách dùng (đứng ở thư mục chứa sim_engine, đã kích hoạt .venv):
-    python -m sim_engine.step_policy                 # seed 2 (seed hay thất bại)
-    python -m sim_engine.step_policy --seed 0        # seed 0 (thành công), để so sánh
-    python -m sim_engine.step_policy --policy sim_engine.policies.my_policy:MyPolicy
-    python -m sim_engine.step_policy --seed 2 --goto 8   # chạy sẵn 8 bước rồi dừng (số bước lấy từ replay.html)
-    python -m sim_engine.step_policy --seed 2 --goto 8 --viewer   # cửa sổ MuJoCo viewer: xoay chuột, thấy va chạm thật
+    python -m sim_engine.tools.step_policy                 # seed 2 (seed hay thất bại)
+    python -m sim_engine.tools.step_policy --seed 0        # seed 0 (thành công), để so sánh
+    python -m sim_engine.tools.step_policy --policy sim_engine.policies.my_policy:MyPolicy
+    python -m sim_engine.tools.step_policy --seed 2 --goto 8   # chạy sẵn 8 bước rồi dừng (số bước lấy từ replay.html)
+    python -m sim_engine.tools.step_policy --seed 2 --goto 8 --viewer   # cửa sổ MuJoCo viewer: xoay chuột, thấy va chạm thật
 
 Chế độ --viewer dùng phím riêng: ENTER/SPACE = 1 bước, U/BACKSPACE = LÙI 1 bước, G = tới phase kế, K = tự chạy, J = chạy lại, +/- = tốc độ.
 

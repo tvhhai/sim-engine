@@ -319,7 +319,7 @@ Mục đích: có hình ảnh trong đầu trước khi đọc số. Thoát bằ
 ### 2. Chấm điểm nhiều seed · *1 dòng mỗi seed*
 
 ```bash
-python -m sim_engine.check_scripted --seeds 0-9
+python -m sim_engine.tools.check_scripted --seeds 0-9
 ```
 
 Mỗi seed là một vị trí hộp khác nhau. Kết quả hiện tại là **8/10**, thất bại ở seed 2 và 3. Con số này không nằm sẵn trong repo, nó do script này đếm.
@@ -327,7 +327,7 @@ Mỗi seed là một vị trí hộp khác nhau. Kết quả hiện tại là **
 ### 3. Mức 1: chỉ thấy lúc đổi phase · *ít dòng nhất*
 
 ```bash
-python -m sim_engine.trace_episode --seed 0 --level 1
+python -m sim_engine.tools.trace_episode --seed 0 --level 1
 ```
 
 ```text
@@ -346,7 +346,7 @@ Cách đọc: mỗi dòng là lúc policy sang phase mới. Phase 3 kéo dài t�
 ### 4. Mức 2: thêm bảng vị trí · *mỗi N bước*
 
 ```bash
-python -m sim_engine.trace_episode --seed 0 --level 2 --every 60
+python -m sim_engine.tools.trace_episode --seed 0 --level 2 --every 60
 ```
 
 ```text
@@ -365,7 +365,7 @@ Cách đọc: dấu `*` là vừa đổi phase. Cột "kẹp mở" từ 100 (m�
 ### 5. Mức 3: thêm action và góc khớp, từng bước · *nhiều nhất*
 
 ```bash
-python -m sim_engine.trace_episode --seed 0 --level 3 --every 1
+python -m sim_engine.tools.trace_episode --seed 0 --level 3 --every 1
 ```
 
 ```text
@@ -402,7 +402,7 @@ Chạy lại bằng `check_scripted --seeds 0 -v` để thấy dòng in. **Nhớ
 ### 7. Xem trực tiếp, lưu là tự nạp lại · *hot reload*
 
 ```bash
-python -m sim_engine.watch_policy --seed 2
+python -m sim_engine.tools.watch_policy --seed 2
 ```
 
 Cửa sổ chạy lặp lại seed 2. Bạn sửa `scripted_policy.py` rồi **lưu**, script tự nạp lại và chạy lại episode, không cần đóng cửa sổ. Phím: `SPACE` tạm dừng, `R` chạy lại, `N`/`B` đổi seed, `Q` thoát. Nếu file có lỗi cú pháp, cửa sổ báo lỗi và chờ bạn sửa.
@@ -411,7 +411,7 @@ Cửa sổ chạy lặp lại seed 2. Bạn sửa `scripted_policy.py` rồi **l
 
 1. Cài interpreter của project là `VLA\.venv\Scripts\python.exe`.
 2. Mở `scripted_policy.py`, bấm vào lề trái của dòng đầu hàm `select_action` để đặt breakpoint (chấm đỏ).
-3. Tạo run configuration kiểu **Module name**: `sim_engine.check_scripted`, tham số `--seeds 2`. Chạy bằng nút Debug.
+3. Tạo run configuration kiểu **Module name**: `sim_engine.tools.check_scripted`, tham số `--seeds 2`. Chạy bằng nút Debug.
 4. Khi dừng: xem các biến ở khung Variables, bước qua từng dòng bằng F8, vào trong hàm bằng F7.
 
 Lợi ích: thấy mọi biến đổi giá trị từng bước mà không phải viết print.
@@ -552,9 +552,9 @@ Số liệu lấy từ log thật. Hình nhìn từ cạnh bên (y ngang, z là 
 
 ### 10.6 Vòng thử mỗi lần sửa
 
-**Xem lại trên trình duyệt:** chạy `python -m sim_engine.make_replay` rồi mở `docs/replay.html`. Trang có hai hình 2D (nhìn từ trên và nhìn từ cạnh), thanh trượt từng bước, nút "tới phase kế", và log đồng bộ. Phần "chạm hộp" cho thấy ngay `forearm_link` ở seed 2. Mỗi lần sửa policy thì chạy lại lệnh để cập nhật.
+**Xem lại trên trình duyệt:** chạy `python -m sim_engine.tools.make_replay` rồi mở `docs/replay.html`. Trang có hai hình 2D (nhìn từ trên và nhìn từ cạnh), thanh trượt từng bước, nút "tới phase kế", và log đồng bộ. Phần "chạm hộp" cho thấy ngay `forearm_link` ở seed 2. Mỗi lần sửa policy thì chạy lại lệnh để cập nhật.
 
-**Muốn xem chậm từng bước:** chạy `python -m sim_engine.step_policy --seed 2`. SPACE chạy đúng 1 bước, P chạy tới khi đổi phase, A tự chạy chậm. Trên ảnh có chấm xanh lá là đích, dấu + xanh dương là đầu tay, chấm đỏ là tâm hộp. Log ở terminal cho biết khoảng cách tới đích, ngưỡng, và lý do sang phase kế.
+**Muốn xem chậm từng bước:** chạy `python -m sim_engine.tools.step_policy --seed 2`. SPACE chạy đúng 1 bước, P chạy tới khi đổi phase, A tự chạy chậm. Trên ảnh có chấm xanh lá là đích, dấu + xanh dương là đầu tay, chấm đỏ là tâm hộp. Log ở terminal cho biết khoảng cách tới đích, ngưỡng, và lý do sang phase kế.
 
 1. Sửa một thứ, lưu file. `watch_policy --seed 2` tự chạy lại. Nhìn dòng `tay` trên màn hình ở phase 2.
 2. Seed 2 ổn thì chạy `check_scripted --seeds 0-29`. Điểm phải lớn hơn **24/30**, không được giảm. Cứu seed 2 mà làm hỏng seed khác là chưa xong.
@@ -569,4 +569,4 @@ Số liệu lấy từ log thật. Hình nhìn từ cạnh bên (y ngang, z là 
 - `tools/make_replay.py` lấy đích và ngưỡng đến đích từ `motion_target` của policy. Khi phase chỉ chờ, replay có thể không hiển thị đích.
 - Demo chỉ xuất hiện dưới tên `.hdf5` khi đã ghi xong. Khi train với ảnh, loader đọc hai khung hình của mẫu đang dùng.
 
-Lệnh `python -m sim_engine.make_replay` vẫn tạo lại trang replay trong thư mục `docs/`.
+Lệnh `python -m sim_engine.tools.make_replay` vẫn tạo lại trang replay trong thư mục `docs/`.

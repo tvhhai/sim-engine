@@ -1,8 +1,8 @@
 """Phòng thí nghiệm khớp: kéo thanh trượt để chỉnh tay robot, xem số liệu và va chạm ngay bên cạnh.
 
 Cách dùng (đứng ở thư mục chứa sim_engine, đã kích hoạt .venv):
-    python -m sim_engine.joint_lab              # mở http://localhost:8765 trong trình duyệt
-    python -m sim_engine.joint_lab --port 9000 --no-open
+    python -m sim_engine.studio              # mở http://localhost:8765 trong trình duyệt
+    python -m sim_engine.studio --port 9000 --no-open
 
 Dùng để làm gì:
     - Kéo 5 khớp + độ mở ngón, xem tay đi đâu (nhìn từ cạnh và từ trên), có chạm bàn / bát / hộp không,

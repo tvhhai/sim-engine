@@ -1,10 +1,10 @@
 """In log từng bước của 1 episode, từ đơn giản đến chi tiết, để làm quen cách hệ thống hoạt động.
 
 Cách chạy (đứng ở thư mục chứa sim_engine, đã kích hoạt .venv):
-    python -m sim_engine.trace_episode --seed 0 --level 1   # chỉ in lúc đổi phase (ít dòng nhất)
-    python -m sim_engine.trace_episode --seed 0 --level 2   # bảng mỗi 10 bước
-    python -m sim_engine.trace_episode --seed 0 --level 3   # bảng mỗi bước, thêm action và góc khớp
-    python -m sim_engine.trace_episode --seed 2 --level 2 --every 5   # tự chọn số bước giữa 2 dòng
+    python -m sim_engine.tools.trace_episode --seed 0 --level 1   # chỉ in lúc đổi phase (ít dòng nhất)
+    python -m sim_engine.tools.trace_episode --seed 0 --level 2   # bảng mỗi 10 bước
+    python -m sim_engine.tools.trace_episode --seed 0 --level 3   # bảng mỗi bước, thêm action và góc khớp
+    python -m sim_engine.tools.trace_episode --seed 2 --level 2 --every 5   # tự chọn số bước giữa 2 dòng
 
 Ba mức log:
     Mức 1: chỉ in khi policy đổi phase. Trả lời "policy đi qua những giai đoạn nào, lúc nào?"

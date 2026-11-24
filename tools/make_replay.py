@@ -1,10 +1,10 @@
 """Ghi nhiều ván chạy ra file HTML để xem lại từng bước trên trình duyệt (replay).
 
 Cách dùng (đứng ở thư mục chứa sim_engine, đã kích hoạt .venv):
-    python -m sim_engine.make_replay                    # seed lấy từ results/replay_seeds.json (xem select_seeds), mặc định 0-29
-    python -m sim_engine.make_replay --seeds 0,2,3      # chỉ vài seed (file nhỏ hơn, ghi nhanh hơn)
-    python -m sim_engine.make_replay --rebuild          # chỉ dựng lại HTML từ results/replay.json sau khi sửa giao diện
-    python -m sim_engine.make_replay --policy sim_engine.policies.my_policy:MyPolicy --out results/replay_my.html
+    python -m sim_engine.tools.make_replay                    # seed lấy từ results/replay_seeds.json (xem select_seeds), mặc định 0-29
+    python -m sim_engine.tools.make_replay --seeds 0,2,3      # chỉ vài seed (file nhỏ hơn, ghi nhanh hơn)
+    python -m sim_engine.tools.make_replay --rebuild          # chỉ dựng lại HTML từ results/replay.json sau khi sửa giao diện
+    python -m sim_engine.tools.make_replay --policy sim_engine.policies.my_policy:MyPolicy --out results/replay_my.html
 
 Kết quả: results/replay.html (bản canvas) và results/replay.json (cùng dữ liệu, Studio React đọc file này).
 Sau đó mở file HTML bằng trình duyệt (bấm đúp). File chạy offline, không cần server, không cần mạng.
@@ -459,7 +459,7 @@ def write_replay(env, episodes, out, policy_name):
         with open(paths.REACH_ENVELOPE, encoding="utf-8") as f:
             scene["reach"] = json.load(f)
     else:
-        print("Chưa có results/reach_envelope.json nên replay chưa vẽ vùng với tới. Chạy python -m sim_engine.joint_lab một lần để tính.")
+        print("Chưa có results/reach_envelope.json nên replay chưa vẽ vùng với tới. Chạy python -m sim_engine.studio một lần để tính.")
     data = {"scene": scene, "episodes": episodes}
     render_html(data, out)
     return data

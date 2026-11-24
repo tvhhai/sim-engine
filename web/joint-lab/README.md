@@ -1,7 +1,7 @@
 # Sim Studio · React edition
 
 This is the source of the local simulator UI, built into `static/studio/` and served
-by `python -m sim_engine.joint_lab`. Open `http://127.0.0.1:8765/lab/`.
+by `python -m sim_engine.studio`. Open `http://127.0.0.1:8765/lab/`.
 The previous viewer is available at `/legacy`.
 
 ```powershell

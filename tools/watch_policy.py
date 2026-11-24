@@ -1,9 +1,9 @@
 """Xem policy chạy trong cửa sổ và TỰ NẠP LẠI khi bạn lưu file code (hot reload).
 
 Cách dùng (đứng ở thư mục chứa sim_engine, đã kích hoạt .venv):
-    python -m sim_engine.watch_policy                 # xem seed 2 (seed hay thất bại)
-    python -m sim_engine.watch_policy --seed 3        # chọn seed
-    python -m sim_engine.watch_policy --policy sim_engine.policies.my_policy:MyPolicy
+    python -m sim_engine.tools.watch_policy                 # xem seed 2 (seed hay thất bại)
+    python -m sim_engine.tools.watch_policy --seed 3        # chọn seed
+    python -m sim_engine.tools.watch_policy --policy sim_engine.policies.my_policy:MyPolicy
 
 Cách hoạt động: mỗi khung hình, script kiểm tra giờ sửa (mtime) của các file bên dưới.
 Nếu có file đổi, nó nạp lại module (importlib.reload), tạo lại env và policy mới,

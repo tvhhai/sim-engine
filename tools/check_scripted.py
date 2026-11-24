@@ -1,10 +1,10 @@
 """Chấm điểm policy trên nhiều seed và xem timeline từng phase, để debug.
 
 Cách chạy (đứng ở thư mục chứa sim_engine, đã kích hoạt .venv):
-    python -m sim_engine.check_scripted                    # chấm seed 0-9 (mặc định)
-    python -m sim_engine.check_scripted --seeds 0-49       # chấm 50 seed
-    python -m sim_engine.check_scripted --seeds 2,3 -v     # chỉ seed 2 và 3, in timeline chi tiết
-    python -m sim_engine.check_scripted --policy sim_engine.policies.my_policy:MyPolicy
+    python -m sim_engine.tools.check_scripted                    # chấm seed 0-9 (mặc định)
+    python -m sim_engine.tools.check_scripted --seeds 0-49       # chấm 50 seed
+    python -m sim_engine.tools.check_scripted --seeds 2,3 -v     # chỉ seed 2 và 3, in timeline chi tiết
+    python -m sim_engine.tools.check_scripted --policy sim_engine.policies.my_policy:MyPolicy
 
 "Thành công" được tính trong SO101PickPlaceEnv._get_info() (file env.py):
 hộp nằm trong bán kính bát (theo chiều ngang) và đúng độ cao. Mỗi seed cho ra một vị trí hộp

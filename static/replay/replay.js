@@ -11,7 +11,7 @@ const JMEAN = "pan = xoay thân · lift = nâng vai · elbow = gập khuỷu · 
 
 const app = document.getElementById("app");
 if (!DATA?.episodes?.length) {
-  app.innerHTML = '<div class="err"><h1>Chưa có dữ liệu</h1><p>Đây là file mẫu. Hãy chạy <code>python -m sim_engine.make_replay</code> để tạo <code>results/replay.html</code>.</p></div>';
+  app.innerHTML = '<div class="err"><h1>Chưa có dữ liệu</h1><p>Đây là file mẫu. Hãy chạy <code>python -m sim_engine.tools.make_replay</code> để tạo <code>results/replay.html</code>.</p></div>';
   throw new Error("no data");
 }
 const S = DATA.scene, EPS = DATA.episodes;
@@ -28,7 +28,7 @@ const OPT = { past:true, future:true, path:true, hz:"1", every:1 };
 app.innerHTML = `
   <a href="#rng" class="skip">Đến thanh tua replay</a>
   <header class="hd">
-    <h1 title="Mỗi lần sửa policy, chạy lại python -m sim_engine.make_replay để cập nhật file này">Replay</h1>
+    <h1 title="Mỗi lần sửa policy, chạy lại python -m sim_engine.tools.make_replay để cập nhật file này">Replay</h1>
     <span class="seed-controls">
       <button id="sPrev" title="seed trước (phím [)">◀ seed</button>
       <label>Vùng <select id="flt"><option value="all">Tất cả</option><option value="green">Gắp được</option><option value="red">Không gắp được</option><option value="mixed">Hỗn hợp</option></select></label>

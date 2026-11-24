@@ -1,9 +1,9 @@
 """Chấm một dải seed lớn (mặc định 0-199) rồi CHỌN bộ seed để xem lại trong replay.
 
 Cách dùng (đứng ở thư mục chứa sim_engine, đã kích hoạt .venv):
-    python -m sim_engine.select_seeds                    # chấm seed 0-199 bằng KẸP THẬT, chọn 30 seed
-    python -m sim_engine.select_seeds --count 40         # chọn 40 seed
-    python -m sim_engine.select_seeds --pool 0-499       # chấm dải lớn hơn
+    python -m sim_engine.tools.select_seeds                    # chấm seed 0-199 bằng KẸP THẬT, chọn 30 seed
+    python -m sim_engine.tools.select_seeds --count 40         # chọn 40 seed
+    python -m sim_engine.tools.select_seeds --pool 0-499       # chấm dải lớn hơn
 
 Cách chọn (để 30 seed trong replay không trùng lặp và đáng xem):
     1. Ưu tiên các seed HỎNG, seed có PHASE HẾT THỜI GIAN (timeout), seed CHẬM bất thường. Mỗi kiểu lỗi
@@ -317,7 +317,7 @@ def main():
     }
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False)
-    print(f"\nĐã ghi {args.out}. Chạy tiếp: python -m sim_engine.make_replay")
+    print(f"\nĐã ghi {args.out}. Chạy tiếp: python -m sim_engine.tools.make_replay")
 
 
 if __name__ == "__main__":
