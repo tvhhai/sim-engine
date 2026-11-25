@@ -95,6 +95,9 @@ vài % (v1: 26 rồi 19 cùng một checkpoint); chênh dưới ~5 % chưa kết
 | `act_box4_topwrist_500_dagger2` (Colab L4) | vòng 2: +300 ván DAgger (thầy min-jerk, sửa "hộp đã ở bát") | 32 x +20k | 68 % (last); **85 %** ở checkpoint 10k | 93 % | 69 % |
 | `act_box4_topwrist_500_dagger3` (Colab L4) | vòng 3: từ checkpoint 10k vòng 2, +500 ván DAgger (tổng 500 + 1100) | 32 x +30k | 5k/10k/15k/20k/25k/30k = 69/73/53/**79**/73/77 % | 91 % (20k) | 53 % (20k) |
 
+**Chấm đủ 774 seed** (100 seed quá nhiễu): vòng 2 ck 10k **602/774 (77,8 %)**, gần 86 %, xa 58 %; vòng 3 ck 20k 601 (77,6 %), gần 88 %,
+xa 53 %; vòng 3 ck 30k 601 (77,6 %). Ba mạng ngang nhau; mạng chọn dùng: `MyDrive/vla/outputs/train/act_box4_topwrist_500_dagger2_colab/checkpoints/010000/pretrained_model` (vùng xa tốt nhất). Chỉ 455 seed đạt ở cả ba, 725 seed đạt ở ít nhất một, 49 seed hỏng cả ba.
+
 Rút ra:
 1. **Camera phải thấy vật ngay từ đầu ván.** Ở home camera cổ tay không thấy hộp: chỉ cổ tay 3 %. Camera trước thấy hộp ~6x6 điểm
    ảnh: 19-26 %, vùng xa 3 %. Camera trên cao (hộp ~12x12 điểm ảnh): 36-40 %, vùng xa 22-28 %.
@@ -118,7 +121,11 @@ Rút ra:
 8. **Vòng 3 không vượt vòng 2** (tốt nhất 79 % so với 85 %), dù thêm 500 ván và train lâu hơn; checkpoint 15k tụt hẳn xuống 53 %. Mức
    thật của các mạng tốt có lẽ quanh 75-80 %; 85 % của vòng 2 có thể một phần nhờ may trên 100 seed. Chấm lại trên đủ 774 seed để
    chọn mạng (xem dòng dưới bảng).
-9. **Đi một mạch 50 action** (`--n-action-steps 50`) thường bằng hoặc tốt hơn đoán lại sau 20 bước; đoán lại sau 5 bước tệ hẳn.
+9. **Chấm 774 seed: DAgger đưa ACT lên ~78 %, vòng 3 không thêm được gì.** 85 % của vòng 2 trên 100 seed là may (774 seed: 77,8 %).
+   Ba mạng tốt nhất cùng ~601/774 nhưng hỏng ở seed khác nhau (725 seed đạt ở ít nhất một mạng): lỗi còn lại phần lớn là "không ổn
+   định" chứ không phải "không biết làm". Hướng tiếp: lr nhỏ hơn / giảm dần khi train tiếp, trung bình trọng số hoặc trung bình
+   action của nhiều checkpoint, temporal ensembling; luôn chấm 774 seed (hoặc ít nhất 300) trước khi kết luận.
+10. **Đi một mạch 50 action** (`--n-action-steps 50`) thường bằng hoặc tốt hơn đoán lại sau 20 bước; đoán lại sau 5 bước tệ hẳn.
 
 ## 3. Thư mục nào làm gì
 
