@@ -35,8 +35,20 @@ def min_jerk(tau):
     return t * t * t * (10.0 + t * (-15.0 + 6.0 * t))
 
 
+def carry_in(tau):
+    """h(τ) = τ − 6τ³ + 8τ⁴ − 3τ⁵: đa thức bậc 5 có h(0)=h(1)=0, h'(0)=1, h'(1)=0, h''(0)=h''(1)=0.
+    Cộng v0·T·h(τ) vào đường minimum-jerk để đoạn mới BẮT ĐẦU với vận tốc v0 của đoạn trước (không dừng ở chỗ nối), vẫn tới đích êm."""
+    t = min(max(tau, 0.0), 1.0)
+    return t * (1.0 + t * t * (-6.0 + t * (8.0 - 3.0 * t)))
+
+
 class ScriptedPolicyMinJerk(ScriptedPolicy):
-    MJ_TCP_PEAK = 0.02     # m/bước: tốc độ đỉnh của đầu tay (giữa đường), bằng TCP_STEP cũ (0,6 m/s ở 30 Hz)
+    MJ_TCP_PEAK = 0.03     # m/bước: tốc độ đỉnh của đầu tay (giữa đường), 0,9 m/s ở 30 Hz. 0,02 (= TCP_STEP cũ): 4/5 seed thử chậm hơn
+                           # bản gốc 5-8% vì tốc độ trung bình của minimum-jerk chỉ bằng 1/1,875 tốc độ đỉnh
+    # Cặp (phase trước, phase sau) nối vận tốc: tay đi liền một mạch, không dừng ở chỗ đổi phase. Bản đầu dừng hẳn ở mọi chỗ nối nên
+    # nhìn "khựng". Không nối 2 -> 3 (lơ lửng -> hạ thẳng xuống hộp): phải dừng trên hộp để hạ thẳng đứng, không quét ngang vào hộp
+    MJ_BLEND = {(1, 2), (5, 6), (6, 6), (6, 7)}
+    MJ_FINISH_PHASES = (3, 7)  # phase chỉ được "tới nơi" khi đã đi hết đoạn minimum-jerk (xem _count_and_advance)
     MJ_JOINT_PEAK = 0.12   # thang action (-1..1)/bước: tốc độ đỉnh của khớp ở đoạn đích là góc khớp (0,06: về home 27 bước, gốc 14)
     # Phase đi bằng đường 3D minimum-jerk. Phase 0 (nhấc khỏi home) giữ cách cũ: đường thẳng 3D từ home đẩy cổ tay vào giới hạn 95°,
     # đầu tay dừng cách đích 2,02 cm > ngưỡng 2 cm nên phase 0 chờ hết hạn 200 bước (đo ở cả 5 seed thử)
@@ -59,24 +71,39 @@ class ScriptedPolicyMinJerk(ScriptedPolicy):
         self._mj_jseg = None       # đoạn khớp đang đi: (phase, q0, T)
         self._mj_cart = False      # bước này đã đi bằng đoạn 3D chưa (thì _build_action không làm mượt thêm)
         self._mj_k = 0
+        self._mj_last = None       # điểm via của bước trước và vận tốc (m/bước), để nối đoạn
+        self._mj_vel = np.zeros(3)
 
     def select_action(self, observation):
         self._mj_cart = False
         return super().select_action(observation)
 
     def _move_toward(self, target_pos, ee_pos, threshold=0.02, *, advance_on_failure=True, timeout_steps=None):
-        if self._phase not in self.MJ_PHASES:
+        if self._phase not in self.MJ_PHASES or timeout_steps is not None:
+            # timeout_steps riêng = các đoạn kéo hộp lại gần (hạn 20-120 bước) và rút lên khi đặt hỏng: giữ cách cũ
+            self._mj_seg = self._mj_last = None
             return super()._move_toward(target_pos, ee_pos, threshold, advance_on_failure=advance_on_failure, timeout_steps=timeout_steps)
         target_pos = np.asarray(target_pos, dtype=float)
         if self._mj_seg is None or self._mj_seg[0] != self._phase or self._phase_step == 0:
-            dist = float(np.linalg.norm(target_pos - ee_pos))
+            prev = self._mj_seg[0] if self._mj_seg is not None else None
+            if (prev, self._phase) in self.MJ_BLEND and self._mj_last is not None:
+                p0, v0 = self._mj_last.copy(), self._mj_vel.copy()  # đi tiếp từ điểm via cuối, giữ vận tốc
+            else:
+                p0, v0 = np.array(ee_pos, dtype=float), np.zeros(3)
+                self._mj_last = None                                 # via cũ thuộc đoạn khác: không dùng để tính vận tốc
+            dist = float(np.linalg.norm(target_pos - p0))
             cap = timeout_steps if timeout_steps is not None else self.PHASE_TIMEOUTS.get(self._phase, self.PHASE_TIMEOUT_STEPS)
             T = max(self.MJ_MIN_STEPS, math.ceil(1.875 * dist / self.MJ_TCP_PEAK))
             T = min(T, max(self.MJ_MIN_STEPS, int(cap * self.MJ_TIMEOUT_SHARE)))
-            self._mj_seg, self._mj_k = (self._phase, np.array(ee_pos, dtype=float), T), 0
-        phase, p0, T = self._mj_seg
+            self._mj_seg, self._mj_k = (self._phase, p0, T, v0), 0
+        phase, p0, T, v0 = self._mj_seg
         self._mj_k += 1
-        via = p0 + (target_pos - p0) * min_jerk(self._mj_k / T)  # điểm trên đường thẳng p0 -> đích, theo nhịp minimum-jerk
+        tau = self._mj_k / T
+        # điểm trên đường p0 -> đích theo nhịp minimum-jerk, cộng phần vận tốc mang từ đoạn trước (tắt dần về 0)
+        via = p0 + (target_pos - p0) * min_jerk(tau) + v0 * T * carry_in(tau)
+        if self._mj_last is not None:
+            self._mj_vel = via - self._mj_last
+        self._mj_last = via.copy()
         # Dùng lại _move_toward gốc để giải IK và đếm bước / chuyển phase, nhưng IK nhắm `via`; khoảng cách tới đích vẫn đo tới đích thật
         self.motion_target = (target_pos.copy(), threshold)
         self._current_joint_targets = self._solve_ik(via)
@@ -89,12 +116,21 @@ class ScriptedPolicyMinJerk(ScriptedPolicy):
         """Phần đếm bước / phát hiện kẹt / chuyển phase, chép nguyên từ ScriptedPolicy._move_toward."""
         self._phase_step += 1
         dist = float(np.linalg.norm(ee_pos - target_pos))
-        if self._phase_step == 1 or dist < self._best_dist - self.STALL_PROGRESS:
-            self._best_dist, self._stall = dist, 0
+        moving = self._mj_seg is not None and self._mj_k < self._mj_seg[2]
+        if self._phase_step == 1 or dist < self._best_dist - self.STALL_PROGRESS or moving:
+            # đang đi đoạn minimum-jerk: đầu đoạn tay đi rất chậm (cố ý), không tính là "kẹt". Bản trước đếm kẹt ở đây nên phase 3 của
+            # đường hạ thẳng (thoát khi kẹt 4 bước) khép kẹp quá sớm (seed 2462 lần gắp lại)
+            self._best_dist, self._stall = min(dist, self._best_dist) if self._phase_step > 1 else dist, 0
         else:
             self._stall += 1
         cap = timeout_steps if timeout_steps is not None else self.PHASE_TIMEOUTS.get(self._phase, self.PHASE_TIMEOUT_STEPS)
-        if dist < threshold:
+        # Phase 7 (hạ vào bát): ngưỡng "tới nơi" rộng 4 cm (PLACE_ARRIVE_THRESHOLD) nên tay vừa vào phase đã "tới" và thả ở 8,5 cm trên bàn.
+        # Bản gốc cũng chỉ ở phase 7 một bước, nhưng lệnh hạ của bước đó còn tác dụng khi mở kẹp nên tay tụt xuống ~5 cm rồi mới nhấc lên.
+        # Ở đây chờ đi hết đoạn hạ (τ = 1) rồi mới cho "tới nơi": thả ở độ cao PLACE_Z, không cần tụt rồi nhấc
+        # Phase 3 (hạ xuống kẹp, đường hạ chéo cho hộp xa) cũng vậy: ngưỡng 2,5 cm làm kẹp khép khi đoạn hạ chưa xong, ôm cạn hơn ~4 mm,
+        # hộp tuột (seed 2462: kẹp khép hết, về home)
+        landing = self._phase in self.MJ_FINISH_PHASES and self._mj_seg is not None and self._mj_k < self._mj_seg[2]
+        if dist < threshold and not landing:
             self.last_exit = "arrived"
         elif self._phase_step > cap:
             self.last_exit = "timeout"
