@@ -24,6 +24,7 @@ import math
 
 import numpy as np
 
+from .. import config
 from .scripted_hybrid import ScriptedPolicyHybrid
 from .scripted_policy import ScriptedPolicy
 from .scripted_v2 import ScriptedPolicyV2
@@ -57,6 +58,19 @@ class ScriptedPolicyMinJerk(ScriptedPolicy):
     MJ_MIN_STEPS = 4       # đoạn ngắn nhất (bước): đích gần mấy cũng không giật trong 1-2 bước
     MJ_TIMEOUT_SHARE = 0.6 # đoạn không dài quá 60% hạn của phase, để còn thời gian bám đích trước khi phase hết hạn
 
+    # --- Kéo vòng cung bằng khớp 1 (hộp sát giới hạn khớp 1 và xa đế) ---
+    # Hộp nằm ở góc gần ±110° (giới hạn khớp 1) và xa đế: kẹp không xoay được cho song song mặt hộp mà vẫn hạ tới độ cao kẹp, gắp thường
+    # hỏng (774 seed: 3 seed còn hỏng 55, 1016, 1022 đều ở -109..-110°, r 39-42 cm). Ý người dùng: đặt kẹp lên hộp, khép, XOAY KHỚP 1 vào
+    # trong để ma sát kéo hộp theo vòng cung ra khỏi sát giới hạn, nhả, rồi gắp lại bình thường. Thử ở seed 55 (sau khi kéo hộp vào 38,5 cm):
+    # tay chỉ hạ tới ~45,7 cm (đè lên nóc hộp), hộp theo được ~5° (-110° -> -105°) rồi trượt; sau đó policy gắp được với roll -45/0/90°.
+    ARC = True
+    ARC_MARGIN_DEG = 3.0       # hộp cách giới hạn khớp 1 dưới chừng này thì kéo vòng cung
+    ARC_R_MIN = 0.37           # chỉ hộp xa đế (gần đế thì gắp được dù sát giới hạn: seed 13, 14, 17 r 15-25 cm vẫn xanh)
+    ARC_ROLL_DEG = 45.0        # roll khi đè lên hộp: -45° ở phía khớp 1 âm, +45° ở phía dương (seed 55: -45° kéo được, 45° không)
+    ARC_SWEEP_DEG = 25.0       # xoay khớp 1 vào trong chừng này (hộp theo được ít hơn vì trượt)
+    ARC_PRESS_Z = 0.430        # đích đầu tay khi đè (thường không tới được; IK dừng ở chỗ thấp nhất với được)
+    ARC_STEPS = {"above": 20, "down": 15, "close": 12, "sweep": 30, "release": 10, "raise": 15}
+
     def __init__(self, env):
         super().__init__(env)
         self.TCP_STEP = self.TCP_STEP1 = 0.0                   # tắt bước tiến đều cũ: minimum-jerk thay nó
@@ -73,10 +87,70 @@ class ScriptedPolicyMinJerk(ScriptedPolicy):
         self._mj_k = 0
         self._mj_last = None       # điểm via của bước trước và vận tốc (m/bước), để nối đoạn
         self._mj_vel = np.zeros(3)
+        self._arc, self._arc_done, self._arc_k, self._arc_q0, self._arc_goal = None, False, 0, None, None
 
     def select_action(self, observation):
         self._mj_cart = False
+        if (self.ARC and self._arc is None and not self._arc_done and self._phase == 2 and self._phase_step == 0
+                and self._arc_needed()):
+            self._arc_start()
+        if self._arc is not None:
+            return self._arc_step()
         return super().select_action(observation)
+
+    # --- kéo vòng cung ---
+    def _box_bearing(self):
+        """(góc của hộp quanh trục khớp 1 theo quy ước góc khớp 1 (độ), khoảng cách tới trục (m))."""
+        b, pan = self.env.get_box_pos(), config.PICK_PAN_XY
+        return math.degrees(math.atan2(b[0] - pan[0], b[1] - pan[1])), math.hypot(b[0] - pan[0], b[1] - pan[1])
+
+    def _arc_needed(self):
+        ang, r = self._box_bearing()
+        lim = math.degrees(float(self._jnt_hi[0] if ang > 0 else -self._jnt_lo[0]))
+        return abs(ang) >= lim - self.ARC_MARGIN_DEG and r >= self.ARC_R_MIN
+
+    def _arc_start(self):
+        ang, _ = self._box_bearing()
+        side = 1.0 if ang > 0 else -1.0
+        b = self.env.get_box_pos()
+        roll = math.radians(side * self.ARC_ROLL_DEG)
+        q_above = self._solve_ik(np.array([b[0], b[1], self._pre_grasp_z + 0.03]), roll=roll, limits=True)
+        q_press = self._solve_ik(np.array([b[0], b[1], self.ARC_PRESS_Z]), roll=roll, limits=True, q0=q_above)
+        q_sweep = q_press.copy()
+        q_sweep[0] = float(np.clip(q_press[0] - side * math.radians(self.ARC_SWEEP_DEG), self._jnt_lo[0], self._jnt_hi[0]))
+        q_raise = q_sweep.copy()
+        q_raise[1] -= math.radians(30)
+        q_raise[2] += math.radians(15)
+        self._arc_plan = {"above": (q_above, 1.0), "down": (q_press, 1.0), "close": (q_press, -1.0),
+                          "sweep": (q_sweep, -1.0), "release": (q_sweep, 1.0), "raise": (q_raise, 1.0)}
+        self._arc, self._arc_k, self._arc_done = "above", 0, True
+        self._arc_q0 = self.data.qpos[self._qpos_adr].copy()
+        self.last_exit = "arc_start"
+
+    def _arc_step(self):
+        """Một bước của thao tác kéo vòng cung: nội suy minimum-jerk trong không gian khớp tới tư thế của chặng hiện tại."""
+        order = list(self.ARC_STEPS)
+        q_goal, grip = self._arc_plan[self._arc]
+        n = self.ARC_STEPS[self._arc]
+        self._arc_k += 1
+        s = min_jerk(self._arc_k / n)
+        self._current_joint_targets = self._arc_q0 + (q_goal - self._arc_q0) * s
+        self._gripper_target = grip
+        self.motion_target = None
+        self._phase_step = 0
+        if self._arc_k >= n:
+            i = order.index(self._arc)
+            self._arc_q0, self._arc_k = q_goal.copy(), 0
+            if i + 1 < len(order):
+                self._arc = order[i + 1]
+            else:                                                       # xong: gắp lại từ phase 2 như sau khi kéo hộp vào
+                self._arc = None
+                self._phase, self._phase_step, self._plan = 2, 0, None
+                self._roll_hold, self._last_finger, self._retries = None, None, 0
+                self._far_fix_key, self._far_fix_roll = None, None
+                self._best_dist, self._stall, self.last_exit = 0.0, 0, "arc_done"
+                self._mj_seg = self._mj_last = None
+        return self._build_action()
 
     def _move_toward(self, target_pos, ee_pos, threshold=0.02, *, advance_on_failure=True, timeout_steps=None):
         if self._phase not in self.MJ_PHASES or timeout_steps is not None:
