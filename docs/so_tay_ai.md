@@ -93,6 +93,7 @@ vài % (v1: 26 rồi 19 cùng một checkpoint); chênh dưới ~5 % chưa kết
 | `act_box4_topwrist_500` (Colab L4) | camera trên cao + cổ tay, **500 ván** | 32 x 60k | **59 %** | 71 % | 34 % |
 | `act_box4_topwrist_500_dagger1` (Colab T4) | như trên, train tiếp trên 500 ván + **300 ván DAgger** | 32 x +20k | **74 %** | 90 % | 41 % |
 | `act_box4_topwrist_500_dagger2` (Colab L4) | vòng 2: +300 ván DAgger (thầy min-jerk, sửa "hộp đã ở bát") | 32 x +20k | 68 % (last); **85 %** ở checkpoint 10k | 93 % | 69 % |
+| `act_box4_topwrist_500_dagger3` (Colab L4) | vòng 3: từ checkpoint 10k vòng 2, +500 ván DAgger (tổng 500 + 1100) | 32 x +30k | 5k/10k/15k/20k/25k/30k = 69/73/53/**79**/73/77 % | 91 % (20k) | 53 % (20k) |
 
 Rút ra:
 1. **Camera phải thấy vật ngay từ đầu ván.** Ở home camera cổ tay không thấy hộp: chỉ cổ tay 3 %. Camera trước thấy hộp ~6x6 điểm
@@ -114,7 +115,10 @@ Rút ra:
    5k/10k/15k/20k = 78/**85**/78/68. Cùng một vòng mà chênh tới 17 điểm, và giữa hai checkpoint có ~20 seed đổi đạt/hỏng: chấm một
    checkpoint trên 100 seed rất nhiễu (sai số chuẩn ~±4-5 điểm), train tiếp quá lâu với lr cố định làm tụt. Từ vòng 3 notebook tự chấm
    mọi checkpoint và vòng sau xuất phát từ checkpoint tốt nhất (`BASE_CKPT`), không lấy `last`.
-8. **Đi một mạch 50 action** (`--n-action-steps 50`) thường bằng hoặc tốt hơn đoán lại sau 20 bước; đoán lại sau 5 bước tệ hẳn.
+8. **Vòng 3 không vượt vòng 2** (tốt nhất 79 % so với 85 %), dù thêm 500 ván và train lâu hơn; checkpoint 15k tụt hẳn xuống 53 %. Mức
+   thật của các mạng tốt có lẽ quanh 75-80 %; 85 % của vòng 2 có thể một phần nhờ may trên 100 seed. Chấm lại trên đủ 774 seed để
+   chọn mạng (xem dòng dưới bảng).
+9. **Đi một mạch 50 action** (`--n-action-steps 50`) thường bằng hoặc tốt hơn đoán lại sau 20 bước; đoán lại sau 5 bước tệ hẳn.
 
 ## 3. Thư mục nào làm gì
 
