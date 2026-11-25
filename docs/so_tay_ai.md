@@ -90,6 +90,7 @@ vài % (v1: 26 rồi 19 cùng một checkpoint); chênh dưới ~5 % chưa kết
 | `act_box4_topwrist` | camera trên cao + cổ tay | 8 x 20k | **36-39 %** | 40 % | 28 % |
 | `act_box4_topwrist_noise` | như trên, dữ liệu có đẩy lệch | 8 x 20k | 19 % | 19 % | 19 % |
 | `act_box4_topwrist` (Colab) | camera trên cao + cổ tay | 32 x 30k | **40 %** | 49 % | 22 % |
+| `act_box4_topwrist_500` (Colab L4) | camera trên cao + cổ tay, **500 ván** | 32 x 60k | **59 %** | 71 % | 34 % |
 
 Rút ra:
 1. **Camera phải thấy vật ngay từ đầu ván.** Ở home camera cổ tay không thấy hộp: chỉ cổ tay 3 %. Camera trước thấy hộp ~6x6 điểm
@@ -100,7 +101,9 @@ Rút ra:
 4. **Đẩy lệch kiểu đơn giản làm tệ đi (36 -> 19 %).** ACT đoán chuỗi 50 action; trong dữ liệu có nhiễu, các action sau là phản ứng
    với những lần bị đẩy ngẫu nhiên tiếp theo, mạng không đoán được. Muốn dạy sửa sai thì nên dùng DAgger (cho AI tự chạy, thầy sửa
    ở chỗ AI lệch) thay vì đẩy ngẫu nhiên.
-5. **Đi một mạch 50 action** (`--n-action-steps 50`) thường bằng hoặc tốt hơn đoán lại sau 20 bước; đoán lại sau 5 bước tệ hẳn.
+5. **Thêm dữ liệu có tác dụng rõ nhất tới giờ:** cùng camera, 200 -> 500 ván (và 30k -> 60k bước) đưa 40 % lên 59 %. Vùng xa vẫn
+   kém (34 %): 17 ván kẹp được nhưng hỏng, 24 ván chưa kẹp được. L4 train 4,6 bước/giây (T4 1,75); 60k bước ~3,6 giờ.
+6. **Đi một mạch 50 action** (`--n-action-steps 50`) thường bằng hoặc tốt hơn đoán lại sau 20 bước; đoán lại sau 5 bước tệ hẳn.
 
 ## 3. Thư mục nào làm gì
 
