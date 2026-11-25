@@ -40,10 +40,18 @@ TEACHER_FRAMES_MAX = 400 # thầy mất nhiều bước hơn thế (lòng vòng,
 
 def make_teacher(env):
     """Thầy giáo tiếp quản giữa ván: bản minimum-jerk + V2 dự phòng. reset() lấy tư thế HIỆN TẠI làm điểm xuất phát (phase 0 nhấc
-    thẳng lên từ chỗ đang đứng rồi đi tới vật), nên dùng được ở bất kỳ lúc nào tay không kẹp vật."""
+    thẳng lên từ chỗ đang đứng rồi đi tới vật), nên dùng được ở bất kỳ lúc nào tay không kẹp vật.
+
+    Hộp đã nằm trong lòng bát (theo chiều ngang) mà chưa tính thành công (AI vừa thả, hộp đang rơi / gác nghiêng trên thành): thầy bắt đầu
+    từ phase 8 (mở kẹp, rút lên khỏi bát, chờ hộp nằm yên, rồi về home; hộp rơi ra ngoài thì tự gắp lại). Trước đây thầy bắt đầu từ phase 0
+    và cố gắp hộp RA KHỎI bát: kẹp hụt 3 lần rồi kẹt 200 bước ở phase 5. Đo 93 điểm tách nhánh (AI act_box4_topwrist, seed 6000-6119):
+    10/10 ván "thầy lòng vòng" đều là ca này. Ca này lại dạy đúng việc ACT hay quên: thả xong thì rút tay về home."""
     from ..policies.scripted_minjerk import ScriptedPolicyHybridMinJerk
     teacher = ScriptedPolicyHybridMinJerk(env)
     teacher.reset()
+    box, bowl = env.get_box_pos(), env.get_bowl_pos()
+    if not env._grasped and float(np.linalg.norm(box[:2] - bowl[:2])) < env.bowl_inner:
+        teacher.v1._phase, teacher.v1._phase_step = 8, 0
     return teacher
 
 
