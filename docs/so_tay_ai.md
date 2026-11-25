@@ -91,6 +91,7 @@ vài % (v1: 26 rồi 19 cùng một checkpoint); chênh dưới ~5 % chưa kết
 | `act_box4_topwrist_noise` | như trên, dữ liệu có đẩy lệch | 8 x 20k | 19 % | 19 % | 19 % |
 | `act_box4_topwrist` (Colab) | camera trên cao + cổ tay | 32 x 30k | **40 %** | 49 % | 22 % |
 | `act_box4_topwrist_500` (Colab L4) | camera trên cao + cổ tay, **500 ván** | 32 x 60k | **59 %** | 71 % | 34 % |
+| `act_box4_topwrist_500_dagger1` (Colab T4) | như trên, train tiếp trên 500 ván + **300 ván DAgger** | 32 x +20k | **74 %** | 90 % | 41 % |
 
 Rút ra:
 1. **Camera phải thấy vật ngay từ đầu ván.** Ở home camera cổ tay không thấy hộp: chỉ cổ tay 3 %. Camera trước thấy hộp ~6x6 điểm
@@ -103,7 +104,12 @@ Rút ra:
    ở chỗ AI lệch) thay vì đẩy ngẫu nhiên.
 5. **Thêm dữ liệu có tác dụng rõ nhất tới giờ:** cùng camera, 200 -> 500 ván (và 30k -> 60k bước) đưa 40 % lên 59 %. Vùng xa vẫn
    kém (34 %): 17 ván kẹp được nhưng hỏng, 24 ván chưa kẹp được. L4 train 4,6 bước/giây (T4 1,75); 60k bước ~3,6 giờ.
-6. **Đi một mạch 50 action** (`--n-action-steps 50`) thường bằng hoặc tốt hơn đoán lại sau 20 bước; đoán lại sau 5 bước tệ hẳn.
+6. **DAgger vòng 1 hiệu quả hơn thêm dữ liệu thường:** AI tự lái một đoạn ngẫu nhiên, thầy (bản min-jerk) tiếp quản và làm nốt, ghi
+   300 ván "thầy sửa" (`learning/dagger.py`), gộp với 500 ván rồi train tiếp 20k bước: 59 % -> 74 % (gần 71 -> 90 %, xa 34 -> 41 %).
+   Ván chưa kẹp được giảm mạnh (24 -> 5), ván kẹp được mà hỏng tăng nhẹ (17 -> 21): chỗ yếu giờ là mang / thả, nhất là vùng xa.
+   23 seed mới đạt, 8 seed mới hỏng; bước trung vị của ván cùng đạt 130 -> 148 (thầy min-jerk đi chậm hơn). Ghi 300 ván + train
+   20k trên T4 mất khoảng 5,5 giờ.
+7. **Đi một mạch 50 action** (`--n-action-steps 50`) thường bằng hoặc tốt hơn đoán lại sau 20 bước; đoán lại sau 5 bước tệ hẳn.
 
 ## 3. Thư mục nào làm gì
 
