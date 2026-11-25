@@ -105,6 +105,10 @@ class ScriptedPolicyMinJerk(ScriptedPolicy):
         return math.degrees(math.atan2(b[0] - pan[0], b[1] - pan[1])), math.hypot(b[0] - pan[0], b[1] - pan[1])
 
     def _arc_needed(self):
+        # Chỉ cho hộp: bóng lăn khỏi kẹp khi bị đè và xoay (thử 10 seed sát giới hạn: bóng chỉ dịch 0-0,9 cm, bóng 3 cm hỏng 8/10 so với 3/10 khi
+        # không kéo). Muốn dùng cho bóng phải làm khác: ôm hẳn bóng (kẹp sâu hơn tâm) và xoay chậm.
+        if getattr(self.env, "target_type", "box") == "sphere":
+            return False
         ang, r = self._box_bearing()
         lim = math.degrees(float(self._jnt_hi[0] if ang > 0 else -self._jnt_lo[0]))
         return abs(ang) >= lim - self.ARC_MARGIN_DEG and r >= self.ARC_R_MIN
@@ -253,7 +257,10 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
 
     def __init__(self, env):
         self.env = env
-        self.v1 = ScriptedPolicyMinJerk(env)
+        # Bóng: giữ V1 gốc. Quét 774 seed: hộp 3 cm 767 -> 774, hộp 4 cm 729 -> 753 với minimum-jerk, nhưng bóng 3 cm 765 -> 754 và bóng 4 cm
+        # 763 -> 752 (bóng lăn khi tay đi chậm lúc đầu đoạn / hạ hết đoạn rồi mới kẹp). Chưa điều tra kỹ nên tạm dùng cách đi cũ cho bóng.
+        sphere = getattr(env, "target_type", "box") == "sphere"
+        self.v1 = ScriptedPolicy(env) if sphere else ScriptedPolicyMinJerk(env)
         self.v2 = ScriptedPolicyV2(env)
         self._active = self.v1
         self.switched = False
