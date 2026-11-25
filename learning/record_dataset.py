@@ -51,7 +51,7 @@ def run_episode(seed, kind, size, color, task, cameras=sim_setup.DEFAULT_CAMERAS
     trạng thái đã lệch đó -> AI được thấy "lệch rồi thì sửa thế này" (ý tưởng của DART / DAgger).
     """
     env, options = sim_setup.make_env(seed, kind, size, color, images=bool(cameras))   # env có hộp ở vị trí của seed
-    policy = default_policy(env)                                  # thầy giáo: policy viết tay mặc định (scripted_hybrid)
+    policy = default_policy(env)                                  # thầy giáo: policy viết tay mặc định (config.DEFAULT_POLICY, bản min-jerk)
     obs, _ = env.reset(seed=seed, options=options)                # đặt tay về home, đặt hộp và bát; obs = quan sát đầu tiên
     policy.reset()                                                # xoá trạng thái cũ của thầy (phase về 0)
     frames, info, push = [], {}, None

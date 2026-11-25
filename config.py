@@ -51,9 +51,13 @@ MAX_EPISODE_STEPS = 500  # tối đa 500 bước (~16 giây ở 30 Hz) rồi b�
 
 # Task: câu lệnh mặc định (VLA sẽ dùng câu này làm input ngôn ngữ)
 # Policy viết tay mặc định cho MỌI công cụ (Lab, quét vùng gắp, make_replay, select_seeds, ghi demo, đánh giá, viewer...):
-# bản kết hợp chạy V1 (scripted_policy) rồi chuyển sang V2 (scripted_v2) khi V1 bỏ cuộc mà hộp còn gắp được. 774/774 seed.
+# bản kết hợp minimum-jerk: V1 chạy quỹ đạo minimum-jerk (scripted_minjerk, mượt hơn, thả thấp, kéo vòng cung hộp sát giới hạn khớp 1),
+# chuyển sang V2 (scripted_v2) khi V1 bỏ cuộc mà hộp còn gắp được; bóng dùng V1 gốc. Quét 774 seed (gốc -> min-jerk):
+# hộp 3 cm 767 -> 774, hộp 4 cm 729 -> 753, bóng 3 cm 765 = 765, bóng 4 cm 763 = 763, hộp 2 cm 758 = 758 (13 seed mới hỏng, 13 mới
+# sửa; seed mới hỏng ghim ở results/object_pins.json). Đổi lại: chậm hơn một chút (hộp 2 cm: trung vị 175 -> 185 bước).
+# Bản gốc vẫn dùng được: --policy sim_engine.policies.scripted_hybrid:ScriptedPolicyHybrid (bộ seed replay cũ ở results/goc/).
 # Muốn dùng policy khác cho một lệnh thì truyền --policy module:Lớp.
-DEFAULT_POLICY = "sim_engine.policies.scripted_hybrid:ScriptedPolicyHybrid"
+DEFAULT_POLICY = "sim_engine.policies.scripted_minjerk:ScriptedPolicyHybridMinJerk"
 
 DEFAULT_TASK = "Pick up the box and place it in the bowl"
 

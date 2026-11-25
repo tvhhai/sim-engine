@@ -22,7 +22,7 @@ pnpm test                                          # test giao diện (vitest)
 |---|---|---|
 | `env.py`, `config.py`, `box_sampling.py`, `paths.py` | Env Gymnasium, hằng số, vị trí vật theo seed, đường dẫn | Mọi hằng số dùng chung ở `config.py` |
 | `assets/` | MJCF + mesh SO-101, bàn, hộp, bát | Theo quy ước MuJoCo Menagerie |
-| `policies/` | `scripted_policy.py` (V1), `scripted_v2.py`, `scripted_hybrid.py` (mặc định) + khung MLP/ACT/Diffusion/SmolVLA | Policy viết tay = bộ sinh dữ liệu demo |
+| `policies/` | `scripted_policy.py` (V1), `scripted_v2.py`, `scripted_hybrid.py`, `scripted_minjerk.py` (mặc định) + khung MLP/ACT/Diffusion/SmolVLA | Policy viết tay = bộ sinh dữ liệu demo |
 | `tools/` | CLI chẩn đoán: replay, chấm seed, quét vùng gắp, xem từng bước | `python -m sim_engine.tools.<tên>` |
 | `workflows/` | Ghi demo (HDF5), train, eval | `python -m sim_engine record|train|eval` |
 | `studio/` | Máy chủ Python của Studio (API, chạy Lab, lịch sử chạy) | |

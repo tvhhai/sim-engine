@@ -27,8 +27,10 @@ cd .. && python -m sim_engine.studio          # mở http://127.0.0.1:8765
 
 ## Policy viết tay
 
-Mặc định `scripted_hybrid`: V1 (`policies/scripted_policy.py`, IK, phase 0-11) chạy trước; V1 bỏ cuộc mà vật còn trong tầm thì V2
-(`policies/scripted_v2.py`) gắp tiếp.
+Mặc định `scripted_minjerk:ScriptedPolicyHybridMinJerk`: V1 (`policies/scripted_policy.py`, IK, phase 0-11) chạy trước với quỹ đạo
+minimum-jerk (`policies/scripted_minjerk.py`: di chuyển mượt, thả thấp, hộp sát giới hạn khớp 1 thì kéo vòng cung); V1 bỏ cuộc mà vật còn
+trong tầm thì V2 (`policies/scripted_v2.py`) gắp tiếp. Bóng dùng V1 gốc. Bản gốc: `--policy sim_engine.policies.scripted_hybrid:ScriptedPolicyHybrid`,
+bộ seed replay của nó ở `results/goc/`.
 
 1. Nâng tay từ home: khuỷu + cổ tay trước, vai sau (không quét trúng vật sát đế).
 2. Tới trên vật ở độ cao tới được; hạ theo kế hoạch, roll khoá song song mặt hộp, né bát.
