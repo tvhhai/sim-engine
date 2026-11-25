@@ -730,8 +730,11 @@ html[data-mantine-color-scheme="light"] .global-run-status {
 .screen-lab .lab-tabs .scene-canvas,
 .screen-lab .lab-workspace .scene-canvas {
   flex: 1;
-  min-height: 0;
+  min-height: 420px; /* cửa sổ thấp: khung 3D không bị ép nhỏ, phần còn lại cuộn */
   height: auto;
+}
+.screen-lab .main-column {
+  min-height: 560px;
 }
 .screen-lab .object-row {
   padding: 8px 10px;
@@ -747,6 +750,10 @@ html[data-mantine-color-scheme="light"] .global-run-status {
   .screen-lab .controls-secondary {
     grid-column: 1 / -1;
     overflow: visible;
+  }
+  /* 2 cột: hàng đầu (cảnh 3D + vật thể) cao gần bằng màn hình; trước đây hàng này co lại ~200 px vì card bên dưới chiếm chỗ */
+  .screen-lab .main-column {
+    min-height: max(560px, calc(100vh - 190px));
   }
 }
 .screen-lab .controls-column > * {
