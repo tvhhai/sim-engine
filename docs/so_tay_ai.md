@@ -336,6 +336,51 @@ Mục 1-3 bạn đã chạm nhiều qua phần policy viết tay. Mục 4-9 họ
 | **`close_err_mm`** | Lần đầu mạng khép kẹp, đầu kẹp lệch tâm vật bao nhiêu mm (x, y, z) | Xem "kẹp vào không khí" |
 | **nhiễu khi chấm** | Tỉ lệ đo trên n seed lệch khoảng ±sqrt(p(1-p)/n). p ~ 0,8: 100 seed ±4 điểm, 774 seed ±1,4 điểm | 85 % trên 100 seed thành 77,8 % trên 774 |
 
+### Đọc log khi train: khi nào dừng sớm
+
+Một lần train dài 4-6 giờ; phần lớn lỗi lộ ra trong **5-15 phút đầu**. Kỹ sư không chờ hết rồi mới xem: đọc đầu log, theo dõi loss vài
+trăm step đầu, chấm nhanh checkpoint đầu tiên, sai thì dừng ngay.
+
+**1. Đầu log (giây đầu tiên): kiểm tra đúng thứ mình định train.**
+
+| Dòng | Xem gì | Ví dụ SmolVLA (Colab mục 8) |
+|---|---|---|
+| `lerobot-train ...` | Lệnh đầy đủ: đúng config, đúng dataset, đúng checkpoint xuất phát | `--policy.path=lerobot/smolvla_base`, `rename_map` top -> camera1 |
+| `dataset.num_episodes / num_frames` | Đúng số ván đã ghi + gộp chưa (gộp thiếu phần nào là thấy ngay) | 2 100 ván, 318 405 khung |
+| `num_learnable_params / num_total_params` | Đúng kiến trúc, đúng phần được train | 100M / 450M (phần nhìn bị khoá) |
+| `Auto-scaling LR scheduler ...` | Lịch lr thực tế | warmup 666, giảm dần tới step 20 000 |
+| `Output dir` | Lưu đúng chỗ (Drive), không ghi đè lần train khác | `MyDrive/vla/outputs/train/smolvla_dagger4_colab` |
+
+**2. Vài trăm step đầu: loss phải giảm rõ.** Mốc tham khảo của chính dự án (đối chiếu đúng loại train):
+
+| Loại | Loss đầu | Sau ~1-5k step | Ghi chú |
+|---|---|---|---|
+| ACT từ đầu (`act_scratch`) | ~10 (step 50) | ~0,13-0,14 (step 5k) | phần lớn là `kld_loss` lúc đầu |
+| ACT train tiếp (`act_finetune`) | ~0,07 | ~0,07 | đã học sẵn nên gần như phẳng là đúng |
+| SmolVLA fine-tune | 0,70 (step 100) | 0,36 (200), 0,15 (1,7k) | grad norm 5 -> 1,5 |
+
+**3. Dấu hiệu dừng ngay (không chờ):**
+
+| Thấy gì | Thường là | Làm gì |
+|---|---|---|
+| `loss: nan` / `inf` | lr quá lớn, dữ liệu lỗi, chia cho 0 khi chuẩn hoá | dừng, giảm lr, kiểm tra thống kê dataset |
+| Loss **không giảm** sau ~1 000 step (vẫn ở mức đầu) | sai dữ liệu (camera trống, action toàn 0), sai chuẩn hoá, lr = 0 | dừng, mở dataset xem vài khung (notebook mini ô 1b) |
+| Loss giảm rồi **tăng vọt**, `grdn` nhảy gấp 10-100 lần | lr quá lớn | dừng, giảm lr / thêm warmup |
+| Loss giảm **quá nhanh về ~0** (vd < 0,01) | rò dữ liệu, học thuộc dataset quá nhỏ | dừng, kiểm tra số ván, seed train trùng seed chấm |
+| `data_s` lớn gần bằng `updt_s` | GPU chờ đọc video | không cần dừng: tăng `num_workers` lần sau |
+| Lỗi CUDA out of memory | batch quá lớn / chạy chung GPU | giảm `batch_size` |
+
+**4. Loss đẹp chưa đủ: chấm nhanh checkpoint đầu.** Loss chỉ đo "đoán giống thầy trên dữ liệu đã thấy", không đo robot gắp được không
+(vòng kín, lỗi cộng dồn). Checkpoint đầu tiên ra là chấm ngay 100 seed (`eval_policy --limit 100`, ~5-10 phút): 0-10 % trong khi lần
+trước cùng mốc được 50 % là có vấn đề, dừng sớm đỡ mất mấy giờ. Kết luận cuối cùng vẫn phải chấm đủ 774 seed.
+
+**5. Nên bật / giữ log gì:**
+- `log_freq: 100` (mỗi 100 step một dòng: đủ dày để thấy xu hướng, không làm chậm).
+- `save_freq`: checkpoint đều đặn để train tiếp được khi Colab ngắt (ACT 5-10k step; SmolVLA 10k vì mỗi checkpoint ~1 GB).
+- Chép log lên Drive (notebook làm sẵn: `/content/<tên>.log`); ghi kết quả từng lần vào sổ tay này (mục "Kết quả").
+- Muốn xem biểu đồ loss: Weights & Biases (`--wandb.enable=true`, cần tài khoản W&B + `wandb login`), so được nhiều lần train trên một
+  trang. Chưa bật vì log chữ + bảng mốc ở trên đã đủ cho vài lần train một ngày.
+
 ## 8. Tra cứu thêm
 
 - Bảng kết quả hiện tại và lệnh hay dùng: [`README.md`](../README.md).
