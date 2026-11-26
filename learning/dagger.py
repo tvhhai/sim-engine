@@ -17,7 +17,7 @@ Không tách nhánh khi AI đang kẹp vật (thầy mới reset sẽ mở kẹp
 Ván AI tự thành công trước t_b thì không có gì để sửa: bỏ (vẫn đếm để biết AI đang giỏi cỡ nào).
 
 Kết quả là một dataset LeRobot RIÊNG. Gộp với dataset gốc bằng learning/merge_datasets.py rồi train tiếp
-(learning/configs/act_box4_topwrist_500_dagger.yaml). Có thể lặp nhiều vòng: train -> dagger -> gộp -> train ...
+(learning/configs/act_finetune.yaml). Có thể lặp nhiều vòng: train -> dagger -> gộp -> train ... (notebook Colab mục 6).
 """
 
 import argparse

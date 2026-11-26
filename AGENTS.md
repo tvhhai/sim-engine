@@ -32,17 +32,20 @@ pnpm test                                          # test giao diện (vitest)
 | `results/` | Dữ liệu sinh ra có commit: quét vùng, seed replay (`replay_pins.json`), seed theo dõi (`object_pins.json`) | `replay.*`, `replays/`, `studio/` chỉ ở máy |
 | `datasets/`, `outputs/` | Dataset và checkpoint huấn luyện | Bỏ qua trong git |
 
-Kế hoạch phần AI (theo cách LeRobot và các repo SO-101 sim tổ chức), thêm khi bắt đầu:
+Phần AI (`learning/`, chạy bằng `D:/vla/venv-lerobot`; dữ liệu và checkpoint ở `D:/vla` và Drive `MyDrive/vla`, không commit):
 
 ```
-learning/                      # cầu nối sang LeRobot, chỉ chứa mã
-    lerobot_env.py             # bọc env: observation.state, observation.images.{front,wrist}, action (6 chiều chuẩn LeRobot)
-    record_dataset.py          # chạy policy viết tay, CHỈ giữ ván thành công, ghi LeRobotDataset vào datasets/<repo_id>/
-    eval_policy.py             # chạy checkpoint LeRobot trên bộ seed cố định, so với policy viết tay, ghi replay
-    configs/act_box4.yaml      # tham số train (policy, dataset, số bước)
-datasets/<repo_id>/            # LeRobotDataset v3 (gitignore)
-outputs/train/<run>/           # checkpoint của lerobot-train (gitignore)
+learning/
+    sim_setup.py               # cầu nối env <-> LeRobot: camera, khung dữ liệu, action 6 <-> 7 số, bộ 774 seed chấm
+    record_dataset.py          # thầy giáo (policy viết tay) ghi demo, chỉ giữ ván thành công
+    train.py + configs/        # act_scratch / act_finetune (DAgger, lr giảm dần) / smolvla_finetune
+    dagger.py, merge_datasets.py   # một vòng DAgger (AI lái, thầy sửa), gộp dataset
+    eval_policy.py             # chấm trên 774 seed, gộp nhiều checkpoint (trung bình action), ghi replay
+    push_dataset.py            # đẩy dataset lên Hugging Face
+    mini_local.ipynb           # bản thu nhỏ chạy ở nhà ~5 phút, chú thích từng dòng
+    colab/so101_act_colab.ipynb    # chạy thật trên Colab (ghi, train, DAgger, chấm, SmolVLA, đẩy HF)
 ```
+Nhật ký thí nghiệm và kết luận: `docs/so_tay_ai.md`. Luôn chấm đủ 774 seed trước khi kết luận (100 seed lệch ±4 điểm).
 
 ## Quy tắc làm việc
 

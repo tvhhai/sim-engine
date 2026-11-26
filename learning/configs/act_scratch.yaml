@@ -1,0 +1,29 @@
+# Train ACT TỪ ĐẦU trên một dataset demo.
+#   python -m sim_engine.learning.train learning/configs/act_scratch.yaml
+# Đầu vào: camera trên cao (thấy cả bàn, hộp ~12x12 điểm ảnh) + camera cổ tay + 6 góc khớp. Các thí nghiệm trước chọn ra bộ này:
+# camera trước + cổ tay 19-26 %, chỉ cổ tay 3 %, trên cao + cổ tay 36-40 % (200 ván); 500 ván + 60k step: 59 % (sổ tay, mục "Kết quả").
+# Train từ đầu chỉ là bước đầu: muốn lên ~78-85 % phải làm tiếp các vòng DAgger (act_finetune.yaml).
+# Ở nhà (GTX 1650 4 GB): thêm --batch_size=8 --num_workers=2, và giảm steps (60k mất cả ngày).
+
+# --- Dữ liệu (Colab ghi đè root) ---
+dataset.repo_id: local/so101_box4_mj
+dataset.root: D:/vla/datasets/so101_box4_mj
+dataset.video_backend: pyav                    # torchcodec trên Windows chưa giải mã được video, dùng pyav
+
+# --- Mạng ---
+policy.type: act                               # ResNet18 đọc ảnh + transformer đoán chuỗi action
+policy.device: cuda
+policy.push_to_hub: false
+policy.use_amp: true                           # tính 16 bit: nhanh hơn, ít bộ nhớ hơn
+policy.chunk_size: 50                          # mỗi lần đoán 50 action tới (~1,7 s)
+policy.n_action_steps: 20                      # làm 20 action rồi nhìn ảnh, đoán lại
+policy.optimizer_lr: 0.00003                   # lr cố định (preset của ACT không có lịch giảm dần)
+
+# --- Nơi lưu và cách chạy ---
+output_dir: D:/vla/outputs/train/act_scratch
+job_name: act_scratch
+batch_size: 32
+steps: 60000                                   # ~9 lượt qua ~200k khung
+save_freq: 10000
+log_freq: 100
+num_workers: 4

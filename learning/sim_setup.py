@@ -40,6 +40,10 @@ CAMERAS = {"front": "webcam", "wrist": "arm_cam", "top": "topcam"}   # tên tron
                                                # front: camera cố định chéo phía trước (hộp 4 cm ~6x6 điểm ảnh);
                                                # wrist: camera gắn cổ tay, đi theo tay (lúc ở home KHÔNG thấy hộp);
                                                # top: camera nhìn thẳng từ trên xuống, thấy cả bàn (hộp ~12x12 điểm ảnh).
+CAMERAS.update(camera1="topcam", camera2="arm_cam")
+                                               # Tên camera của SmolVLA: smolvla_base được train sẵn với camera1/2/3. Khi fine-tune ta
+                                               # đổi top -> camera1, wrist -> camera2 (rename_map trong configs/smolvla_finetune.yaml);
+                                               # checkpoint SmolVLA vì vậy đòi camera1/camera2, hai dòng này để eval / DAgger dựng đúng.
 DEFAULT_CAMERAS = ("front", "wrist")           # bộ camera của dataset v1
 ENV_STATE_NAMES = ["box_x", "box_y", "box_z", "bowl_x", "bowl_y"]
                                                # "thông tin ăn gian" (privileged): toạ độ thật của vật và bát, đọc thẳng từ mô phỏng.
@@ -129,7 +133,8 @@ def to_frame(env, obs, action, task, cameras=DEFAULT_CAMERAS, env_state=False):
 def spec_from_features(keys):
     """Ngược lại của features(): từ tên các trường đầu vào của một mạng đã train, suy ra (camera, có env_state không).
     eval_policy dùng để dựng đúng loại quan sát mà mạng đó được train, không cần ghi tay."""
-    cameras = tuple(k.split(".")[-1] for k in keys if k.startswith("observation.images."))
+    # Bỏ những camera ta không có (vd camera3 / empty_camera_0 của SmolVLA): mạng tự bù ảnh trống cho chúng.
+    cameras = tuple(k.split(".")[-1] for k in keys if k.startswith("observation.images.") and k.split(".")[-1] in CAMERAS)
     return cameras, "observation.environment_state" in keys
 
 

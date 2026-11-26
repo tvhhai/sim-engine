@@ -1,0 +1,29 @@
+# Fine-tune SmolVLA (Vision-Language-Action, ~450M tham số) từ bản học sẵn lerobot/smolvla_base trên dataset của ta.
+#   python -m sim_engine.learning.train learning/configs/smolvla_finetune.yaml --dataset.repo_id=... --dataset.root=...
+# Cần thư viện phụ: pip install "lerobot[smolvla]==0.7.0" (transformers, accelerate, num2words).
+# Mặc định của SmolVLA (giữ nguyên): khoá phần nhìn (SmolVLM), chỉ train "action expert"; lr 1e-4, lịch giảm dần có sẵn; đoán 50 action
+# và làm hết 50 rồi mới đoán lại. Câu lệnh chữ lấy từ trường "task" của dataset ("Pick up the red box and place it in the bowl").
+# So sánh: ACT tốt nhất (gộp 3 checkpoint DAgger) 84,8 % trên 774 seed.
+
+# --- Mạng: bản học sẵn trên Hugging Face ---
+policy.path: lerobot/smolvla_base
+policy.device: cuda
+policy.push_to_hub: false
+
+# smolvla_base được train với camera tên camera1/2/3; đổi tên camera của dataset cho khớp (camera3 thiếu thì mạng tự bù ảnh trống).
+# sim_setup.CAMERAS có sẵn camera1 -> topcam, camera2 -> arm_cam để eval / DAgger dựng đúng ảnh.
+rename_map: '{"observation.images.top": "observation.images.camera1", "observation.images.wrist": "observation.images.camera2"}'
+
+# --- Dữ liệu (Colab ghi đè) ---
+dataset.repo_id: local/so101_box4_topwrist_500_dagger4
+dataset.root: D:/vla/datasets/so101_box4_topwrist_500_dagger4
+dataset.video_backend: pyav
+
+# --- Nơi lưu và cách chạy ---
+output_dir: D:/vla/outputs/train/smolvla_finetune
+job_name: smolvla_finetune
+batch_size: 32                                 # hướng dẫn LeRobot dùng 64; 32 vừa L4 24 GB
+steps: 20000
+save_freq: 5000
+log_freq: 100
+num_workers: 4

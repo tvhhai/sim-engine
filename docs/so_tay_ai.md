@@ -35,10 +35,12 @@ Vai trò của policy viết tay từ giờ: **thầy giáo**. Nó làm mẫu, m
 |---|---|---|
 | Python 3.12 venv riêng cho AI | Không đụng venv của Studio | `D:/vla/venv-lerobot` |
 | PyTorch bản CUDA 12.6 | Chạy mạng trên GPU | trong venv trên |
-| LeRobot 0.7 (`lerobot[dataset,training]`) | Định dạng dataset, train ACT | trong venv trên |
+| LeRobot 0.7 (`lerobot[dataset,training,smolvla]`) | Định dạng dataset, train ACT / SmolVLA | trong venv trên |
 | `learning/mini_local.ipynb` | Bản Colab thu nhỏ chạy ở nhà (~5 phút): ghi 3 ván, train 300 step, chấm vài seed, tự viết vòng lặp mạng lái | Học cách chạy trước khi đọc code |
 | `learning/record_dataset.py` | Ghi dataset từ thầy giáo | chặng 1 |
-| `learning/configs/*.yaml` + `learning/train.py` | Một file YAML = một thí nghiệm train | chặng 2 |
+| `learning/configs/*.yaml` + `learning/train.py` | `act_scratch` (ACT từ đầu), `act_finetune` (train tiếp, mỗi vòng DAgger, lr giảm dần), `smolvla_finetune` (SmolVLA từ bản học sẵn) | chặng 2 |
+| `learning/dagger.py` + `learning/merge_datasets.py` | Một vòng DAgger (AI lái, thầy sửa) và gộp dataset | chặng 2 |
+| `learning/push_dataset.py` | Đẩy dataset lên Hugging Face (cả bản con N ván) | chia sẻ |
 | `learning/eval_policy.py` | Bài kiểm tra trên bộ seed cố định | chặng 3 |
 
 Cài lại từ đầu (PowerShell / Git Bash):
@@ -47,15 +49,16 @@ Cài lại từ đầu (PowerShell / Git Bash):
 uv venv --python 3.12 D:/vla/venv-lerobot
 uv pip install --python D:/vla/venv-lerobot/Scripts/python.exe --index-strategy unsafe-best-match \
     --extra-index-url https://download.pytorch.org/whl/cu126 "torch==2.14.1+cu126" "torchvision==0.29.1+cu126" \
-    "lerobot[dataset,training]==0.7.0" -e <đường dẫn tới sim-engine>
+    "lerobot[dataset,training,smolvla]==0.7.0" -e <đường dẫn tới sim-engine>
 ```
 
 Chạy (dùng `D:/vla/venv-lerobot/Scripts/python.exe`):
 
 ```bash
-python -m sim_engine.learning.record_dataset --episodes 200 --kind box --size 0.04 --root D:/vla/datasets/so101_box4_v1 --repo-id local/so101_box4_v1
-python -m sim_engine.learning.train learning/configs/act_box4_v1.yaml
-python -m sim_engine.learning.eval_policy --policy D:/vla/outputs/train/act_box4_v1/checkpoints/last/pretrained_model --limit 100
+python -m sim_engine.learning.record_dataset --episodes 200 --cameras top,wrist --root D:/vla/datasets/so101_box4_mj --repo-id local/so101_box4_mj
+python -m sim_engine.learning.train learning/configs/act_scratch.yaml --batch_size=8 --num_workers=2
+python -m sim_engine.learning.eval_policy --policy D:/vla/outputs/train/act_scratch/checkpoints/last/pretrained_model   # đủ 774 seed
+python -m sim_engine.learning.eval_policy --policy <ck A> <ck B> <ck C>        # gộp nhiều checkpoint (trung bình action)
 ```
 
 Số đo lần đầu: ghi 200 ván mất 21 phút (bỏ 7 ván hỏng), 34 823 khung hình, 182 MB. Train ACT 52 triệu tham số, batch 8:
@@ -67,13 +70,13 @@ Notebook dựng sẵn: [`learning/colab/so101_act_colab.ipynb`](../learning/cola
 <https://colab.research.google.com/github/tvhhai/sim-engine/blob/my-work/learning/colab/so101_act_colab.ipynb>
 
 Cần chuẩn bị: tài khoản Colab (Pro cho GPU A100 / L4), Google Drive còn ~1 GB trống. Không cần cài gì ở máy nhà.
-Notebook tự làm: nối Drive (`MyDrive/vla`), clone nhánh `my-work`, cài LeRobot, ghi dataset (hoặc giải nén zip đã có trên Drive),
-train, đánh giá 100 seed, chép replay lên Drive. Checkpoint lưu thẳng lên Drive nên Colab ngắt cũng không mất; ô 6b train tiếp.
+Ô 1-3 (GPU, Drive, cài đặt + hàm dùng chung) chạy mỗi lần mở; các mục sau chạy **nền**: 4 ghi demo, 5 train ACT từ đầu, 6 một vòng
+DAgger, 7 chấm / gộp checkpoint trên 774 seed, 8 SmolVLA, 9 đẩy dataset lên Hugging Face, 10 xem tiến độ. Mọi thứ lưu lên Drive theo
+từng phần: Colab ngắt thì chạy lại ô 1-3 và đúng mục đó, phần đã xong được bỏ qua, train chạy tiếp từ checkpoint.
 
 Lưu ý: code Colab lấy từ GitHub, nên sửa code ở máy nhà phải **push** trước rồi chạy lại ô 3 (`git pull`).
 Trên Colab không có màn hình, MuJoCo vẽ ảnh bằng `MUJOCO_GL=egl` **và** file khai báo driver EGL của NVIDIA (ô 3 tự tạo). Thiếu
 file đó MuJoCo vẽ bằng CPU (`llvmpipe`): 0,85 s mỗi ảnh, ghi một ván mất 150 s thay vì 4,5 s.
-Để qua đêm: dùng ô 9 (chạy nền bằng `nohup`), không xếp hàng ô 5-6-7: trang mất kết nối là hàng chờ ô bị mất.
 Đo được (T4 High-RAM, 2,7 đơn vị / giờ): ghi 200 ván ~15 phút; train batch 32 được 1,7 bước / giây (30 000 bước ~4 giờ 50 phút).
 A100 và L4 thường hết máy; T4 dễ có máy nhất.
 
@@ -138,7 +141,7 @@ Rút ra:
 12. **Dữ liệu lẫn hai thầy.** 500 ván gốc ghi bằng `ScriptedPolicyHybrid` bản gốc (đi nhanh, trung vị ~130 bước), ván DAgger ghi bằng
     bản min-jerk (chậm, thả thấp, kéo vòng cung); DAgger vòng 1 còn chưa có bản sửa "hộp đã ở bát". Cùng cảnh hai lệnh khác nhau thì
     ACT học trung bình, có thể là một lý do mạng chập chờn. Thử train lại từ đầu trên dữ liệu một thầy: 500 ván min-jerk mới
-    (seed 3000-4999) + DAgger vòng 2-3 (`learning/configs/act_box4_topwrist_mj.yaml`, notebook mục 11), xem mục 13.
+    (seed 3000-4999) + DAgger vòng 2-3 (config nay là `act_scratch.yaml`), xem mục 13.
 13. **Train lại từ đầu trên dữ liệu một thầy KÉM HƠN: tốt nhất 59 %** (774 seed). Checkpoint 10k/20k/30k/40k/50k/60k =
     ~23 / ~29 (dừng chấm giữa chừng) / 57,0 / 49,2 / **59,2** / 48,4 %. Ck 50k: gần 63 %, xa 50 %; kẹp được mà hỏng 158, chưa kẹp được
     158 (mạng dagger2 ck 10k: 93 / 79); bước trung vị ván đạt 207 (dagger2: 171). Ngang mạng 500 ván gốc (59 % trên 100 seed), tức
