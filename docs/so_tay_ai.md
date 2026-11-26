@@ -36,6 +36,7 @@ Vai trò của policy viết tay từ giờ: **thầy giáo**. Nó làm mẫu, m
 | Python 3.12 venv riêng cho AI | Không đụng venv của Studio | `D:/vla/venv-lerobot` |
 | PyTorch bản CUDA 12.6 | Chạy mạng trên GPU | trong venv trên |
 | LeRobot 0.7 (`lerobot[dataset,training]`) | Định dạng dataset, train ACT | trong venv trên |
+| `learning/mini_local.ipynb` | Bản Colab thu nhỏ chạy ở nhà (~5 phút): ghi 3 ván, train 300 step, chấm vài seed, tự viết vòng lặp mạng lái | Học cách chạy trước khi đọc code |
 | `learning/record_dataset.py` | Ghi dataset từ thầy giáo | chặng 1 |
 | `learning/configs/*.yaml` + `learning/train.py` | Một file YAML = một thí nghiệm train | chặng 2 |
 | `learning/eval_policy.py` | Bài kiểm tra trên bộ seed cố định | chặng 3 |
@@ -243,6 +244,45 @@ Mục 1-3 bạn đã chạm nhiều qua phần policy viết tay. Mục 4-9 họ
 | **ACT** | Mạng đọc ảnh + góc khớp, đoán một chuỗi ~20-100 action tới |
 | **VLA** | Vision-Language-Action: mạng nhìn ảnh, đọc lệnh chữ, ra action (vd SmolVLA) |
 | **vùng xanh / hỗn hợp / đỏ** | Vùng gắp được / gắp được một phần / không với tới (`config.PICK_GREEN`) |
+
+### Thuật ngữ khi train và chấm
+
+Đọc kèm một dòng log của `lerobot-train`, vd
+`step:5K smpl:157K ep:997 epch:0.77 loss:0.136 grdn:8.68 lr:3.0e-05 data_s:0.003 updt_s:0.246 smp/s:128 l1_loss:0.114 kld_loss:0.002`.
+
+| Từ | Nghĩa | Ví dụ ở dự án này |
+|---|---|---|
+| **khung (frame)** | Một bước của một ván: ảnh 2 camera + 6 góc khớp + 6 số action thầy chọn. Mạng học theo từng khung | Ván ~170 khung; dataset min-jerk ~1300 ván = ~204k khung |
+| **batch / `batch_size`** | Số khung lấy ngẫu nhiên cho MỘT lần cập nhật trọng số. Lớn = hướng sửa ổn định hơn, tốn GPU hơn | 8 ở GTX 1650, 32 trên L4 |
+| **step (bước train)** | Một lần: lấy 1 batch -> mạng đoán -> tính loss -> sửa trọng số. Khác "bước" của env (1/30 giây) | `steps: 60000` |
+| **epoch (`epch`)** | Số lần mạng đã đi hết dataset = step x batch / số khung | 60k x 32 / 204k ~ 9,4 epoch |
+| **`smpl`, `ep`** | Tổng số khung / số ván (quy đổi) mạng đã xem tới giờ | `smpl:157K` = 4,9k step x 32 |
+| **learning rate (`lr`)** | Mỗi step sửa trọng số mạnh cỡ nào. Lớn: học nhanh nhưng loss nhảy, dễ "quên"; nhỏ: chậm mà chắc. Có thể cố định hoặc giảm dần về cuối | 3e-5 cố định; train tiếp lâu với lr cố định làm điểm tụt (vòng 3 ck 15k: 53 %) |
+| **loss** | Sai lệch giữa action mạng đoán và action thầy. Loss train thấp KHÔNG có nghĩa gắp giỏi (xem "vòng kín") | `loss = l1_loss + 10 x kld_loss` |
+| **`l1_loss`** | Trung bình trị tuyệt đối sai lệch của 50 action đoán (đã chuẩn hoá) | ~0,11 sau 5k step |
+| **`kld_loss`** | Phần phạt của bộ mã hoá biến ẩn (VAE) trong ACT, giữ biến ẩn gọn để lúc chạy mạng không phụ thuộc nó | ~0,002, nhỏ là bình thường |
+| **`grdn` (grad norm)** | Độ lớn tổng của hướng sửa ở step đó. Nhảy vọt bất thường = train không ổn định | ~9 |
+| **`data_s` / `updt_s` / `smp/s`** | Thời gian chờ đọc dữ liệu / thời gian GPU tính một step / số khung xử lý mỗi giây. `data_s` lớn = nghẽn ở đọc video, tăng `num_workers` | L4: `updt_s` 0,25 s, ~4 step/s |
+| **`num_workers`** | Số tiến trình đọc và giải mã video song song cho dataloader | 2 ở nhà, 4 trên Colab |
+| **AMP (`use_amp`)** | Tính bằng số 16 bit thay vì 32 bit: nhanh hơn, ít bộ nhớ hơn, gần như không mất độ chính xác | `policy.use_amp: true` |
+| **chuẩn hoá (normalization)** | Trước khi vào mạng, mỗi góc khớp / action được trừ trung bình, chia độ lệch chuẩn tính từ dataset; lúc chạy đổi ngược lại. Lưu trong `policy_preprocessor*` / `policy_postprocessor*` | Mỗi dataset có thống kê riêng, nên không trung bình trọng số được giữa hai checkpoint train trên hai dataset |
+| **`chunk_size`** | ACT đoán một lần cả chuỗi action tới (action chunking) | 50 action ~ 1,7 s |
+| **`n_action_steps`** | Làm bao nhiêu action trong chuỗi rồi mới nhìn ảnh, đoán lại. Các action chờ nằm trong hàng đợi (`_action_queue`) | 20 |
+| **temporal ensembling** | Đoán lại MỖI bước, action chạy = trung bình có trọng số các chuỗi đoán chồng lên nhau (bài báo ACT) | Ở đây tệ hơn và chậm: đã bỏ |
+| **checkpoint / `last`** | Bản lưu trọng số tại một step (`checkpoints/010000/`). `last` trỏ tới bản mới nhất, không phải bản tốt nhất | Vòng 2: `last` 68 %, ck 10k 85 % (100 seed) |
+| **`pretrained_model/`** | Thư mục dùng được của checkpoint: `config.json` + `model.safetensors` + bộ chuẩn hoá. Đưa thẳng cho `eval_policy --policy` | |
+| **resume** | Train tiếp từ checkpoint cuối sau khi bị ngắt (giữ cả trạng thái optimizer, step) | `lerobot-train --resume=true` |
+| **train từ đầu / fine-tune** | Từ đầu: trọng số ngẫu nhiên (trừ ResNet18 đã học sẵn ImageNet). Fine-tune: bắt đầu từ một checkpoint đã train | DAgger 1-3: fine-tune; bản min-jerk: từ đầu |
+| **vòng kín (closed loop) / lỗi cộng dồn** | Lúc chấm không có thầy: action của mạng đổi cảnh, cảnh mới vào lại mạng. Lệch nhỏ cộng dồn đưa tay tới cảnh chưa từng thấy | Lý do loss thấp mà vẫn gắp hỏng |
+| **DAgger kiểu thầy tiếp quản** | AI lái `t_b` bước (15-250), thầy reset từ tư thế hiện tại và làm nốt; chỉ ghi đoạn thầy làm. `ai_ok`: AI tự xong (bỏ), `teacher_ok`: ghi, `teacher_fail` / `teacher_slow` (> 400 khung): bỏ | `learning/dagger.py` |
+| **gộp dataset (merge)** | Nối nhiều dataset LeRobot thành một để train | `learning/merge_datasets.py` |
+| **gộp checkpoint (ensemble)** | Chạy nhiều mạng cùng lúc, lấy trung bình action mỗi bước. Khác **trung bình trọng số** (gộp thành một mạng) | 3 mạng: 77,8 -> 84,8 % |
+| **dữ liệu đa mốt (multimodal)** | Cùng một cảnh mà dữ liệu có hai cách làm khác nhau; mạng học trung bình hai cách, ra cách thứ ba sai | Hai thầy (gốc + min-jerk); hai mạng gộp lại đôi khi cũng vậy |
+| **bộ chấm 774 seed** | Seed 0-199, seed cố định >= 200, 2000-2499; không trùng seed train (3000+) và DAgger (6000+) | `sim_setup.EVAL_SEEDS` |
+| **gần / xa** | Vật cách trục khớp 1 dưới / từ 37 cm. Xa thì tay vươn gần hết, kẹp nghiêng nên khó | |
+| **kẹp được mà hỏng / chưa kẹp được** | Hai kiểu hỏng: mang, thả kém / tìm, tiếp cận vật kém | `grasped_but_failed` / `never_grasped` |
+| **`close_err_mm`** | Lần đầu mạng khép kẹp, đầu kẹp lệch tâm vật bao nhiêu mm (x, y, z) | Xem "kẹp vào không khí" |
+| **nhiễu khi chấm** | Tỉ lệ đo trên n seed lệch khoảng ±sqrt(p(1-p)/n). p ~ 0,8: 100 seed ±4 điểm, 774 seed ±1,4 điểm | 85 % trên 100 seed thành 77,8 % trên 774 |
 
 ## 8. Tra cứu thêm
 
