@@ -126,6 +126,16 @@ Rút ra:
    định" chứ không phải "không biết làm". Hướng tiếp: lr nhỏ hơn / giảm dần khi train tiếp, trung bình trọng số hoặc trung bình
    action của nhiều checkpoint, temporal ensembling; luôn chấm 774 seed (hoặc ít nhất 300) trước khi kết luận.
 10. **Đi một mạch 50 action** (`--n-action-steps 50`) thường bằng hoặc tốt hơn đoán lại sau 20 bước; đoán lại sau 5 bước tệ hẳn.
+11. **Gộp 3 checkpoint (trung bình action) đưa 77,8 % lên 84,8 %.** `eval_policy --policy A B C`: mỗi bước cả ba mạng cùng đoán,
+    chạy trung bình action thang thật (không trung bình trọng số vì mỗi vòng chuẩn hoá theo thống kê dataset riêng). Ba mạng vòng 2 ck
+    10k + vòng 3 ck 20k + ck 30k, 774 seed: **656/774 (84,8 %)**, gần 91 %, xa **70 %** (mạng lẻ tốt nhất: 602, gần 86 %, xa 58 %);
+    kẹp được mà hỏng 58, chưa kẹp được 60 (mạng lẻ: 93 / 79). Theo số mạng lẻ đạt seed đó: 3/3 -> gộp đạt 440/455, 2/3 -> 139/169,
+    1/3 -> 63/101, 0/3 -> 14/49. Bước trung vị ván đạt gần như cũ (175 so với 171). Cái giá: chạy 3 mạng mỗi bước (L4: ~3,3 s/ván
+    so với ~1,2 s). Temporal ensembling (`--temporal-ensemble 0.01`) trên mạng lẻ thì tệ đi rõ (4/9 ván đầu) và chậm, đã dừng.
+12. **Dữ liệu lẫn hai thầy.** 500 ván gốc ghi bằng `ScriptedPolicyHybrid` bản gốc (đi nhanh, trung vị ~130 bước), ván DAgger ghi bằng
+    bản min-jerk (chậm, thả thấp, kéo vòng cung); DAgger vòng 1 còn chưa có bản sửa "hộp đã ở bát". Cùng cảnh hai lệnh khác nhau thì
+    ACT học trung bình, có thể là một lý do mạng chập chờn. Đang train lại từ đầu trên dữ liệu một thầy: 500 ván min-jerk mới
+    (seed 3000-4999) + DAgger vòng 2-3 (`learning/configs/act_box4_topwrist_mj.yaml`, notebook mục 11), chấm mọi checkpoint trên 774 seed.
 
 ## 3. Thư mục nào làm gì
 
