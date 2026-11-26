@@ -95,6 +95,8 @@ vài % (v1: 26 rồi 19 cùng một checkpoint); chênh dưới ~5 % chưa kết
 | `act_box4_topwrist_500_dagger1` (Colab T4) | như trên, train tiếp trên 500 ván + **300 ván DAgger** | 32 x +20k | **74 %** | 90 % | 41 % |
 | `act_box4_topwrist_500_dagger2` (Colab L4) | vòng 2: +300 ván DAgger (thầy min-jerk, sửa "hộp đã ở bát") | 32 x +20k | 68 % (last); **85 %** ở checkpoint 10k | 93 % | 69 % |
 | `act_box4_topwrist_500_dagger3` (Colab L4) | vòng 3: từ checkpoint 10k vòng 2, +500 ván DAgger (tổng 500 + 1100) | 32 x +30k | 5k/10k/15k/20k/25k/30k = 69/73/53/**79**/73/77 % | 91 % (20k) | 53 % (20k) |
+| gộp 3 checkpoint (d2 10k + d3 20k + d3 30k) | trung bình action, **774 seed** | | **84,8 %** | 91 % | 70 % |
+| `act_box4_topwrist_mj` (Colab L4) | train từ đầu: 500 ván min-jerk mới + DAgger vòng 2-3, **774 seed** | 32 x 60k | 30k/40k/50k/60k = 57/49/**59**/48 % | 63 % (50k) | 50 % (50k) |
 
 **Chấm đủ 774 seed** (100 seed quá nhiễu): vòng 2 ck 10k **602/774 (77,8 %)**, gần 86 %, xa 58 %; vòng 3 ck 20k 601 (77,6 %), gần 88 %,
 xa 53 %; vòng 3 ck 30k 601 (77,6 %). Ba mạng ngang nhau; mạng chọn dùng: `MyDrive/vla/outputs/train/act_box4_topwrist_500_dagger2_colab/checkpoints/010000/pretrained_model` (vùng xa tốt nhất). Chỉ 455 seed đạt ở cả ba, 725 seed đạt ở ít nhất một, 49 seed hỏng cả ba.
@@ -135,8 +137,21 @@ Rút ra:
     so với ~1,2 s). Temporal ensembling (`--temporal-ensemble 0.01`) trên mạng lẻ thì tệ đi rõ (4/9 ván đầu) và chậm, đã dừng.
 12. **Dữ liệu lẫn hai thầy.** 500 ván gốc ghi bằng `ScriptedPolicyHybrid` bản gốc (đi nhanh, trung vị ~130 bước), ván DAgger ghi bằng
     bản min-jerk (chậm, thả thấp, kéo vòng cung); DAgger vòng 1 còn chưa có bản sửa "hộp đã ở bát". Cùng cảnh hai lệnh khác nhau thì
-    ACT học trung bình, có thể là một lý do mạng chập chờn. Đang train lại từ đầu trên dữ liệu một thầy: 500 ván min-jerk mới
-    (seed 3000-4999) + DAgger vòng 2-3 (`learning/configs/act_box4_topwrist_mj.yaml`, notebook mục 11), chấm mọi checkpoint trên 774 seed.
+    ACT học trung bình, có thể là một lý do mạng chập chờn. Thử train lại từ đầu trên dữ liệu một thầy: 500 ván min-jerk mới
+    (seed 3000-4999) + DAgger vòng 2-3 (`learning/configs/act_box4_topwrist_mj.yaml`, notebook mục 11), xem mục 13.
+13. **Train lại từ đầu trên dữ liệu một thầy KÉM HƠN: tốt nhất 59 %** (774 seed). Checkpoint 10k/20k/30k/40k/50k/60k =
+    ~23 / ~29 (dừng chấm giữa chừng) / 57,0 / 49,2 / **59,2** / 48,4 %. Ck 50k: gần 63 %, xa 50 %; kẹp được mà hỏng 158, chưa kẹp được
+    158 (mạng dagger2 ck 10k: 93 / 79); bước trung vị ván đạt 207 (dagger2: 171). Ngang mạng 500 ván gốc (59 % trên 100 seed), tức
+    800 ván DAgger gần như không giúp gì khi train từ đầu. Lý giải:
+    - Ván DAgger là "thầy sửa lỗi CỦA MỘT MẠNG CỤ THỂ" (cảnh do mạng cũ tự lái tới). Thêm vào khi fine-tune chính mạng đó thì trúng chỗ
+      nó yếu; train mạng mới từ đầu thì mạng mới sai ở chỗ khác, các đoạn sửa đó lệch chỗ. Chuỗi cũ còn train tổng cộng nhiều hơn
+      (60k + 20k + 20k + 10k step).
+    - 800/1300 ván là đoạn "thầy tiếp quản" (nhấc lên rồi tiếp cận lại từ giữa chừng), chỉ 500 ván đầy đủ từ home: mạng thấy ít ví dụ
+      đi một mạch từ home tới vật, nên vùng gần còn kém hơn cả mạng 500 ván gốc.
+    - Điểm vẫn dao động mạnh giữa các checkpoint (49 / 59 / 48 %) dù dữ liệu chỉ một thầy: lẫn hai thầy không phải nguyên nhân chính
+      của sự chập chờn; lr cố định 3e-5 tới cuối vẫn là nghi phạm.
+    Kết luận: mạng tốt nhất vẫn là **gộp 3 checkpoint DAgger (84,8 %)**. Muốn dùng dữ liệu một thầy thì phải đi lại chuỗi DAgger từ mạng
+    mới (mỗi vòng AI mới lái, thầy min-jerk sửa), không thay được bằng một lần train từ đầu.
 
 ## 3. Thư mục nào làm gì
 
