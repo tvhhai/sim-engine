@@ -4,7 +4,7 @@
     python -m sim_engine.learning.train learning/configs/act_scratch.yaml --steps=200  # ghi đè tham số khi chạy thử
 
 Ba config: act_scratch (ACT từ đầu), act_finetune (train tiếp một checkpoint, dùng mỗi vòng DAgger, lr giảm dần),
-smolvla_finetune (SmolVLA từ bản học sẵn). Config của các thí nghiệm cũ (camera trước, chỉ cổ tay, toạ độ, nhiễu...) xem git history.
+smolvla_finetune (SmolVLA từ bản học sẵn), diffusion_scratch (Diffusion Policy). Config của các thí nghiệm cũ (camera trước, chỉ cổ tay, toạ độ, nhiễu...) xem git history.
 
 Tham số thêm sau tên file (dạng --khoá=giá_trị) được chuyển thẳng cho lerobot-train và ghi đè giá trị trong YAML.
 

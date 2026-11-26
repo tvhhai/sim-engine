@@ -1,0 +1,35 @@
+# Train Diffusion Policy TỪ ĐẦU trên cùng dữ liệu của mạng ACT tốt nhất (demo gốc + DAgger 1-4, ~2 100 ván), để so trên 774 seed.
+#   python -m sim_engine.learning.train learning/configs/diffusion_scratch.yaml
+# Vì sao thử: Diffusion Policy sinh action bằng cách khử nhiễu dần từ nhiễu ngẫu nhiên, nên giữ được NHIỀU cách làm cho cùng một cảnh
+# (dữ liệu "đa mốt") thay vì trung bình chúng như ACT. Dữ liệu của ta lẫn hai thầy (gốc + min-jerk) và thầy có lúc kéo trượt / gắp lại
+# hộp xa: đúng loại dữ liệu ACT dễ trung bình thành cách làm sai. Mốc so sánh: ACT 84,1 % (một mạng), 85,5 % (gộp 3).
+# Không học sẵn (khác SmolVLA): ResNet18 đọc ảnh lấy trọng số ImageNet, phần còn lại (U-Net 1 chiều) học từ đầu.
+
+# --- Dữ liệu (Colab ghi đè root) ---
+dataset.repo_id: local/so101_box4_topwrist_500_dagger4
+dataset.root: D:/vla/datasets/so101_box4_topwrist_500_dagger4
+dataset.video_backend: pyav
+
+# --- Mạng ---
+policy.type: diffusion
+policy.device: cuda
+policy.push_to_hub: false
+policy.use_amp: true
+# Giữ mặc định LeRobot: nhìn 2 khung gần nhất (n_obs_steps 2), đoán 64 action (horizon), làm 32 rồi đoán lại (n_action_steps),
+# mỗi camera một ResNet18 riêng, ảnh để nguyên (không cắt: hộp 4 cm chỉ ~12x12 điểm ảnh, cắt dễ mất hộp).
+# Khử nhiễu: train với 100 mức nhiễu, chạy bằng DDIM 10 bước (mặc định DDPM 100 bước: mỗi lần đoán chạy U-Net 100 lần, chấm 774 seed
+# lâu gấp ~10). Lr 1e-4 + lịch cosine có sẵn trong preset.
+policy.noise_scheduler_type: DDIM
+policy.num_inference_steps: 10
+# U-Net thu nhỏ một nửa (mặc định 512/1024/2048: 278 triệu tham số, 3,9 s/step batch 4 trên GTX 1650, 60k step trên L4 > 10 giờ).
+# Lần so sánh đầu dùng bản nhỏ; nếu hứa hẹn thì thử bản đầy đủ.
+policy.down_dims: [256, 512, 1024]
+
+# --- Nơi lưu và cách chạy ---
+output_dir: D:/vla/outputs/train/diffusion_scratch
+job_name: diffusion_scratch
+batch_size: 32
+steps: 30000
+save_freq: 10000                               # 3 checkpoint; lr giảm dần nên ck cuối thường tốt nhất
+log_freq: 100
+num_workers: 4

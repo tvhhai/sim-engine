@@ -38,7 +38,7 @@ Phần AI (`learning/`, chạy bằng `D:/vla/venv-lerobot`; dữ liệu và che
 learning/
     sim_setup.py               # cầu nối env <-> LeRobot: camera, khung dữ liệu, action 6 <-> 7 số, bộ 774 seed chấm
     record_dataset.py          # thầy giáo (policy viết tay) ghi demo, chỉ giữ ván thành công
-    train.py + configs/        # act_scratch / act_finetune (DAgger, lr giảm dần) / smolvla_finetune
+    train.py + configs/        # act_scratch / act_finetune (DAgger, lr giảm dần) / smolvla_finetune / diffusion_scratch
     dagger.py, merge_datasets.py   # một vòng DAgger (AI lái, thầy sửa), gộp dataset
     eval_policy.py             # chấm trên 774 seed, gộp nhiều checkpoint (trung bình action), ghi replay
     push_dataset.py            # đẩy dataset lên Hugging Face

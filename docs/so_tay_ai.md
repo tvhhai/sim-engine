@@ -35,11 +35,11 @@ Vai trò của policy viết tay từ giờ: **thầy giáo**. Nó làm mẫu, m
 |---|---|---|
 | Python 3.12 venv riêng cho AI | Không đụng venv của Studio | `D:/vla/venv-lerobot` |
 | PyTorch bản CUDA 12.6 | Chạy mạng trên GPU | trong venv trên |
-| LeRobot 0.7 (`lerobot[dataset,training,smolvla]`) | Định dạng dataset, train ACT / SmolVLA | trong venv trên |
+| LeRobot 0.7 (`lerobot[dataset,training,smolvla,diffusion]`) | Định dạng dataset, train ACT / SmolVLA / Diffusion | trong venv trên |
 | `learning/mini_local.ipynb` | Bản Colab thu nhỏ chạy ở nhà (~5 phút): ghi 3 ván, train 300 step, chấm vài seed, tự viết vòng lặp mạng lái | Học cách chạy trước khi đọc code |
 | `learning/mini_smolvla.ipynb` | Như trên cho SmolVLA (~5 phút): fine-tune 100 step, chấm 1 seed, xem câu lệnh thành token, hàng đợi 50 action | Trước khi chạy SmolVLA trên Colab |
 | `learning/record_dataset.py` | Ghi dataset từ thầy giáo | chặng 1 |
-| `learning/configs/*.yaml` + `learning/train.py` | `act_scratch` (ACT từ đầu), `act_finetune` (train tiếp, mỗi vòng DAgger, lr giảm dần), `smolvla_finetune` (SmolVLA từ bản học sẵn) | chặng 2 |
+| `learning/configs/*.yaml` + `learning/train.py` | `act_scratch` (ACT từ đầu), `act_finetune` (train tiếp, mỗi vòng DAgger, lr giảm dần), `smolvla_finetune` (SmolVLA từ bản học sẵn), `diffusion_scratch` (Diffusion Policy) | chặng 2 |
 | `learning/dagger.py` + `learning/merge_datasets.py` | Một vòng DAgger (AI lái, thầy sửa) và gộp dataset | chặng 2 |
 | `learning/push_dataset.py` | Đẩy dataset lên Hugging Face (cả bản con N ván) | chia sẻ |
 | `learning/eval_policy.py` | Bài kiểm tra trên bộ seed cố định | chặng 3 |
@@ -50,7 +50,7 @@ Cài lại từ đầu (PowerShell / Git Bash):
 uv venv --python 3.12 D:/vla/venv-lerobot
 uv pip install --python D:/vla/venv-lerobot/Scripts/python.exe --index-strategy unsafe-best-match \
     --extra-index-url https://download.pytorch.org/whl/cu126 "torch==2.14.1+cu126" "torchvision==0.29.1+cu126" \
-    "lerobot[dataset,training,smolvla]==0.7.0" -e <đường dẫn tới sim-engine>
+    "lerobot[dataset,training,smolvla,diffusion]==0.7.0" -e <đường dẫn tới sim-engine>
 ```
 
 Chạy (dùng `D:/vla/venv-lerobot/Scripts/python.exe`):
@@ -177,6 +177,17 @@ Rút ra:
     checkpoint may rủi. Ck 20k: xa 71,4 %, kẹp được mà hỏng chỉ 44. Một mạng lẻ giờ bằng gộp 3 mạng cũ, chạy nhanh gấp 3. Gộp d4 15k +
     d3cos 7,5k + 10k: **662/774 (85,5 %)**, xa 72,3 %; hơn 656 của gộp cũ nhưng trong mức nhiễu (±1,4 điểm), tức đang chạm trần ~85 %
     của ACT trên bài này. Mạng nên dùng (một mạng): `MyDrive/vla/outputs/train/act_box4_topwrist_500_dagger4_colab/checkpoints/020000/pretrained_model`.
+16. **ACT tốt nhất (d4 ck 20k) còn hỏng ở đâu** (123/774 seed hỏng). 115 ca thầy min-jerk làm được, chỉ 8 ca thầy cũng hỏng: còn nhiều
+    chỗ học được, chưa chạm giới hạn của thầy. Theo bán kính: r < 20 cm 82 % (thầy 98 %), 20-37 cm 91-93 % (thầy ~100 %), 37-40 cm 81 %
+    (thầy 96 %), **40-45 cm 59 % (thầy 88 %)**: phần lớn khoảng cách còn lại nằm ở vòng ngoài cùng và vòng sát chân đế (thầy có động
+    tác riêng cho cả hai: hộp xa kéo trượt vào rồi gắp lại, hộp sát đế dời ra ngoài khi nhấc).
+    - Kẹp được mà hỏng (44): 29 làm rơi giữa đường, 10 rơi gần chỗ cũ, 5 nằm sát thành bát; 30/44 ở r >= 37 cm.
+    - Chưa kẹp được (79): 49 ca đẩy hộp lệch > 2 cm; 28 ca không khép kẹp lần nào; lần khép đầu lệch ngang (y) trung vị 34 mm,
+      tức kẹp trượt sang cạnh hộp chứ không phải sai độ cao (z lệch ~6 mm).
+    Hướng: thêm dữ liệu đúng chỗ yếu (DAgger chỉ trên seed r >= 37 cm và r < 20 cm), hoặc mô hình giữ được nhiều cách làm (Diffusion).
+17. **Diffusion Policy (đang chuẩn bị).** `learning/configs/diffusion_scratch.yaml`, notebook mục 8b: train từ đầu trên cùng dữ liệu
+    ACT tốt nhất (~2 100 ván). U-Net thu nhỏ 256/512/1024 (89 triệu tham số; bản mặc định 278 triệu chậm ~6 lần), DDIM 10 bước khi
+    chạy, 30k step. Cần thêm `lerobot[diffusion]` (thư viện diffusers).
 
 ## 3. Thư mục nào làm gì
 
