@@ -175,7 +175,8 @@ Rút ra:
     xong ~60 % lần tách nhánh, thầy chỉ sửa ca khó), train tiếp vòng 3 ck 20k 20k step lr cosine. Ck 5k/10k/15k/20k = 62,7 / 75,8 /
     83,2 / **84,1 %**: với lr giảm dần, checkpoint **cuối** là tốt nhất (giữa chừng lr còn cao nên điểm thấp); không còn phải chọn
     checkpoint may rủi. Ck 20k: xa 71,4 %, kẹp được mà hỏng chỉ 44. Một mạng lẻ giờ bằng gộp 3 mạng cũ, chạy nhanh gấp 3. Gộp d4 15k +
-    d3cos 7,5k + 10k: **662/774 (85,5 %)**, xa 72,3 %; hơn 656 của gộp cũ nhưng trong mức nhiễu (±1,4 điểm), tức đang chạm trần ~85 %
+    d3cos 7,5k + 10k: **662/774 (85,5 %)**, xa 72,3 %; gộp d4 20k + d4 15k + d3cos 7,5k cũng đúng 662. Hơn 656 của gộp cũ nhưng trong
+    mức nhiễu (±1,4 điểm), tức đang chạm trần ~85 %
     của ACT trên bài này. Mạng nên dùng (một mạng): `MyDrive/vla/outputs/train/act_box4_topwrist_500_dagger4_colab/checkpoints/020000/pretrained_model`.
 16. **ACT tốt nhất (d4 ck 20k) còn hỏng ở đâu** (123/774 seed hỏng). 115 ca thầy min-jerk làm được, chỉ 8 ca thầy cũng hỏng: còn nhiều
     chỗ học được, chưa chạm giới hạn của thầy. Theo bán kính: r < 20 cm 82 % (thầy 98 %), 20-37 cm 91-93 % (thầy ~100 %), 37-40 cm 81 %
