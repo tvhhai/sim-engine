@@ -42,7 +42,7 @@ learning/
     dagger.py, merge_datasets.py   # một vòng DAgger (AI lái, thầy sửa), gộp dataset
     eval_policy.py             # chấm trên 774 seed, gộp nhiều checkpoint (trung bình action), ghi replay
     push_dataset.py            # đẩy dataset lên Hugging Face
-    mini_local.ipynb           # bản thu nhỏ chạy ở nhà ~5 phút, chú thích từng dòng
+    mini_local.ipynb, mini_smolvla.ipynb   # bản thu nhỏ ACT / SmolVLA chạy ở nhà ~5 phút, chú thích từng dòng
     colab/so101_act_colab.ipynb    # chạy thật trên Colab (ghi, train, DAgger, chấm, SmolVLA, đẩy HF)
 ```
 Nhật ký thí nghiệm và kết luận: `docs/so_tay_ai.md`. Luôn chấm đủ 774 seed trước khi kết luận (100 seed lệch ±4 điểm).

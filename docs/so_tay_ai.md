@@ -37,6 +37,7 @@ Vai trò của policy viết tay từ giờ: **thầy giáo**. Nó làm mẫu, m
 | PyTorch bản CUDA 12.6 | Chạy mạng trên GPU | trong venv trên |
 | LeRobot 0.7 (`lerobot[dataset,training,smolvla]`) | Định dạng dataset, train ACT / SmolVLA | trong venv trên |
 | `learning/mini_local.ipynb` | Bản Colab thu nhỏ chạy ở nhà (~5 phút): ghi 3 ván, train 300 step, chấm vài seed, tự viết vòng lặp mạng lái | Học cách chạy trước khi đọc code |
+| `learning/mini_smolvla.ipynb` | Như trên cho SmolVLA (~5 phút): fine-tune 100 step, chấm 1 seed, xem câu lệnh thành token, hàng đợi 50 action | Trước khi chạy SmolVLA trên Colab |
 | `learning/record_dataset.py` | Ghi dataset từ thầy giáo | chặng 1 |
 | `learning/configs/*.yaml` + `learning/train.py` | `act_scratch` (ACT từ đầu), `act_finetune` (train tiếp, mỗi vòng DAgger, lr giảm dần), `smolvla_finetune` (SmolVLA từ bản học sẵn) | chặng 2 |
 | `learning/dagger.py` + `learning/merge_datasets.py` | Một vòng DAgger (AI lái, thầy sửa) và gộp dataset | chặng 2 |
