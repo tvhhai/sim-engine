@@ -6,6 +6,7 @@ Cách dùng (môi trường có LeRobot, vd D:/vla/venv-lerobot):
 
 --limit N: chỉ chạy N seed đầu của bộ đánh giá (cách đều trong 774 seed) để có số nhanh; bỏ --limit để chạy đủ 774.
 --replay TÊN: ghi thêm results/replays/TÊN.json để xem từng ván trên Studio (Replay > Nguồn replay).
+--policy A B C: gộp nhiều checkpoint. Mỗi bước cả ba mạng cùng đoán, action chạy thật = trung bình action của chúng (xem act()).
 Kết quả: tỉ lệ thành công chung, theo bán kính (r < 37 cm / r >= 37 cm), danh sách seed hỏng; ghi JSON từng seed.
 
 Khác với lúc train: ở đây KHÔNG có thầy giáo. Mạng tự nhìn ảnh, tự ra lệnh, mô phỏng chạy theo lệnh đó, rồi mạng nhìn kết quả và ra lệnh
@@ -71,22 +72,36 @@ def _recorder(env):
     return Recorder(env, SimpleNamespace(_joint_ids=joint_ids, _current_joint_targets=None))
 
 
-def run_episode(seed, policy, pre, post, device, kind, size, task, max_steps, record=False):
-    """Cho policy AI tự chạy một ván. Trả (dict kết quả, ván replay hoặc None nếu record=False)."""
+def act(members, observation, device, task):
+    """Action chạy thật ở bước này. members = danh sách (mạng, pre, post); một mạng thì như cũ.
+
+    Gộp nhiều checkpoint: lấy trung bình action THANG THẬT (sau post) của từng mạng. Không trung bình trọng số vì mỗi checkpoint
+    chuẩn hoá theo thống kê dataset riêng của vòng nó (vòng 3 gộp nhiều ván hơn vòng 2). Lý do thử: chấm 774 seed, ba mạng tốt nhất
+    (dagger2 010000, dagger3 020000, dagger3 030000) cùng đạt ~601/774 nhưng hỏng ở seed khác nhau: 725 seed đạt ở ít nhất một mạng,
+    chỉ 455 seed đạt ở cả ba. Mỗi mạng giữ hàng đợi action riêng; cả ba reset cùng lúc nên đoán lại cùng nhịp.
+    """
     import torch
     from lerobot.common.control_utils import predict_action
 
+    actions = [predict_action(observation, policy, torch.device(device), pre, post, use_amp=False, task=task)
+               for policy, pre, post in members]
+    return actions[0] if len(actions) == 1 else torch.stack(actions).mean(0)
+
+
+def run_episode(seed, members, device, kind, size, task, max_steps, record=False):
+    """Cho policy AI tự chạy một ván. members = [(mạng, pre, post), ...]. Trả (dict kết quả, ván replay hoặc None)."""
     # Mạng được train với những đầu vào nào (camera nào, có toạ độ vật không) thì dựng đúng những đầu vào đó.
-    cameras, env_state = sim_setup.spec_from_features(policy.config.input_features)
+    cameras, env_state = sim_setup.spec_from_features(members[0][0].config.input_features)
     env, options = sim_setup.make_env(seed, kind, size, images=bool(cameras))   # cùng cảnh với seed đó của policy viết tay
     obs, info = env.reset(seed=seed, options=options)
     rec = _recorder(env) if record else None
     frames = [rec.frame(0, 0, 0, 0, info, 1.0)] if rec else []   # khung 0 của replay: trước khi làm gì
     # Xoá trí nhớ của ván trước. ACT giữ một hàng đợi action: mỗi lần đoán 50 action (chunk_size), làm dần n_action_steps cái
     # rồi mới đoán lại. Không reset thì ván mới sẽ làm nốt action còn thừa của ván cũ.
-    policy.reset()
-    pre.reset()
-    post.reset()
+    for policy, pre, post in members:
+        policy.reset()
+        pre.reset()
+        post.reset()
     grasped, t, close_err = False, 0, None
     for t in range(max_steps):
         # 1) Đổi quan sát của env sang định dạng LeRobot (giống hệt lúc ghi dataset), bỏ trường "action" và "task".
@@ -94,7 +109,7 @@ def run_episode(seed, policy, pre, post, device, kind, size, task, max_steps, re
         observation = {k: v for k, v in frame.items() if k.startswith("observation.")}
         # 2) Mạng ra lệnh. predict_action làm gọn: chuẩn hoá (pre) -> mạng -> đổi về thang thật (post).
         #    Thực tế mạng chỉ chạy thật sự mỗi n_action_steps bước; các bước giữa lấy action kế tiếp trong hàng đợi.
-        action = predict_action(observation, policy, torch.device(device), pre, post, use_amp=False, task=task)
+        action = act(members, observation, device, task)
         env_action = sim_setup.to_env_action(action.cpu().numpy())   # 6 số -> 7 số env nhận
         # 3) Mô phỏng làm lệnh đó và trả quan sát mới. Vòng lặp quay lại bước 1 với quan sát mới (vòng kín).
         obs, _, terminated, truncated, info = env.step(env_action)
@@ -171,7 +186,8 @@ def summarize(rows):
 def main():
     # --- Tham số dòng lệnh ---
     parser = argparse.ArgumentParser(description="Đánh giá policy LeRobot trên bộ seed cố định")
-    parser.add_argument("--policy", required=True, help="thư mục pretrained_model của checkpoint")
+    parser.add_argument("--policy", required=True, nargs="+",
+                        help="thư mục pretrained_model của checkpoint; nhiều thư mục = gộp, lấy trung bình action")
     parser.add_argument("--kind", choices=["box", "sphere"], default="box")
     parser.add_argument("--size", type=float, default=0.04)
     parser.add_argument("--color-name", default="red")
@@ -196,14 +212,16 @@ def main():
     if args.limit:
         seeds = [seeds[i] for i in np.linspace(0, len(seeds) - 1, args.limit).round().astype(int)]
     task = sim_setup.TASKS[args.kind].format(color=args.color_name)
-    policy, pre, post = load_policy(args.policy, args.device, args.n_action_steps, args.temporal_ensemble)
+    members = [load_policy(path, args.device, args.n_action_steps, args.temporal_ensemble) for path in args.policy]
     # Tên hiện trên replay: thư mục ngay dưới ".../train/", vd D:/vla/outputs/train/act_box4_v1/... -> "act_box4_v1".
-    policy_name = args.name or next((p.name for p in Path(args.policy).parents if p.parent.name == "train"), "AI")
+    policy_name = args.name or next((p.name for p in Path(args.policy[0]).parents if p.parent.name == "train"), "AI")
+    if len(members) > 1 and not args.name:
+        policy_name = f"gộp {len(members)} checkpoint"
 
     # --- Chạy từng seed ---
     rows, episodes, per_group, t0 = [], [], {}, time.time()
     for k, seed in enumerate(seeds):
-        row, episode = run_episode(seed, policy, pre, post, args.device, args.kind, args.size, task, args.max_steps,
+        row, episode = run_episode(seed, members, args.device, args.kind, args.size, task, args.max_steps,
                                    record=bool(args.replay))
         if episode is not None:                                  # chỉ giữ tối đa --replay-per-group ván mỗi nhóm (đỡ tốn RAM)
             group = label(row)
@@ -221,7 +239,7 @@ def main():
     print(json.dumps(summary, ensure_ascii=False, indent=1))
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out).write_text(json.dumps({"policy": args.policy, "kind": args.kind, "size": args.size, "summary": summary,
+        Path(args.out).write_text(json.dumps({"policy": args.policy if len(args.policy) > 1 else args.policy[0], "kind": args.kind, "size": args.size, "summary": summary,
                                               "rows": rows}, ensure_ascii=False, indent=1), encoding="utf-8")
     if args.replay:
         write_replay(args.replay, policy_name, args.kind, args.size, rows, episodes)
