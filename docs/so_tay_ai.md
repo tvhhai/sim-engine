@@ -110,6 +110,8 @@ vài % (v1: 26 rồi 19 cùng một checkpoint); chênh dưới ~5 % chưa kết
 | gộp 3 checkpoint (d2 10k + d3 20k + d3 30k) | trung bình action, **774 seed** | | **84,8 %** | 91 % | 70 % |
 | `act_box4_topwrist_mj` (Colab L4) | train từ đầu: 500 ván min-jerk mới + DAgger vòng 2-3, **774 seed** | 32 x 60k | 30k/40k/50k/60k = 57/49/**59**/48 % | 63 % (50k) | 50 % (50k) |
 | `act_box4_topwrist_d3cos` (Colab L4) | vòng 3 ck 20k train tiếp, **lr giảm dần**, cùng dữ liệu, **774 seed** | 32 x +10k | 2,5k/5k/7,5k/10k = 76,4/76,4/**81,5**/81,1 % | | |
+| `act_box4_topwrist_500_dagger4` (Colab L4) | vòng 4: +500 ván DAgger do **gộp 3 checkpoint lái**, từ vòng 3 ck 20k, lr giảm dần, **774 seed** | 32 x +20k | 5k/10k/15k/20k = 62,7/75,8/83,2/**84,1** % | 89,7 % (20k) | 71,4 % (20k) |
+| gộp 3 mạng mới (d4 15k + d3cos 7,5k + 10k) | trung bình action, **774 seed** | | **85,5 %** | 91,4 % | 72,3 % |
 
 **Chấm đủ 774 seed** (100 seed quá nhiễu): vòng 2 ck 10k **602/774 (77,8 %)**, gần 86 %, xa 58 %; vòng 3 ck 20k 601 (77,6 %), gần 88 %,
 xa 53 %; vòng 3 ck 30k 601 (77,6 %). Ba mạng ngang nhau; mạng chọn dùng: `MyDrive/vla/outputs/train/act_box4_topwrist_500_dagger2_colab/checkpoints/010000/pretrained_model` (vùng xa tốt nhất). Chỉ 455 seed đạt ở cả ba, 725 seed đạt ở ít nhất một, 49 seed hỏng cả ba.
@@ -169,6 +171,12 @@ Rút ra:
     3e-5 -> 0 (`act_finetune.yaml`): ck 2,5k / 5k / 7,5k / 10k = 591 / 591 / **631 (81,5 %)** / 628 (81,1 %). Hai checkpoint cuối (lr đã
     nhỏ) cao và sát nhau: hết cảnh điểm nhảy 49 / 59 / 48 % như khi lr cố định. Không thêm dữ liệu nào, chỉ đổi lịch lr. Từ vòng 4 mọi
     lần train tiếp dùng lịch này. Mạng: `MyDrive/vla/outputs/train/act_box4_topwrist_d3cos_colab/checkpoints/007500/pretrained_model`.
+15. **DAgger vòng 4 + lr giảm dần: mạng lẻ 84,1 %, gộp 85,5 %.** 500 ván DAgger do mạng gộp 3 checkpoint (84,8 %) lái (mạng giỏi tự
+    xong ~60 % lần tách nhánh, thầy chỉ sửa ca khó), train tiếp vòng 3 ck 20k 20k step lr cosine. Ck 5k/10k/15k/20k = 62,7 / 75,8 /
+    83,2 / **84,1 %**: với lr giảm dần, checkpoint **cuối** là tốt nhất (giữa chừng lr còn cao nên điểm thấp); không còn phải chọn
+    checkpoint may rủi. Ck 20k: xa 71,4 %, kẹp được mà hỏng chỉ 44. Một mạng lẻ giờ bằng gộp 3 mạng cũ, chạy nhanh gấp 3. Gộp d4 15k +
+    d3cos 7,5k + 10k: **662/774 (85,5 %)**, xa 72,3 %; hơn 656 của gộp cũ nhưng trong mức nhiễu (±1,4 điểm), tức đang chạm trần ~85 %
+    của ACT trên bài này. Mạng nên dùng (một mạng): `MyDrive/vla/outputs/train/act_box4_topwrist_500_dagger4_colab/checkpoints/020000/pretrained_model`.
 
 ## 3. Thư mục nào làm gì
 
