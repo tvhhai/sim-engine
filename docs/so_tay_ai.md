@@ -64,6 +64,14 @@ python -m sim_engine.learning.eval_policy --policy <ck A> <ck B> <ck C>        #
 Số đo lần đầu: ghi 200 ván mất 21 phút (bỏ 7 ván hỏng), 34 823 khung hình, 182 MB. Train ACT 52 triệu tham số, batch 8:
 2,8 bước / giây, GPU dùng 1,3 GB, 20 000 bước khoảng 2 giờ. Trên Windows, `torchcodec` chưa đọc được video nên LeRobot tự dùng `pyav`.
 
+### Dataset trên Hugging Face (private, tài khoản tvhhai)
+
+- [`tvhhai/so101_box4_mj`](https://huggingface.co/datasets/tvhhai/so101_box4_mj): 500 demo thầy min-jerk (93 950 khung, seed 3000-4999).
+- [`tvhhai/so101_box4_mj_50`](https://huggingface.co/datasets/tvhhai/so101_box4_mj_50): 50 ván đầu (mốc "50 demo" của kế hoạch 12 tuần).
+
+Train thẳng từ Hub: `--dataset.repo_id=tvhhai/so101_box4_mj` (bỏ `--dataset.root`). Đổi sang public ở trang Settings của repo. Đẩy
+dataset khác: `learning/push_dataset.py` hoặc notebook Colab mục 9.
+
 ### Chạy trên Google Colab
 
 Notebook dựng sẵn: [`learning/colab/so101_act_colab.ipynb`](../learning/colab/so101_act_colab.ipynb). Mở thẳng từ GitHub:
@@ -100,6 +108,7 @@ vài % (v1: 26 rồi 19 cùng một checkpoint); chênh dưới ~5 % chưa kết
 | `act_box4_topwrist_500_dagger3` (Colab L4) | vòng 3: từ checkpoint 10k vòng 2, +500 ván DAgger (tổng 500 + 1100) | 32 x +30k | 5k/10k/15k/20k/25k/30k = 69/73/53/**79**/73/77 % | 91 % (20k) | 53 % (20k) |
 | gộp 3 checkpoint (d2 10k + d3 20k + d3 30k) | trung bình action, **774 seed** | | **84,8 %** | 91 % | 70 % |
 | `act_box4_topwrist_mj` (Colab L4) | train từ đầu: 500 ván min-jerk mới + DAgger vòng 2-3, **774 seed** | 32 x 60k | 30k/40k/50k/60k = 57/49/**59**/48 % | 63 % (50k) | 50 % (50k) |
+| `act_box4_topwrist_d3cos` (Colab L4) | vòng 3 ck 20k train tiếp, **lr giảm dần**, cùng dữ liệu, **774 seed** | 32 x +10k | 2,5k/5k/7,5k/10k = 76,4/76,4/**81,5**/81,1 % | | |
 
 **Chấm đủ 774 seed** (100 seed quá nhiễu): vòng 2 ck 10k **602/774 (77,8 %)**, gần 86 %, xa 58 %; vòng 3 ck 20k 601 (77,6 %), gần 88 %,
 xa 53 %; vòng 3 ck 30k 601 (77,6 %). Ba mạng ngang nhau; mạng chọn dùng: `MyDrive/vla/outputs/train/act_box4_topwrist_500_dagger2_colab/checkpoints/010000/pretrained_model` (vùng xa tốt nhất). Chỉ 455 seed đạt ở cả ba, 725 seed đạt ở ít nhất một, 49 seed hỏng cả ba.
@@ -155,6 +164,10 @@ Rút ra:
       của sự chập chờn; lr cố định 3e-5 tới cuối vẫn là nghi phạm.
     Kết luận: mạng tốt nhất vẫn là **gộp 3 checkpoint DAgger (84,8 %)**. Muốn dùng dữ liệu một thầy thì phải đi lại chuỗi DAgger từ mạng
     mới (mỗi vòng AI mới lái, thầy min-jerk sửa), không thay được bằng một lần train từ đầu.
+14. **lr giảm dần là thứ thiếu: mạng lẻ lên 81,5 %.** Train tiếp vòng 3 ck 20k (601/774) thêm 10k step trên đúng dữ liệu cũ, lr cosine
+    3e-5 -> 0 (`act_finetune.yaml`): ck 2,5k / 5k / 7,5k / 10k = 591 / 591 / **631 (81,5 %)** / 628 (81,1 %). Hai checkpoint cuối (lr đã
+    nhỏ) cao và sát nhau: hết cảnh điểm nhảy 49 / 59 / 48 % như khi lr cố định. Không thêm dữ liệu nào, chỉ đổi lịch lr. Từ vòng 4 mọi
+    lần train tiếp dùng lịch này. Mạng: `MyDrive/vla/outputs/train/act_box4_topwrist_d3cos_colab/checkpoints/007500/pretrained_model`.
 
 ## 3. Thư mục nào làm gì
 
