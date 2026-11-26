@@ -24,6 +24,6 @@ output_dir: D:/vla/outputs/train/smolvla_finetune
 job_name: smolvla_finetune
 batch_size: 32                                 # hướng dẫn LeRobot dùng 64; 32 vừa L4 24 GB
 steps: 20000
-save_freq: 5000
+save_freq: 10000                               # chỉ 2 checkpoint (10k, 20k): chấm SmolVLA chậm, lr giảm dần nên ck cuối thường tốt nhất
 log_freq: 100
 num_workers: 4
