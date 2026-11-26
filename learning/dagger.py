@@ -31,7 +31,7 @@ import numpy as np
 
 from .. import config
 from . import sim_setup
-from .eval_policy import load_policy
+from .eval_policy import act, load_policy
 
 GRASP_WAIT_MAX = 60      # AI đang kẹp vật ở bước t_b: chờ tối đa chừng này bước cho tới lúc không kẹp nữa rồi mới tách nhánh
 TEACHER_FRAMES_MAX = 400 # thầy mất nhiều bước hơn thế (lòng vòng, thử lại nhiều lần) thì bỏ ván: dạy AI lòng vòng chẳng ích gì
@@ -55,15 +55,14 @@ def make_teacher(env):
     return teacher
 
 
-def run_episode(seed, policy, pre, post, device, kind, size, task, t_branch):
-    """Một ván DAgger. Trả (kết quả: "ai_ok" / "no_branch" / "teacher_ok" / "teacher_fail", số bước AI đã lái, danh sách khung)."""
-    import torch
-    from lerobot.common.control_utils import predict_action
-
-    cameras, env_state = sim_setup.spec_from_features(policy.config.input_features)
+def run_episode(seed, members, device, kind, size, task, t_branch):
+    """Một ván DAgger. members = [(mạng, pre, post), ...]: một mạng, hoặc nhiều checkpoint lái chung (trung bình action, xem
+    eval_policy.act). Trả (kết quả: "ai_ok" / "no_branch" / "teacher_ok" / "teacher_fail", số bước AI đã lái, danh sách khung)."""
+    cameras, env_state = sim_setup.spec_from_features(members[0][0].config.input_features)
     env, options = sim_setup.make_env(seed, kind, size, images=bool(cameras))
     obs, info = env.reset(seed=seed, options=options)
-    policy.reset(); pre.reset(); post.reset()
+    for policy, pre, post in members:
+        policy.reset(); pre.reset(); post.reset()
     try:
         # 1) AI lái tới t_b (kéo dài thêm tối đa GRASP_WAIT_MAX bước nếu lúc đó đang kẹp vật)
         t = 0
@@ -72,7 +71,7 @@ def run_episode(seed, policy, pre, post, device, kind, size, task, t_branch):
                 return "no_branch", t, []
             frame = sim_setup.to_frame(env, obs, np.zeros(7), task, cameras, env_state)
             observation = {k: v for k, v in frame.items() if k.startswith("observation.")}
-            action = predict_action(observation, policy, torch.device(device), pre, post, use_amp=False, task=task)
+            action = act(members, observation, device, task)
             obs, _, _, _, info = env.step(sim_setup.to_env_action(action.cpu().numpy()))
             t += 1
             if info.get("success"):
@@ -99,7 +98,9 @@ def run_episode(seed, policy, pre, post, device, kind, size, task, t_branch):
 
 def main():
     parser = argparse.ArgumentParser(description="DAgger: AI lái, thầy tiếp quản, ghi đoạn thầy sửa thành dataset LeRobot")
-    parser.add_argument("--policy", required=True, help="thư mục pretrained_model của checkpoint AI hiện tại")
+    parser.add_argument("--policy", required=True, nargs="+",
+                        help="thư mục pretrained_model của checkpoint AI lái; nhiều thư mục = gộp (trung bình action). Vòng 4 cho "
+                             "mạng gộp 3 checkpoint (84,8 %) lái: mạng giỏi hơn thì lệch ở chỗ khó hơn, thầy sửa đúng chỗ còn yếu")
     parser.add_argument("--episodes", type=int, default=200, help="số ván THẦY SỬA THÀNH CÔNG cần ghi")
     parser.add_argument("--kind", choices=["box", "sphere"], default="box")
     parser.add_argument("--size", type=float, default=0.04)
@@ -115,8 +116,8 @@ def main():
 
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
-    policy, pre, post = load_policy(args.policy, args.device)
-    cameras, env_state = sim_setup.spec_from_features(policy.config.input_features)
+    members = [load_policy(path, args.device) for path in args.policy]
+    cameras, env_state = sim_setup.spec_from_features(members[0][0].config.input_features)
     task = sim_setup.TASKS[args.kind].format(color=args.color_name)
     ds = LeRobotDataset.create(args.repo_id, sim_setup.FPS, sim_setup.features(cameras, env_state), root=args.root,
                                robot_type="so101_follower", use_videos=bool(cameras), streaming_encoding=bool(cameras))
@@ -125,7 +126,7 @@ def main():
     try:
         while len(log["kept"]) < args.episodes:
             t_branch = int(rng.integers(args.branch_min, args.branch_max + 1))
-            result, t_ai, frames = run_episode(seed, policy, pre, post, args.device, args.kind, args.size, task, t_branch)
+            result, t_ai, frames = run_episode(seed, members, args.device, args.kind, args.size, task, t_branch)
             if result == "teacher_ok":
                 for frame in frames:
                     ds.add_frame(frame)

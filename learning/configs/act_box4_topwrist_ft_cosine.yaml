@@ -1,0 +1,34 @@
+# Train TIẾP một checkpoint với learning rate GIẢM DẦN (cosine: tăng dần 500 step đầu rồi giảm mượt về 0 ở step cuối).
+# Vì sao: các vòng DAgger train tiếp với lr cố định 3e-5 và điểm nhảy mạnh giữa các checkpoint (vòng 3: 69/73/53/79/73/77 %, bản
+# min-jerk từ đầu: 57/49/59/48 % trên 774 seed). lr giảm về 0 ở cuối thì các bước cuối chỉ chỉnh rất nhẹ, checkpoint cuối nên ổn định.
+# Cách đặt: preset của ACT luôn ghi đè scheduler = không có, nên phải tắt preset và tự khai báo optimizer + scheduler.
+# Tác dụng phụ: preset cho ResNet18 (backbone) lr riêng 1e-5; tắt preset thì cả mạng dùng chung optimizer.lr.
+# Colab ghi đè policy.path, dataset.*, output_dir, steps.
+
+# --- Mạng: nạp từ checkpoint ---
+policy.path: D:/vla/outputs/train/act_box4_topwrist_500_dagger3_colab/checkpoints/020000/pretrained_model
+policy.device: cuda
+policy.push_to_hub: false
+
+# --- Dữ liệu ---
+dataset.repo_id: local/so101_box4_topwrist_500_dagger3
+dataset.root: D:/vla/datasets/so101_box4_topwrist_500_dagger3
+dataset.video_backend: pyav
+
+# --- Tối ưu: giống preset ACT (AdamW, lr 3e-5, weight decay 1e-4, cắt gradient 10) + lịch giảm dần ---
+use_policy_training_preset: false
+optimizer.type: adamw
+optimizer.lr: 0.00003
+optimizer.weight_decay: 0.0001
+optimizer.grad_clip_norm: 10.0
+scheduler.type: cosine_annealing_with_warmup
+scheduler.num_warmup_steps: 500
+
+# --- Nơi lưu và cách chạy ---
+output_dir: D:/vla/outputs/train/act_box4_topwrist_ft_cosine
+job_name: act_box4_topwrist_ft_cosine
+batch_size: 32
+steps: 10000
+save_freq: 2500
+log_freq: 100
+num_workers: 4
