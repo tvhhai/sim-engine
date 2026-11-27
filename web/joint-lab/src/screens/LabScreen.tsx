@@ -1,7 +1,6 @@
 import {
   Badge,
   Button,
-  Checkbox,
   ColorInput,
   FileButton,
   Group,
@@ -121,12 +120,6 @@ export default function LabScreen() {
               </Button>
             )}
           </FileButton>
-          <Checkbox
-            label="Gắp tất cả"
-            checked={scene.mode === "all"}
-            disabled={running}
-            onChange={(event) => setScene({ ...scene, mode: event.currentTarget.checked ? "all" : "single" })}
-          />
           <Button
             leftSection={<MonitorPlay size={16} />}
             loading={running}

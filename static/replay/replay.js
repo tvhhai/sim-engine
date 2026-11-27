@@ -613,7 +613,7 @@ function drawInfo(fr, fs) {
     const current = fr.objects?.findIndex(obj => obj.id === fr.target_id);
     const active = current >= 0 ? ` · đang xử lý vật ${current + 1}` : "";
     const placed = placements.filter(result => result.status === "placed").length;
-    al += `<div class="alert info"><b>Gắp tất cả${active}</b><br>Kết quả cuối: ${placed}/${placements.length} vật trong bát.
+    al += `<div class="alert info"><b>Gắp nhiều vật${active}</b><br>Kết quả cuối: ${placed}/${placements.length} vật đã chọn trong bát.
       <div>${placements.map(result => {
         const index = fr.objects?.findIndex(obj => obj.id === result.id) ?? -1;
         return `Vật ${index >= 0 ? index + 1 : "—"}: ${results[result.status] ?? "—"}`;

@@ -72,10 +72,11 @@ class LabSceneTests(unittest.TestCase):
             items = [
                 dict(id="box", type="box", size=.025, x=-.08109, y=.00811, yaw=6),
                 dict(id="ball", type="sphere", size=.025, x=.07, y=.03),
+                dict(id="other", type="box", size=.025, x=.35, y=.2),
             ]
             runner.start(dict(pose(), pan=-.4, lift=-34.5, elbow=17.1, wflex=75.4, wroll=-5.5, grip=-.1,
                               wx=-.19755, wy=.08118, objects=items, target_id="box",
-                              bowl={"radius": .065, "height": .05}, mode="all"))
+                              bowl={"radius": .065, "height": .05}, target_ids=["box", "ball"]))
             result = wait(runner)
             self.assertTrue(result.get("success"), result)
             episode = json.loads((Path(directory) / "replay_lab.json").read_text(encoding="utf-8"))["episodes"][0]

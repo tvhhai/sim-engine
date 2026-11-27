@@ -18,10 +18,10 @@ from .store import StudioStore
 LAB_SEED = 2147483647
 
 
-def run_all(env, options):
+def run_all(env, options, target_ids=None):
     """Chạy từng vật trên một mô phỏng liên tục và chấm lại mọi vật ở khung cuối."""
     env.reset(seed=LAB_SEED, options=options)
-    objects = env.lab_objects
+    objects = [obj for obj in env.lab_objects if target_ids is None or obj["id"] in target_ids]
     pending = list(objects)
     frames, outcomes = [], {}
     attempts = 0
@@ -92,8 +92,16 @@ class LabRun:
         keys = ("pan", "lift", "elbow", "wflex", "wroll", "grip", "bx", "by", "byaw", "wx", "wy")
         objects = pose.get("objects")
         target_id = pose.get("target_id")
+        target_ids = pose.get("target_ids")
         bowl = pose.get("bowl")
         mode = pose.get("mode", "single")
+        if target_ids is not None:
+            if (not isinstance(target_ids, list) or not 1 <= len(target_ids) <= 5
+                    or any(not isinstance(ident, str) for ident in target_ids)
+                    or len(set(target_ids)) != len(target_ids) or objects is None):
+                raise ValueError("Chọn từ 1 đến 5 vật cần gắp")
+            mode = "all" if len(target_ids) > 1 else "single"
+            target_id = target_ids[0]
         if mode not in ("single", "all") or (mode == "all" and objects is None):
             raise ValueError("Chế độ gắp không hợp lệ")
         pose = {key: float(pose[key]) for key in keys}
@@ -103,9 +111,15 @@ class LabRun:
             raise ValueError("Hộp và bát phải nằm trong hệ tọa độ ±45 cm")
         if objects is not None:
             pose["objects"] = normalize_objects(objects, target_id)
+            if target_ids is not None:
+                if not set(target_ids).issubset(obj["id"] for obj in pose["objects"]):
+                    raise ValueError("Có vật cần gắp không tồn tại")
+                pose["target_ids"] = target_ids
             pose["bowl"] = normalize_bowl(bowl)
-            validate_bowl = check_bowl_capacity if mode == "all" else check_bowl_fits
-            validate_bowl(pose["objects"], pose["bowl"])
+            check_bowl_fits(pose["objects"], pose["bowl"])
+            if mode == "all":
+                selected = [obj for obj in pose["objects"] if target_ids is None or obj["id"] in target_ids]
+                check_bowl_capacity(selected, pose["bowl"])
             target = next(obj for obj in pose["objects"] if obj["body"] == "box")
             pose.update(target_id=target["id"], bx=target["x"], by=target["y"], byaw=target["yaw"])
         if mode == "all":
@@ -145,16 +159,18 @@ class LabRun:
                                     lab_objects=pose.get("objects"), target_id=pose.get("target_id"),
                                     lab_bowl=pose.get("bowl"))
             all_objects = pose.get("mode") == "all"
-            episode = run_all(env, options) if all_objects and not blocked else Recorder(env, default_policy(env)).run(LAB_SEED, options=options)
+            target_ids = pose.get("target_ids")
+            episode = run_all(env, options, target_ids) if all_objects and not blocked else Recorder(env, default_policy(env)).run(LAB_SEED, options=options)
             episode.update(name="lab", group="mixed", tags=["LAB · lần chạy mới nhất"])
             totals = {}
             if all_objects:
                 if blocked:
-                    episode.update(mode="all", placements=[{"id": obj["id"], "status": "not_attempted"} for obj in env.lab_objects])
+                    episode.update(mode="all", placements=[{"id": obj["id"], "status": "not_attempted"}
+                                                           for obj in env.lab_objects if target_ids is None or obj["id"] in target_ids])
                 placed = sum(result["status"] == "placed" for result in episode["placements"])
                 total = len(episode["placements"])
                 totals = {"placed": placed, "total": total}
-                episode["tags"].append(f"Gắp tất cả · {placed}/{total} vật trong bát")
+                episode["tags"].append(f"Gắp nhiều vật · {placed}/{total} vật đã chọn trong bát")
             episode["initial_options"] = options
             out = self.directory / "replay_lab.html"
             temporary = out.with_suffix(".tmp")

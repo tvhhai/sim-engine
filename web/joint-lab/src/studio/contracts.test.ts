@@ -66,6 +66,11 @@ describe("Studio import contracts", () => {
       parseScene({ ...scene, objects: Array(6).fill(scene.objects[0]) }, meta),
     ).toThrow();
   });
+  it("restores only the selected objects and migrates old all-mode scenes", () => {
+    const objects = [...scene.objects, { ...scene.objects[0], id: "b", x: -.1 }];
+    expect(parseScene({ ...scene, objects, target_ids: ["b"] }, meta).target_ids).toEqual(["b"]);
+    expect(parseScene({ ...scene, objects, mode: "all" }, meta).target_ids).toEqual(["a", "b"]);
+  });
   it("keeps outside-workspace object positions for stop-condition tests", () => {
     const next = parseScene(
       { ...scene, objects: [{ ...scene.objects[0], x: -0.43, y: -0.38 }] },

@@ -26,7 +26,7 @@ export type Pose = {
   wy: number;
 };
 export type Bowl = { color: string; radius: number; height: number }; // radius: tới tâm tường (m), height: chiều cao tường (m)
-export type Scene = { pose: Pose; objects: Item[]; target_id: string; bowl: Bowl; mode?: "single" | "all" };
+export type Scene = { pose: Pose; objects: Item[]; target_id: string; target_ids?: string[]; bowl: Bowl };
 export type Region = {
   pan: [number, number];
   r_min: number;
@@ -89,7 +89,7 @@ export type Meta = {
   limits: [number, number][];
   gopen: number;
   gclose: number;
-  saved_pose: (Pose & { objects?: Item[]; target_id?: string; bowl?: Bowl; mode?: Scene["mode"] }) | null;
+  saved_pose: (Pose & { objects?: Item[]; target_id?: string; target_ids?: string[]; bowl?: Bowl; mode?: "single" | "all" }) | null;
   pick_region: Region;
   pick_scan?: ScanPoint[];
   unreachable_region?: StopRegion;

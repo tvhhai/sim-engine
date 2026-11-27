@@ -126,8 +126,11 @@ export function parseScene(input: unknown, meta: Meta): Scene {
   const target = items.find((item) => item.id === target_id);
   if (!target) throw new Error("Vật cần gắp không tồn tại");
   Object.assign(pose, { bx: target.x, by: target.y, byaw: target.yaw });
-  const mode = (value.mode ?? raw.mode) === "all" ? "all" : "single";
-  return { pose, objects: items, target_id, bowl: parseBowl(value.bowl ?? raw.bowl), mode };
+  const picked = value.target_ids ?? raw.target_ids;
+  const target_ids = Array.isArray(picked)
+    ? [...new Set(picked.filter((id): id is string => typeof id === "string" && ids.has(id)))]
+    : (value.mode ?? raw.mode) === "all" ? items.map((item) => item.id) : [target_id];
+  return { pose, objects: items, target_id, target_ids, bowl: parseBowl(value.bowl ?? raw.bowl) };
 }
 export function request(scene: Scene) {
   const target = scene.objects.find((item) => item.id === scene.target_id)!;

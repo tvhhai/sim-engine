@@ -4,6 +4,7 @@ import {
   Button,
   ColorInput,
   Group,
+  MultiSelect,
   NumberInput,
   Select,
   Stack,
@@ -52,7 +53,7 @@ function ObjectAppearance({ item, index, maxSize, onChange }: {
         }}
         onBlur={() => { if (!validColor(color)) setColor(item.color); }}
       />
-      <NumberInput
+      {item.type === "box" && <NumberInput
         size="xs"
         label="Góc xoay (°)"
         value={yaw}
@@ -64,7 +65,7 @@ function ObjectAppearance({ item, index, maxSize, onChange }: {
           const degrees = yaw === "" ? item.yaw : Math.max(-180, Math.min(180, Number(yaw)));
           setYaw(onChange({ yaw: degrees }) ? degrees : item.yaw);
         }}
-      />
+      />}
       <NumberInput
         size="xs"
         label={item.type === "sphere" ? "Đường kính (cm)" : "Cạnh (cm)"}
@@ -115,6 +116,14 @@ export function ObjectPanel({
   const selectedIndex = scene.objects.findIndex((obj) => obj.id === selected);
   const appearanceIndex = selectedIndex < 0 ? 0 : selectedIndex;
   const appearance = scene.objects[appearanceIndex];
+  const targetIds = scene.target_ids ?? [scene.target_id];
+  const allSelected = targetIds.length === scene.objects.length;
+  function chooseTargets(ids: string[]) {
+    const preferred = ids.find((id) => !targetIds.includes(id)) ?? ids[0];
+    onChange({ ...scene, target_ids: ids, target_id: preferred ?? scene.target_id });
+    if (preferred) onSelect(preferred);
+    setSizeError("");
+  }
   function update(id: string, patch: Partial<Item>) {
     if (
       [patch.x, patch.y, patch.yaw].some(
@@ -182,22 +191,23 @@ export function ObjectPanel({
             ? "Bát chưa đủ chỗ. Thử giảm số vật hoặc tăng bán kính bát."
             : `Cỡ vật khi thêm: ${Number((newSize * 100).toFixed(2))} cm.`}
         </Text>
-        <Select
-            size="xs"
-          label="Vật cần gắp"
-          value={scene.target_id}
-          onChange={(value) => {
-            if (value) {
-              onChange({ ...scene, target_id: value });
-              setSizeError("");
-              onSelect(value);
-            }
-          }}
+        <Group justify="space-between">
+          <Text component="label" htmlFor="lab-target-ids" size="xs" fw={600}>Vật cần gắp</Text>
+          <Button size="compact-xs" variant="subtle" disabled={allSelected} onClick={() => chooseTargets(scene.objects.map((obj) => obj.id))}>
+            Chọn tất cả
+          </Button>
+        </Group>
+        <MultiSelect
+          id="lab-target-ids"
+          size="xs"
+          value={targetIds}
+          onChange={chooseTargets}
+          placeholder="Chọn một hoặc nhiều vật"
+          hidePickedOptions
           data={scene.objects.map((obj, i) => ({
             value: obj.id,
             label: `${obj.type === "sphere" ? "Bóng" : "Hộp"} ${i + 1}`,
           }))}
-          allowDeselect={false}
         />
         <ObjectAppearance
           key={appearance.id}
@@ -250,6 +260,7 @@ export function ObjectPanel({
                     onChange({
                       ...scene,
                       objects,
+                      target_ids: targetIds.filter((id) => id !== obj.id),
                       target_id:
                         scene.target_id === obj.id
                           ? objects[0].id

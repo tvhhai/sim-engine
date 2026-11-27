@@ -144,7 +144,7 @@ function useStudioController() {
           objects,
           target_id: saved?.target_id || objects[0].id,
           bowl: parseBowl(saved?.bowl),
-          mode: saved?.mode,
+          target_ids: saved?.target_ids ?? (saved?.mode === "all" ? objects.map((item) => item.id) : undefined),
         });
         setSelected(objects[0].id);
         try {
@@ -212,7 +212,7 @@ function useStudioController() {
           if (requestedRun.current) {
             requestedRun.current = false;
             setNotice(next.blocked_reason || (next.total !== undefined
-              ? `Gắp tất cả · ${next.placed}/${next.total} vật trong bát`
+              ? `Đã gắp ${next.placed}/${next.total} vật vào bát`
               : next.success ? "Gắp thành công." : "Đã kết thúc mô phỏng. Xem Replay để kiểm tra lần gắp."));
             if (settingsRef.current.autoOpenReplay)
               navigate("replay", { source: "lab" });
@@ -335,14 +335,19 @@ function useStudioController() {
   async function runScene(candidate: Scene) {
     setError("");
     setNotice("");
-    if (candidate.mode === "all" && !fitsBowl(candidate.objects, candidate.bowl)) {
-      setError("Bát chưa đủ chỗ cho tất cả vật. Hãy tăng bán kính bát hoặc giảm cỡ hay số vật.");
+    const targetIds = candidate.target_ids ?? [candidate.target_id];
+    if (!targetIds.length) {
+      setError("Chọn ít nhất một vật cần gắp.");
+      return;
+    }
+    if (targetIds.length > 1 && !fitsBowl(candidate.objects.filter((item) => targetIds.includes(item.id)), candidate.bowl)) {
+      setError("Bát chưa đủ chỗ cho các vật đã chọn. Hãy tăng bán kính bát hoặc chọn ít vật hơn.");
       return;
     }
     setSubmitting(true);
     requestedRun.current = true;
     try {
-      const next = await api<Run>("/run", { ...request(candidate), mode: candidate.mode });
+      const next = await api<Run>("/run", { ...request(candidate), target_ids: targetIds });
       setRun(next);
     } catch (e) {
       requestedRun.current = false;
