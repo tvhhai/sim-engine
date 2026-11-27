@@ -186,9 +186,37 @@ Rút ra:
     - Chưa kẹp được (79): 49 ca đẩy hộp lệch > 2 cm; 28 ca không khép kẹp lần nào; lần khép đầu lệch ngang (y) trung vị 34 mm,
       tức kẹp trượt sang cạnh hộp chứ không phải sai độ cao (z lệch ~6 mm).
     Hướng: thêm dữ liệu đúng chỗ yếu (DAgger chỉ trên seed r >= 37 cm và r < 20 cm), hoặc mô hình giữ được nhiều cách làm (Diffusion).
-17. **Diffusion Policy (đang chuẩn bị).** `learning/configs/diffusion_scratch.yaml`, notebook mục 8b: train từ đầu trên cùng dữ liệu
-    ACT tốt nhất (~2 100 ván). U-Net thu nhỏ 256/512/1024 (89 triệu tham số; bản mặc định 278 triệu chậm ~6 lần), DDIM 10 bước khi
-    chạy, 30k step. Cần thêm `lerobot[diffusion]` (thư viện diffusers).
+17. **SmolVLA (fine-tune từ `lerobot/smolvla_base`) còn xa ACT: tốt nhất ~53 % trên 100 seed.** Cùng dữ liệu ACT tốt nhất (~2 100
+    ván, 318k khung), batch 32, lr 1e-4 cosine, khoá phần nhìn (mặc định). L4: ~1,05 s/step một mình, 20k step 5,4 giờ. Chấm 100 seed
+    (`--limit 100`, cách đều trong bộ 774), con số trong ngoặc là số action làm trước khi đoán lại (`--n-action-steps`):
+    - 10k (50): 22/94 (dừng giữa chừng); 10k (10): 7/52 (dừng). 20k (50): 30/100; **20k (10): 53/100**; 20k (5): 17/63 (dừng).
+    - Train tiếp 20k -> 40k (resume `--steps=40000`): **30k (10): 61/100** (gần 74 %, xa 34 %). Còn tăng: 10k -> 20k -> 30k = 13 -> 53 -> 61.
+    - **Đoán lại sau 10 action** gần gấp đôi so với làm hết 50 (mặc định): SmolVLA đoán 50 action một lần rồi chạy mù 50 bước (~1,7 s
+      sim), sai lệch tích lại; đoán lại sau 5 thì tệ đi (chuỗi mới hay "giật" khỏi chuỗi cũ). ACT ngược lại: 50 tốt nhất (mục 10).
+    - Đã kiểm tra pipeline không lệch: config sau fine-tune có `camera1/2/3`, preprocessor đổi `top -> camera1`, `wrist -> camera2`,
+      camera3 bù ảnh trống ở cả train lẫn chấm; điểm thấp là do mạng chứ không do lỗi nối.
+    - Chấm chậm: ~8 s/ván (50) đến ~25 s/ván (10) trên L4 dùng chung, 774 seed mất 2-5 giờ. Nên chấm 100 seed để lọc, chỉ chấm 774
+      khi đã sát ACT.
+    - Vì sao yếu (giả thuyết, chưa kiểm): phần nhìn SmolVLM bị khoá, ảnh resize lên 512 có pad, hộp 4 cm còn ~10 điểm ảnh trong ảnh
+      gốc; mạng định vị hộp thô hơn ACT (ResNet18 train cùng). Thử tiếp: mở khoá phần nhìn (`--policy.freeze_vision_encoder=false`,
+      chậm và tốn bộ nhớ hơn), train lâu hơn (điểm còn tăng 10k -> 20k -> 30k).
+18. **Diffusion Policy (train từ đầu) tăng đều theo số step, chưa bão hoà.** `learning/configs/diffusion_scratch.yaml` (mục 8b), cùng
+    dữ liệu, U-Net 256/512/1024 (89 triệu tham số), DDIM 10 bước, batch 32. L4 ~2,9 step/s một mình (~1,3 khi chung GPU với SmolVLA).
+    100 seed: ck 10k / 20k / 30k = 11 / 32 / **53** %. Loss 0,022 (2k) -> 0,004 (30k). Train tiếp 30k -> 60k (resume với `--steps=60000`:
+    lịch cosine được tính lại theo 60k nên lr nhảy lên ~5e-5 ở step 30k rồi giảm dần): ck 40k 45/100, tụt ở gần (68 -> 44 %) nhưng
+    xa tăng (22 -> 47 %); lr còn cao nên chưa ổn định, đợi 50k / 60k khi lr đã nhỏ. Chấm nhanh (~8 s/ván).
+    Muốn so ACT phải train tới khi điểm thôi tăng; bài báo Diffusion Policy train 100k+ step.
+
+Bảng chấm nhanh 100 seed (đêm 2026-11-26/27, Colab L4), cùng 100 seed cách đều của bộ 774:
+
+| Mạng | 100 seed | Gần r<37 | Xa r>=37 |
+|---|---|---|---|
+| ACT d4 ck 20k (mốc, 774 seed) | 84,1 % | 89,7 % | 71,4 % |
+| SmolVLA 20k, làm 50 rồi đoán lại | 30 % | 34 % | 22 % |
+| SmolVLA 20k, làm 10 rồi đoán lại | **53 %** | 65 % | 28 % |
+| SmolVLA 30k, làm 10 rồi đoán lại | **61 %** | 74 % | 34 % |
+| Diffusion 10k / 20k / 30k | 11 / 32 / **53 %** | 15 / 41 / 68 % | 3 / 13 / 22 % |
+| Diffusion 40k (lr vừa nhảy lên) | 45 % | 44 % | **47 %** |
 
 ## 3. Thư mục nào làm gì
 
