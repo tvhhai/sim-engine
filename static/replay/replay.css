@@ -259,6 +259,10 @@
   .replay-diagnostics > .vtabs { flex:none; flex-wrap:wrap; padding-bottom:6px; border-bottom:1px solid var(--line); margin-bottom:6px; font-size:12px; }
   .diagnostic-panel { min-height:0; overflow:auto; overflow-wrap:anywhere; }
   .diagnostic-panel[hidden] { display:none; }
+  .ik-status { flex:none; padding:5px 0 7px; margin-bottom:7px; border-bottom:1px solid var(--line); font-size:12px; }
+  .ik-status .meter { margin:5px 0 0; }
+  .studio-replay .viewbar { z-index:3; }
+  .studio-replay .studio-view-options label.overlay-toggle { display:flex; align-items:center; gap:4px; }
   @media (max-width:899px) {
     .studio-replay:not(.studio-focus3d) .main { display:grid; }
     .studio-replay:not(.studio-focus3d) .main > .card { margin:0; }

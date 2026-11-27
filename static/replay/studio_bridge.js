@@ -54,6 +54,27 @@
   const options=document.createElement('details');options.className='studio-view-options';
   const optionsLabel=document.createElement('summary');optionsLabel.textContent='Tùy chọn';options.append(optionsLabel);
   const optionsBody=document.createElement('div');options.append(optionsBody);
+  const markers = { hand:true, target:true, link:true };
+  try {
+    const saved = JSON.parse(store.get('studioReplayMarkers') || '{}');
+    for (const key of Object.keys(markers)) {
+      if (typeof saved?.[key] === 'boolean') markers[key] = saved[key];
+    }
+  } catch {}
+  for (const [key, name] of [['hand', 'Điểm tay'], ['target', 'Đích IK'], ['link', 'Đường tay–đích']]) {
+    const label = document.createElement('label');
+    label.className = 'overlay-toggle';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = markers[key];
+    input.onchange = () => {
+      markers[key] = input.checked;
+      store.set('studioReplayMarkers', JSON.stringify(markers));
+      redraw3();
+    };
+    label.append(input, name);
+    optionsBody.append(label);
+  }
   optionsBody.append($('camTilt').closest('label'));
   const keysButton=document.querySelector('[popovertarget="keysPop"]');keysButton.textContent='Phím tắt 3D';optionsBody.append(keysButton);
   const legendButton=document.querySelector('.legend-btn');legendButton.textContent='Chú giải';optionsBody.append(legendButton);
@@ -115,15 +136,15 @@
       camera = {p:T?mvec(R,sensor.pos).map((v,k)=>v+T.p[k]):sensor.pos,R:(T?mmul(R,sensor.R):sensor.R).flat(),fovy:sensor.fovy,mount:T?{bodyPose:T,local:{p:sensor.pos,R:sensor.R.flat()}}:undefined};
     }
     const lines = [];
-    for(const [enabled,from,to,color] of [[OPT.past,pastStart(),i,'#63d7b1'],[OPT.future,i,futureEnd(),'#f4ae62']]){
+    for(const [enabled,from,to,color,dashed] of [[OPT.past,pastStart(),i,'#63d7b1',false],[OPT.future,i,futureEnd(),'#f4ae62',true]]){
       if(!enabled)continue;
-      if(OPT.path && to>from)lines.push({points:fs.slice(from,to+1).filter((_,k)=>k%Math.max(1,Math.ceil((to-from)/150))===0||k===to-from).map(f=>f.ee),color,opacity:.65});
-      ghostIdx(i,from===i?to:from).forEach(k=>lines.push({points:[...fs[k].arm,fs[k].ee],color,opacity:.18}));
+      if(OPT.path && to>from)lines.push({points:fs.slice(from,to+1).filter((_,k)=>k%Math.max(1,Math.ceil((to-from)/150))===0||k===to-from).map(f=>f.ee),color,opacity:.96,width:4,dashed});
+      ghostIdx(i,from===i?to:from).forEach(k=>lines.push({points:[...fs[k].arm,fs[k].ee],color,opacity:.29,width:2}));
     }
     if(!document.documentElement.classList.contains('studio-focus3d') && (!timer || performance.now()-xyAt>=66)) {
       xy=xyFrame(fr,fs);xyAt=performance.now();
     }
-    parent.postMessage({type:'studio-replay-scene',source:sourceKey,scene:{xy,poses,objects:replayObjects(fr).map((obj,k)=>({...obj,id:obj.id||`object-${k+1}`,x:obj.pos[0],y:obj.pos[1],yaw:obj.yaw||0})),bowl:S.bowl,bowlColor:S.bowl_color,bowlGeoms:S.bowl_geoms,ee:fr.ee,origin,region:S.pick_region,zones:S.pick_region?{region:S.pick_region,stop:S.unreachable_region||null,scan:S.pick_scan||[]}:null,showRegion:$('showReach').checked,sensor:SHOW_CAM?camera:null,camera:{...CAM,t:[...CAM.t]},target:fr.tg,lines,contacts:{box:fr.ct,table:fr.tb,tablePts:fr.tp||[],bowl:fr.bc||[],cam:fr.cc||[]},playing:!!timer,sample:{...sample,continuous:!!timer&&sample.continuous}}},location.origin);
+    parent.postMessage({type:'studio-replay-scene',source:sourceKey,scene:{xy,poses,objects:replayObjects(fr).map((obj,k)=>({...obj,id:obj.id||`object-${k+1}`,x:obj.pos[0],y:obj.pos[1],yaw:obj.yaw||0})),bowl:S.bowl,bowlColor:S.bowl_color,bowlGeoms:S.bowl_geoms,ee:fr.ee,origin,region:S.pick_region,zones:S.pick_region?{region:S.pick_region,stop:S.unreachable_region||null,scan:S.pick_scan||[]}:null,showRegion:$('showReach').checked,sensor:SHOW_CAM?camera:null,camera:{...CAM,t:[...CAM.t]},target:fr.tg,markers,lines,contacts:{box:fr.ct,table:fr.tb,tablePts:fr.tp||[],bowl:fr.bc||[],cam:fr.cc||[]},playing:!!timer,sample:{...sample,continuous:!!timer&&sample.continuous}}},location.origin);
   };
   window.studioRender = publish;
   const notify = () => parent.postMessage({type:'studio-replay-state',source:sourceKey,episode:ep,step:i,playing:!!timer}, location.origin);

@@ -22,7 +22,7 @@ const cm = v => (v * 100).toFixed(1);
 
 let ep = 0, i = 0, timer = null, speed = 1;   // speed = hệ số so với thời gian thực (1 = đúng tốc độ robot chạy thật)
 const STEP_DT = S.step_dt || 1 / 30;           // giây mô phỏng mỗi bước (policy ra 1 action mỗi STEP_DT)
-const OPT = { past:true, future:true, path:true, hz:"1", every:1 };
+const OPT = { past:true, future:true, path:true, hz:window.STUDIO_WEBGL ? "15" : "1", every:window.STUDIO_WEBGL ? 5 : 1 };
 
 /* ---------- khung trang ---------- */
 app.innerHTML = `
@@ -110,6 +110,7 @@ app.innerHTML = `
         <button type="button" role="tab" id="tabIk" aria-selected="true" aria-controls="ikPanel">Đích IK</button>
         <button type="button" role="tab" id="tabGrasp" aria-selected="false" aria-controls="graspPanel" tabindex="-1">Kẹp và vào bát</button>
       </div>
+      <div id="ikStatus" class="ik-status" aria-label="Khoảng cách tay tới đích"></div>
       <div id="ikPanel" class="diagnostic-panel" role="tabpanel" aria-labelledby="tabIk" tabindex="0"><div id="info"></div></div>
       <div id="graspPanel" class="diagnostic-panel" role="tabpanel" aria-labelledby="tabGrasp" tabindex="0" hidden><div id="chk"></div></div>
     </div>` : `
@@ -603,6 +604,7 @@ function reasonOf(fr) {
 }
 function drawInfo(fr, fs) {
   const ph = fr.ph, d = fr.tg ? dist(fr.ee, fr.tg) : null, lim = WAIT_LIMIT[ph] || 200, wait = !!WAIT_LIMIT[ph];
+  const learned = isLearnedReplay();
   const prev = fs[Math.max(0, i - 1)], box0 = fs[0].box;
   let al = "";
 
@@ -610,13 +612,13 @@ function drawInfo(fr, fs) {
   if (d !== null && fr.ie !== null && fr.ie < 0.005 && d > fr.th && fr.ps >= 5)
     al += `<div class="alert bad"><b>IK tin là tới được</b> (sai số ${cm(fr.ie)} cm) <b>nhưng tay thật còn cách đích ${cm(d)} cm</b> (ngưỡng ${cm(fr.th)}). Tay có thể bị cản.${fr.tb.length ? " Đang chạm bàn: <b>" + fr.tb.join(", ") + "</b>." : ""}</div>`;
   // Cảnh báo 2: sắp timeout
-  if (!wait && fr.ps >= 0.75 * lim) al += `<div class="alert warn">Phase đã chạy <b>${fr.ps}/${lim}</b> bước: sắp timeout, cả ván có ${S.max_steps} bước.</div>`;
+  if (!learned && !wait && fr.ps >= 0.75 * lim) al += `<div class="alert warn">Phase đã chạy <b>${fr.ps}/${lim}</b> bước: sắp timeout, cả ván có ${S.max_steps} bước.</div>`;
   // Cảnh báo 3: hộp vừa bị đẩy
   const mv = dist(fr.box, prev.box);
   if (!fr.gr && mv > 0.002) al += `<div class="alert bad"><b>Hộp vừa bị đẩy ${cm(mv)} cm</b> trong bước này${fr.ct.length ? " (chạm: <b>" + fr.ct.join(", ") + "</b>)" : ""}.</div>`;
   // Cảnh báo 4: hộp đã lệch so với ban đầu trước khi kẹp
   const off = Math.hypot(fr.box[0]-box0[0], fr.box[1]-box0[1]);
-  if (!fr.gr && ph <= 4 && off > 0.01) al += `<div class="alert warn">Hộp đã lệch <b>${cm(off)} cm</b> so với vị trí ban đầu, trước khi được kẹp.</div>`;
+  if (!fr.gr && (learned ? !ph_after_grasp() : ph <= 4) && off > 0.01) al += `<div class="alert warn">Hộp đã lệch <b>${cm(off)} cm</b> so với vị trí ban đầu, trước khi được kẹp.</div>`;
   // Cảnh báo: hộp bị nghiêng/lật trước khi kẹp
   if (!fr.gr && tiltDeg(fr) > 3) al += `<div class="alert bad"><b>Hộp đang bị nghiêng ${tiltDeg(fr).toFixed(0)}°</b> (bị lật/gạt)${fr.ct.length ? ", đang chạm: <b>" + fr.ct.join(", ") + "</b>" : ""}.</div>`;
   // Cảnh báo 5: tay đang chạm bát
@@ -633,14 +635,20 @@ function drawInfo(fr, fs) {
       ${row("Tay", "var(--hand)", fr.ee)}${row("Đích", "var(--goal)", fr.tg)}${row("Tay − đích", "var(--muted)", dv3)}${row("Hộp", "var(--box)", fr.box)}${row("Bát", "var(--bowl)", S.bowl)}
     </tbody></table>
     <div class="note" style="margin-top:2px">Bát: đáy z=${S.bowl[2].toFixed(2)}, miệng z=${(S.bowl[2]+S.bowl_height).toFixed(2)}, lòng rộng ±${(S.bowl_radius*100).toFixed(1)} cm. Hộp nghiêng <span class="${tilted ? "hlb" : ""}">${tl.toFixed(1)}°</span> so với phương thẳng đứng${tilted ? " (đang bị nghiêng/lật)" : ""}.</div>`;
+  let status = `<div class="note">${learned ? "Mạng ra lệnh góc khớp trực tiếp. Replay này không có đích IK." : "Bước này không có đích IK."}</div>`;
   if (d !== null) {
-    const pct = Math.min(100, d / 0.2 * 100), tp = Math.min(100, fr.th / 0.2 * 100), ok = d < fr.th;
-    html += `<div class="meter" title="vạch đen = ngưỡng" style="margin-top:6px"><i style="width:${pct}%;background:${ok ? "var(--ok)" : "var(--warn)"}"></i><u style="left:${tp}%"></u></div>
-      <div>Tay cách đích <span class="big ${ok ? "hlg" : "hlw"}">${cm(d)} cm</span> · ngưỡng ${cm(fr.th)} cm ${ok ? '<span class="hlg">đủ gần</span>' : '<span class="hlw">chưa đủ</span>'}</div>`;
-  } else html += `<div class="note" style="margin-top:5px">Phase này đứng yên, chỉ đóng/mở kẹp và chờ, nên không có đích.</div>`;
+    const hasThreshold = Number.isFinite(fr.th) && fr.th > 0;
+    const ok = hasThreshold && d < fr.th;
+    const scale = Math.max(.2, d, hasThreshold ? fr.th : 0);
+    status = `<div>Tay cách đích <span class="big ${ok ? "hlg" : "hlw"}">${cm(d)} cm</span>${hasThreshold ? ` · ngưỡng ${cm(fr.th)} cm · ${ok ? "đủ gần" : "chưa đủ"}` : ""}</div>
+      <div class="meter"${hasThreshold ? ' title="Vạch đứng là ngưỡng"' : ""}><i style="width:${d / scale * 100}%;background:${ok ? "var(--ok)" : "var(--warn)"}"></i>${hasThreshold ? `<u style="left:${Math.min(99.5, fr.th / scale * 100)}%"></u>` : ""}</div>`;
+  }
+  const statusSlot = $("ikStatus");
+  if (statusSlot) statusSlot.innerHTML = status;
+  else html += status;
 
   // IK: góc khớp IK muốn so với góc thật, và đoạn tay chạm hộp/bàn/bát
-  html += `<div class="sec">IK <em>${fr.ik ? "tay dự đoán cách đích <span class=\"" + (fr.ie < 0.005 ? "hlg" : "hlw") + "\">" + cm(fr.ie) + " cm</span> (chưa tính va chạm)" : "phase chờ: IK không chạy"}</em></div>`;
+  html += `<div class="sec">${learned ? "GÓC KHỚP" : "IK"} <em>${fr.ik ? "tay dự đoán cách đích <span class=\"" + (fr.ie < 0.005 ? "hlg" : "hlw") + "\">" + cm(fr.ie) + " cm</span> (chưa tính va chạm)" : learned ? "góc thực tế trong mô phỏng" : "bước này không có dữ liệu IK"}</em></div>`;
   html += `<table class="jt"><thead><tr><th>#</th><th>khớp</th><th class="r">IK muốn</th><th class="r">thật</th><th class="r">lệch</th><th>đoạn tay</th></tr></thead><tbody>` +
     S.joints.map((jn, k) => {
       const link = S.arm_bodies[k + 1], a = fr.ik ? fr.ik[k] : null, dv = a === null ? null : a - fr.jq[k], ad = Math.abs(dv), cls = dv === null ? "" : ad > 15 ? "hlb" : ad > 5 ? "hlw" : "";
@@ -651,6 +659,7 @@ function drawInfo(fr, fs) {
     }).join("") + `</tbody></table>`;
   $("info").innerHTML = html;
 }
+function isLearnedReplay() { return (EPS[ep].tags || []).some(tag => tag.startsWith("AI: ")); }
 // Từ lúc hai hàm đã kẹp hộp ít nhất một lần, hộp dịch chuyển là chủ ý
 function ph_after_grasp() { return F().slice(0, i + 1).some(f => f.gr); }
 // PUSH[ep] = chỉ số khung đầu tiên mà hộp trượt ngang > 0.2 cm khi chưa được kẹp (hoặc null)
@@ -1172,9 +1181,13 @@ $("bFollow").onclick = () => { CAM.follow = !CAM.follow; syncFollow(); redraw3()
 // Nhớ lựa chọn hiển thị qua F5 và qua lần mở sau: quá khứ / tương lai / đường đi, phạm vi, số cánh tay mờ và camera bám tay
 // (tốc độ và bật tắt ảnh camera cổ tay đã được lưu riêng ở replaySpeed và showArmCam)
 {
-  const saveOpts = () => store.set("replayOpts", JSON.stringify({ ...OPT, follow: CAM.follow }));
+  const optsKey = window.STUDIO_WEBGL ? "studioReplayOpts" : "replayOpts";
+  const saveOpts = () => store.set(optsKey, JSON.stringify({ ...OPT, follow: CAM.follow }));
+  $("oHz").value = OPT.hz;
+  $("oEv").value = String(OPT.every);
+  $("oEv").disabled = OPT.hz === "1";
   try {
-    const o = JSON.parse(store.get("replayOpts") || "null");
+    const o = JSON.parse(store.get(optsKey) || "null");
     if (o) {
       for (const [k, id] of [["past", "oPast"], ["future", "oFut"], ["path", "oPath"]]) if (typeof o[k] === "boolean") { OPT[k] = o[k]; $(id).checked = o[k]; }
       if (["1", "5", "15", "phase", "end"].includes(o.hz)) { OPT.hz = o.hz; $("oHz").value = o.hz; $("oEv").disabled = o.hz === "1"; }

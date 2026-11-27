@@ -219,6 +219,7 @@ export function SceneView({
   onOrbit,
   lines,
   target,
+  markers,
   contacts,
   region,
   zones,
@@ -243,6 +244,7 @@ export function SceneView({
   onOrbit?: (view: ViewCamera) => void;
   lines?: ReplayViewState["lines"];
   target?: Vec3 | null;
+  markers?: ReplayViewState["markers"];
   contacts?: ReplayViewState["contacts"];
   region?: Region;
   zones?: PickZones | null;
@@ -315,13 +317,26 @@ export function SceneView({
                 color={line.color}
                 opacity={line.opacity}
                 transparent
-                lineWidth={1.2}
+                lineWidth={line.width}
+                dashed={line.dashed}
+                dashSize={0.012}
+                gapSize={0.006}
+                depthWrite={false}
               />
             ))}
-        {!sensor && target && (
-          <mesh position={target}>
-            <sphereGeometry args={[0.006, 12, 12]} />
-            <meshBasicMaterial color="#6dc6ff" wireframe />
+        {!sensor && target && markers?.link && (
+          <Line points={[ee, target]} color="#ffd35a" lineWidth={3} depthTest={false} depthWrite={false} renderOrder={10} />
+        )}
+        {!sensor && markers?.hand && (
+          <mesh position={ee} renderOrder={11}>
+            <sphereGeometry args={[0.008, 16, 16]} />
+            <meshBasicMaterial color="#e879f9" depthTest={false} depthWrite={false} />
+          </mesh>
+        )}
+        {!sensor && target && markers?.target && (
+          <mesh position={target} renderOrder={12}>
+            <sphereGeometry args={[0.009, 16, 16]} />
+            <meshBasicMaterial color="#4ade80" depthTest={false} depthWrite={false} wireframe />
           </mesh>
         )}
         {!sensor &&

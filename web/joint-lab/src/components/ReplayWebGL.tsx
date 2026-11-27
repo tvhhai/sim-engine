@@ -53,6 +53,7 @@ export function ReplayWebGL({
             onOrbit={orbit}
             lines={scene.lines}
             target={scene.target}
+            markers={scene.markers}
             contacts={scene.contacts}
             region={scene.region}
             zones={scene.zones}
