@@ -102,6 +102,11 @@
     <!-- Camera nhìn thẳng từ trên xuống, thấy cả mặt bàn (x ±0,45, y ±0,40): cho AI biết vật nằm đâu ngay từ đầu ván.
          Cao 0,72 m trên mặt bàn, fovy 60 -> phủ ~0,83 m theo chiều dọc ảnh (trục y), ~1,1 m theo chiều ngang (trục x). -->
     <camera name="topcam" pos="0.0 0.0 1.14" quat="1 0 0 0" fovy="60"/>
+    <!-- Camera gắn SÁT sau đế tay như bộ thật hay dựng (cần đứng / kẹp cổ ngỗng): sau đế 12 cm, lệch phải 5 cm, cao 65 cm trên mặt bàn,
+         nhìn thẳng về phía trước, chúc xuống 68,6° (nhìn vào điểm (0,05; -0,055; 0,42)), fovy 55 như webcam thường. Khung chọn để mép
+         xa của bàn sát cạnh trên ảnh (gần như không thấy nền ngoài bàn). Ảnh 320x240: thấy hộp ở 97 % bộ 774 seed (thiếu vài seed sát
+         hai góc bàn sau đế), hộp 4 cm ~12-15 điểm ảnh (topcam ~12). -->
+    <camera name="rearcam" pos="0.05 -0.31 1.07" xyaxes="1 0 0 0 0.9309 0.3652" fovy="55"/>
 
     <body name="table" pos="0 0 0.2">
       <geom name="table_top" type="box" size="0.45 0.40 0.02" pos="0 0 0.20" material="wood_mat" contype="1" conaffinity="1" mass="10"/>

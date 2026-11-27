@@ -36,10 +36,12 @@ FPS = config.CONTROL_FREQ                      # 30 khung hình / giây = số b
                                                # config.PHYSICS_SUBSTEPS). LeRobot dùng số này để biết "1 giây là bao nhiêu khung".
 IMAGE_H, IMAGE_W = 240, 320                    # kích thước ảnh lưu vào dataset. Nhỏ hơn 640x480 gốc để train vừa GPU 4 GB.
                                                # Đổi lại: hộp 4 cm trong camera trước chỉ còn khoảng 6x6 điểm ảnh.
-CAMERAS = {"front": "webcam", "wrist": "arm_cam", "top": "topcam"}   # tên trong dataset -> tên camera trong MJCF.
-                                               # front: camera cố định chéo phía trước (hộp 4 cm ~6x6 điểm ảnh);
+CAMERAS = {"front": "webcam", "wrist": "arm_cam", "top": "topcam", "rear": "rearcam"}   # tên trong dataset -> tên camera MJCF.
+                                               # front: camera cố định chéo phía trước, đặt xa (hộp 4 cm ~6x6 điểm ảnh);
                                                # wrist: camera gắn cổ tay, đi theo tay (lúc ở home KHÔNG thấy hộp);
-                                               # top: camera nhìn thẳng từ trên xuống, thấy cả bàn (hộp ~12x12 điểm ảnh).
+                                               # top: camera nhìn thẳng từ trên xuống, thấy cả bàn (hộp ~12x12 điểm ảnh);
+                                               # rear: camera sát sau đế tay, chúc xuống bàn, giống bộ thật hay dựng (hộp ~12-15
+                                               #   điểm ảnh, thấy hộp ở 97 % seed). Bộ camera mặc định từ 2026-11-27: rear + wrist.
 CAMERAS.update(camera1="topcam", camera2="arm_cam")
                                                # Tên camera của SmolVLA: smolvla_base được train sẵn với camera1/2/3. Khi fine-tune ta
                                                # đổi top -> camera1, wrist -> camera2 (rename_map trong configs/smolvla_finetune.yaml);
