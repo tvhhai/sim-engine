@@ -46,6 +46,8 @@ learning/
     colab/so101_act_colab.ipynb    # chạy thật trên Colab (ghi, train, DAgger, chấm, SmolVLA, đẩy HF)
 ```
 Nhật ký thí nghiệm và kết luận: `docs/so_tay_ai.md`. Luôn chấm đủ 774 seed trước khi kết luận (100 seed lệch ±4 điểm).
+Chọn checkpoint / mạng lái DAgger trên bộ validation (`eval_policy --seeds val`, seed 2500-2999); 774 seed chỉ dùng chấm cuối.
+Chạy song song nhiều phần ghi demo / DAgger: phần k dùng `--seed-start S+k --seed-step K` (dải liền nhau sẽ trùng seed).
 
 ## Quy tắc làm việc
 
