@@ -87,6 +87,8 @@ def main():
     parser.add_argument("--color", default="#e5484d")
     parser.add_argument("--color-name", default="red", help="tên màu trong câu nhiệm vụ")
     parser.add_argument("--seed-start", type=int, default=sim_setup.TRAIN_SEED_START)
+    parser.add_argument("--seed-step", type=int, default=1,
+                        help="bước nhảy seed: chạy song song K phần thì phần k dùng --seed-start S+k --seed-step K, các phần không bao giờ trùng seed (dải liền nhau thì phần có ván hỏng lấn sang dải phần sau)")
     parser.add_argument("--root", required=True, help="thư mục dataset (chưa tồn tại)")
     parser.add_argument("--repo-id", default="local/so101_dataset")   # tên dataset kiểu Hugging Face; "local/..." = không đẩy lên mạng
     parser.add_argument("--cameras", default=",".join(sim_setup.DEFAULT_CAMERAS),
@@ -119,11 +121,12 @@ def main():
             done = len(log["kept"])
             print(f"seed {seed}: {'giữ' if ok else 'HỎNG, bỏ'} ({len(frames)} khung) | đã có {done}/{args.episodes} ván, "
                   f"bỏ {len(log['failed'])}, {time.time() - t0:.0f} s", flush=True)
-            seed += 1
+            seed += args.seed_step
     finally:
         # finally: chạy cả khi bấm Ctrl+C giữa chừng -> các ván đã lưu vẫn dùng được.
         ds.finalize()                                             # đóng file video / parquet, ghi thống kê vào meta/
         log.update(kind=args.kind, size=args.size, task=task, cameras=list(cameras), env_state=args.env_state, noise=args.noise,
+                   seed_start=args.seed_start, seed_step=args.seed_step,
                    seconds=round(time.time() - t0))
         (Path(args.root) / "record_log.json").write_text(json.dumps(log, indent=1), encoding="utf-8")
     print(f"Xong: {len(log['kept'])} ván, {sum(k['frames'] for k in log['kept'])} khung hình -> {args.root}")

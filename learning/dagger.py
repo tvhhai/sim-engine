@@ -31,7 +31,7 @@ import numpy as np
 
 from .. import config
 from . import sim_setup
-from .eval_policy import act, camera_spec, load_policy
+from .eval_policy import act, camera_spec, load_policy, seed_everything
 
 GRASP_WAIT_MAX = 60      # AI đang kẹp vật ở bước t_b: chờ tối đa chừng này bước cho tới lúc không kẹp nữa rồi mới tách nhánh
 TEACHER_FRAMES_MAX = 400 # thầy mất nhiều bước hơn thế (lòng vòng, thử lại nhiều lần) thì bỏ ván: dạy AI lòng vòng chẳng ích gì
@@ -58,6 +58,7 @@ def make_teacher(env):
 def run_episode(seed, members, device, kind, size, task, t_branch):
     """Một ván DAgger. members = [(mạng, pre, post), ...]: một mạng, hoặc nhiều checkpoint lái chung (trung bình action, xem
     eval_policy.act). Trả (kết quả: "ai_ok" / "no_branch" / "teacher_ok" / "teacher_fail", số bước AI đã lái, danh sách khung)."""
+    seed_everything(seed)                                        # mạng lái có nhiễu (SmolVLA / Diffusion): cố định theo seed
     cameras, env_state = camera_spec(members[0])
     env, options = sim_setup.make_env(seed, kind, size, images=bool(cameras))
     obs, info = env.reset(seed=seed, options=options)
@@ -107,6 +108,8 @@ def main():
     parser.add_argument("--color", default="#e5484d")
     parser.add_argument("--color-name", default="red")
     parser.add_argument("--seed-start", type=int, default=6000, help="seed riêng cho DAgger (dataset gốc dùng 3000+, đánh giá dưới 3000)")
+    parser.add_argument("--seed-step", type=int, default=1,
+                        help="bước nhảy seed: chạy song song K phần thì phần k dùng --seed-start S+k --seed-step K, các phần không bao giờ trùng seed (dải liền nhau thì phần có ván hỏng lấn sang dải phần sau)")
     parser.add_argument("--branch-min", type=int, default=15, help="AI lái ít nhất chừng này bước rồi thầy mới tiếp quản")
     parser.add_argument("--branch-max", type=int, default=250)
     parser.add_argument("--root", required=True, help="thư mục dataset mới (chưa tồn tại)")
@@ -139,10 +142,10 @@ def main():
                   f"AI tự xong {n['ai_ok']}, không tách được {n['no_branch']}, thầy hỏng {n['teacher_fail']}, thầy lòng vòng "
                   f"{n['teacher_slow']}, {time.time() - t0:.0f} s",
                   flush=True)
-            seed += 1
+            seed += args.seed_step
     finally:
         ds.finalize()
-        log.update(policy=args.policy, kind=args.kind, size=args.size, task=task, cameras=list(cameras), env_state=env_state,
+        log.update(policy=args.policy, seed_start=args.seed_start, seed_step=args.seed_step, kind=args.kind, size=args.size, task=task, cameras=list(cameras), env_state=env_state,
                    branch=[args.branch_min, args.branch_max], seconds=round(time.time() - t0))
         (Path(args.root) / "dagger_log.json").write_text(json.dumps(log, indent=1), encoding="utf-8")
     print(f"Xong: {len(log['kept'])} ván -> {args.root}")

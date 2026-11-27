@@ -57,7 +57,11 @@ TASKS = {"box": "Pick up the {color} box and place it in the bowl", "sphere": "P
                                                # câu lệnh chữ. ACT KHÔNG đọc câu này (chỉ lưu kèm); SmolVLA sau này mới đọc.
 EVAL_SEEDS = list(range(200)) + sorted(k for k in config.BOX_FIXED_SEEDS if k >= 200) + list(range(2000, 2500))
                                                # bộ 774 seed chấm điểm, giống bộ dùng để chấm policy viết tay -> so sánh được.
-TRAIN_SEED_START = 3000                        # seed 3000+ phủ cùng 200 ô vùng gắp như seed 0-199 nhưng điểm rơi khác.
+VAL_SEEDS = list(range(2500, 3000))           # bộ VALIDATION (500 seed): dùng để CHỌN checkpoint / mạng lái DAgger. Tách khỏi
+                                               # EVAL_SEEDS để điểm cuối trên 774 seed không bị lạc quan vì đã dùng chính bộ đó để
+                                               # chọn. Không trùng seed train (3000+), DAgger (6000+), chấm (0-199, cố định <= 1022,
+                                               # 2000-2499). Vị trí hộp vẫn theo cùng 200 ô (seed % 200) nhưng điểm rơi trong ô khác.
+TRAIN_SEED_START = 3000                       # seed 3000+ phủ cùng 200 ô vùng gắp như seed 0-199 nhưng điểm rơi khác.
                                                # Không bao giờ ghi dữ liệu từ EVAL_SEEDS, nếu không điểm chấm sẽ "ăn gian".
 
 

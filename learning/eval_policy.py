@@ -102,8 +102,31 @@ def act(members, observation, device, task):
     return actions[0] if len(actions) == 1 else torch.stack(actions).mean(0)
 
 
+def seed_everything(seed):
+    """Cố định mọi nguồn ngẫu nhiên theo seed của ván. env.reset(seed) chỉ cố định CẢNH; SmolVLA (flow matching) và Diffusion còn
+    lấy nhiễu ngẫu nhiên của PyTorch mỗi lần đoán action, nên không cố định thì chấm lại cùng checkpoint ra điểm khác."""
+    import random
+
+    import torch
+    random.seed(seed)
+    np.random.seed(seed % 2**32)
+    torch.manual_seed(seed)
+
+
+def code_version():
+    """Commit git của code đang chạy (ghi vào file kết quả để truy nguyên); không có git thì None."""
+    import subprocess
+    try:
+        out = subprocess.run(["git", "-C", str(Path(__file__).resolve().parent), "rev-parse", "--short", "HEAD"],
+                             capture_output=True, text=True, timeout=10)
+        return out.stdout.strip() or None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def run_episode(seed, members, device, kind, size, task, max_steps, record=False):
     """Cho policy AI tự chạy một ván. members = [(mạng, pre, post), ...]. Trả (dict kết quả, ván replay hoặc None)."""
+    seed_everything(seed)
     # Mạng được train với những đầu vào nào (camera nào, có toạ độ vật không) thì dựng đúng những đầu vào đó.
     cameras, env_state = camera_spec(members[0])
     env, options = sim_setup.make_env(seed, kind, size, images=bool(cameras))   # cùng cảnh với seed đó của policy viết tay
@@ -214,11 +237,15 @@ def main():
     parser.add_argument("--name", default=None, help="tên policy hiện trên replay (mặc định: tên thư mục train)")
     parser.add_argument("--n-action-steps", type=int, default=None, help="ghi đè số action làm trước khi đoán lại (không cần train lại)")
     parser.add_argument("--temporal-ensemble", type=float, default=None, help="vd 0.01: đoán mỗi bước, trung bình các lần đoán")
-    parser.add_argument("--seeds", default=None, help="danh sách seed riêng, vd 3000-3019 (mặc định bộ 774 seed đánh giá)")
+    parser.add_argument("--seeds", default=None,
+                        help="'val' = bộ validation 2500-2999 (để CHỌN checkpoint), hoặc danh sách riêng vd 3000-3019; "
+                             "mặc định bộ 774 seed đánh giá (chỉ dùng chấm cuối)")
     args = parser.parse_args()
 
     # --- Chọn seed: --limit N lấy N seed cách đều trong 774 seed (phủ cả gần lẫn xa, cả seed 0-199 lẫn 2000-2499) ---
-    if args.seeds:                                               # vd "3000-3019" (seed đã train) để xem mạng học thuộc được chưa
+    if args.seeds == "val":
+        seeds = sim_setup.VAL_SEEDS
+    elif args.seeds:                                             # vd "3000-3019" (seed đã train) để xem mạng học thuộc được chưa
         from ..tools.make_replay import parse_seeds
         seeds = parse_seeds(args.seeds)
     else:
@@ -253,8 +280,14 @@ def main():
     print(json.dumps(summary, ensure_ascii=False, indent=1))
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out).write_text(json.dumps({"policy": args.policy if len(args.policy) > 1 else args.policy[0], "kind": args.kind, "size": args.size, "summary": summary,
-                                              "rows": rows}, ensure_ascii=False, indent=1), encoding="utf-8")
+        # "run": mọi thứ quyết định điểm ngoài trọng số, để không nhầm hai lần chấm khác cách (vd đoán lại sau 10 vs 50 action).
+        run = {"seed_set": args.seeds or "eval774", "limit": args.limit, "n_seeds": len(seeds), "max_steps": args.max_steps,
+               "n_action_steps": [m[0].config.n_action_steps for m in members],
+               "temporal_ensemble": args.temporal_ensemble, "torch_seeded_per_episode": True, "code": code_version(),
+               "finished": time.strftime("%Y-%m-%d %H:%M:%S")}
+        Path(args.out).write_text(json.dumps({"policy": args.policy if len(args.policy) > 1 else args.policy[0], "kind": args.kind,
+                                              "size": args.size, "run": run, "summary": summary, "rows": rows},
+                                             ensure_ascii=False, indent=1), encoding="utf-8")
     if args.replay:
         write_replay(args.replay, policy_name, args.kind, args.size, rows, episodes)
 
