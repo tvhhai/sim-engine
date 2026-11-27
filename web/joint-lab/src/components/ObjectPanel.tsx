@@ -10,13 +10,79 @@ import {
   Text,
 } from "@mantine/core";
 import { Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Item, Region, Scene } from "../types";
 import { fitsBowl, maxObjectSize, NEW_OBJECT_SIZE } from "../studio/scene";
 import { reachable } from "../workspace";
 import { Panel } from "./Panel";
 // Màu chọn nhanh cho vật mới: đỏ, xanh, vàng (vật mới lần lượt lấy màu kế tiếp)
 const PALETTE = ["#e5484d", "#30a46c", "#f5c542"];
+
+function ObjectAppearance({ item, index, maxSize, onChange }: {
+  item: Item;
+  index: number;
+  maxSize: number;
+  onChange: (patch: Partial<Item>) => boolean;
+}) {
+  const liveSize = Number(((item.size ?? .03) * 100).toFixed(2));
+  const [color, setColor] = useState(item.color);
+  const [yaw, setYaw] = useState<string | number>(item.yaw);
+  const [size, setSize] = useState<string | number>(liveSize);
+  useEffect(() => { setColor(item.color); }, [item.color]);
+  useEffect(() => { setYaw(item.yaw); }, [item.yaw]);
+  useEffect(() => { setSize(liveSize); }, [liveSize]);
+  const validColor = (value: string) => /^#[0-9a-f]{6}$/i.test(value);
+  const submitOnEnter = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") event.currentTarget.blur();
+  };
+
+  return (
+    <div className="lab-object-fields lab-object-details">
+      <Text size="sm" fw={600}>Chỉnh {item.type === "sphere" ? "bóng" : "hộp"} {index + 1}</Text>
+      <ColorInput
+        size="xs"
+        label="Màu"
+        eyeDropperButtonProps={{ "aria-label": "Lấy màu cho vật đang chọn" }}
+        value={color}
+        format="hex"
+        swatches={PALETTE}
+        onChange={(value) => {
+          setColor(value);
+          if (validColor(value)) onChange({ color: value });
+        }}
+        onBlur={() => { if (!validColor(color)) setColor(item.color); }}
+      />
+      <NumberInput
+        size="xs"
+        label="Góc xoay (°)"
+        value={yaw}
+        min={-180}
+        max={180}
+        onChange={setYaw}
+        onKeyDown={submitOnEnter}
+        onBlur={() => {
+          const degrees = yaw === "" ? item.yaw : Math.max(-180, Math.min(180, Number(yaw)));
+          setYaw(onChange({ yaw: degrees }) ? degrees : item.yaw);
+        }}
+      />
+      <NumberInput
+        size="xs"
+        label={item.type === "sphere" ? "Đường kính (cm)" : "Cạnh (cm)"}
+        value={size}
+        min={2}
+        max={maxSize}
+        step={0.5}
+        onChange={setSize}
+        onKeyDown={submitOnEnter}
+        onBlur={() => {
+          const cm = size === "" ? liveSize : Math.max(2, Math.min(maxSize, Number(size)));
+          setSize(Number.isFinite(cm) && onChange({ size: cm / 100 }) ? cm : liveSize);
+        }}
+      />
+    </div>
+  );
+}
+
 export function ObjectPanel({
   scene,
   selected,
@@ -46,20 +112,24 @@ export function ObjectPanel({
       )
     : undefined;
   const [sizeError, setSizeError] = useState("");
+  const selectedIndex = scene.objects.findIndex((obj) => obj.id === selected);
+  const appearanceIndex = selectedIndex < 0 ? 0 : selectedIndex;
+  const appearance = scene.objects[appearanceIndex];
   function update(id: string, patch: Partial<Item>) {
     if (
       [patch.x, patch.y, patch.yaw].some(
         (value) => value !== undefined && !Number.isFinite(value),
       )
     )
-      return;
+      return false;
     const objects = scene.objects.map((obj) => obj.id === id ? { ...obj, ...patch } : obj);
     if (patch.size !== undefined && !fitsBowl(objects, scene.bowl)) {
       setSizeError("Bát chưa đủ chỗ cho cỡ vật này.");
-      return;
+      return false;
     }
     setSizeError("");
     onChange({ ...scene, objects });
+    return true;
   }
   function add() {
     if (newSize === undefined) return;
@@ -76,6 +146,7 @@ export function ObjectPanel({
       }),
     );
     onChange({ ...scene, objects: [...scene.objects, ...added] });
+    setSizeError("");
     if (added[0]) onSelect(added[0].id);
   }
   return (
@@ -111,13 +182,16 @@ export function ObjectPanel({
             ? "Bát chưa đủ chỗ. Thử giảm số vật hoặc tăng bán kính bát."
             : `Cỡ vật khi thêm: ${Number((newSize * 100).toFixed(2))} cm.`}
         </Text>
-        {sizeError && <Text size="xs" c="red" role="status">{sizeError}</Text>}
         <Select
             size="xs"
           label="Vật cần gắp"
           value={scene.target_id}
           onChange={(value) => {
-            if (value) onChange({ ...scene, target_id: value });
+            if (value) {
+              onChange({ ...scene, target_id: value });
+              setSizeError("");
+              onSelect(value);
+            }
           }}
           data={scene.objects.map((obj, i) => ({
             value: obj.id,
@@ -125,6 +199,14 @@ export function ObjectPanel({
           }))}
           allowDeselect={false}
         />
+        <ObjectAppearance
+          key={appearance.id}
+          item={appearance}
+          index={appearanceIndex}
+          maxSize={maxObjectSize(scene.bowl) * 100}
+          onChange={(patch) => update(appearance.id, patch)}
+        />
+        {sizeError && <Text size="xs" c="red" role="status">{sizeError}</Text>}
         {scene.objects.map((obj, i) => (
           <div
             className={`object-row ${selected === obj.id ? "is-selected" : ""}`}
@@ -135,7 +217,11 @@ export function ObjectPanel({
                 variant="subtle"
                 size="compact-sm"
                 color="gray"
-                onClick={() => onSelect(obj.id)}
+                aria-pressed={appearance.id === obj.id}
+                onClick={() => {
+                  setSizeError("");
+                  onSelect(obj.id);
+                }}
                 leftSection={
                   <span
                     className="color-chip"
@@ -201,43 +287,6 @@ export function ObjectPanel({
                 step={0.5}
               />
             </div>
-            {selected === obj.id && (
-              <div className="lab-object-fields lab-object-details">
-                <ColorInput
-            size="xs"
-                  eyeDropperButtonProps={{
-                    "aria-label": "Lấy màu cho vật đang chọn",
-                  }}
-                  label="Màu"
-                  value={obj.color}
-                  onChange={(v) => {
-                    if (/^#[0-9a-f]{6}$/i.test(v)) update(obj.id, { color: v });
-                  }}
-                  format="hex"
-                  swatches={PALETTE}
-                />
-                <NumberInput
-            size="xs"
-                  label="Xoay (°)"
-                  value={obj.yaw}
-                  onChange={(v) => update(obj.id, { yaw: Number(v) })}
-                  min={-180}
-                  max={180}
-                />
-                <NumberInput
-            size="xs"
-                  label={obj.type === "sphere" ? "Đường kính (cm)" : "Cạnh (cm)"}
-                  value={Number(((obj.size ?? 0.03) * 100).toFixed(1))}
-                  onChange={(v) => {
-                    const cm = Number(v);
-                    if (Number.isFinite(cm)) update(obj.id, { size: Math.max(0.02, Math.min(maxObjectSize(scene.bowl), cm / 100)) });
-                  }}
-                  min={2}
-                  max={maxObjectSize(scene.bowl) * 100}
-                  step={0.5}
-                />
-              </div>
-            )}
           </div>
         ))}
         {undo && (
