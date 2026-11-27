@@ -243,7 +243,18 @@
   .studio-replay .c-small h2 { display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
   .studio-replay .c-small .vtabs { flex-wrap:wrap; }
   .studio-replay .c-small #top, .studio-replay .c-small #side { flex:1 1 0; min-height:0; }
-  .studio-replay .logcard { height:clamp(120px, 18vh, 180px); flex:none; }
+  .studio-replay .logcard { height:clamp(245px, 38vh, 420px); flex:none; }
+  .projection-info { flex:none; padding:10px 0 2px; border-top:1px solid var(--line); }
+  .projection-info h3 { margin:0 0 6px; font-size:12px; }
+  .projection-info th, .projection-info td { position:static; padding:5px 4px; font-size:12px; white-space:normal; }
+  .projection-info th:not(:first-child), .projection-info td { text-align:right; font-variant-numeric:tabular-nums; }
+  .projection-info tbody th { font-weight:500; }
+  .projection-info i { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px; vertical-align:1px; }
+  .projection-info dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin:8px 0 0; }
+  .projection-info dl div { background:var(--bg); border-radius:6px; padding:5px 7px; }
+  .projection-info dt { font-size:11px; color:var(--muted); }
+  .projection-info dd { margin:2px 0 0; font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .fs-wrap:fullscreen .projection-info, .fs-wrap.fs-fallback .projection-info { display:none; }
   .studio-replay .replay-diagnostics { overflow:hidden; }
   .replay-diagnostics > .vtabs { flex:none; flex-wrap:wrap; padding-bottom:6px; border-bottom:1px solid var(--line); margin-bottom:6px; font-size:12px; }
   .diagnostic-panel { min-height:0; overflow:auto; overflow-wrap:anywhere; }
@@ -254,7 +265,7 @@
   }
   @media (max-width:799px) {
     .studio-replay:not(.studio-focus3d) .main { height:auto; grid-template-columns:minmax(0,1fr); grid-template-rows:auto; }
-    .studio-replay .c-small { height:360px; }
+    .studio-replay .c-small { height:clamp(425px, 90vw, 575px); }
     .studio-replay:not(.studio-focus3d) .c-3d { height:520px; }
     .studio-replay .replay-diagnostics { height:420px; }
   }

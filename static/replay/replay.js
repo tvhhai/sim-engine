@@ -56,6 +56,7 @@ app.innerHTML = `
   <main class="main">
     <div class="card c-small"><div id="topWrap" class="fs-wrap"><h2><span class="vtabs" role="tablist" aria-label="Góc nhìn 2D"><button type="button" role="tab" id="tabTop" aria-selected="true" aria-controls="top">Nhìn từ trên · XY (m)</button><button type="button" role="tab" id="tabSide" aria-selected="false" aria-controls="side">Nhìn từ cạnh · YZ (m)</button></span><span class="pick-zone-toggle" id="topTools"><label><input type="checkbox" id="showReach" checked> Vùng gắp</label> <button type="button" class="legend-btn legend-icon" id="zoneBtn" popovertarget="zonePop" title="Chú giải màu vùng và điểm quét" aria-label="Chú giải màu vùng và điểm quét">?</button> <button type="button" class="fs-btn" id="topFs" title="Xem toàn màn hình (phím F, Esc để thoát)" aria-label="Toàn màn hình hình nhìn từ trên">⛶ Toàn màn hình</button></span></h2>
       <div id="zonePop" popover class="legend-pop"><div class="pick-zone-legend"><span class="zone-green">Gắp được</span><span class="zone-red">Không gắp · về home</span><span class="zone-mixed">Hỗn hợp · cần tối ưu</span><span class="scan-note"><b style="color:#d14049">✕</b> điểm quét hỏng (vùng xanh còn ít điểm hỏng: mỗi điểm có 1 seed 1001+)</span><span class="scan-note"><b style="color:#16834f">●</b> điểm quét gắp được, chỉ vẽ ở vùng hỗn hợp</span></div></div><svg id="top" role="tabpanel" aria-label="Hình chiếu XY cố định" viewBox="0 0 520 340"></svg><svg id="side" role="tabpanel" aria-label="Hình chiếu YZ cố định" viewBox="0 18 520 202" hidden></svg>
+      ${window.STUDIO_WEBGL ? '<section class="projection-info" id="projectionInfo" aria-label="Số đo hình chiếu"></section>' : ''}
       <div class="fs-only fs-bar"><button type="button" id="fsPrev" title="Lùi 1 bước (←)">◀</button><button type="button" id="fsPlay" title="Phát / tạm dừng (Space)">▶ / ❚❚</button><button type="button" id="fsNext" title="Tiến 1 bước (→)">▶</button><input type="range" id="fsRng" min="0" value="0" aria-label="Bước"><output id="fsInfo"></output></div></div></div>
     <div class="card c-3d"><h2><span>3D (VIEW CHÍNH)</span><span class="hint">kéo trái xoay · kéo phải dịch · lăn zoom · R mặc định · ⌨ xem phím</span><button type="button" class="fs-btn" id="c3Fs" title="Xem toàn màn hình (phím G, Esc để thoát)" aria-label="Toàn màn hình hình 3D" style="margin-left:auto">⛶ Toàn màn hình</button></h2>
       <div class="cv"><canvas id="c3"></canvas>
@@ -1015,11 +1016,37 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") { const f = 
 
 /* ---------- điều khiển ---------- */
 let studioProjectionAt = -Infinity;
+function drawProjectionInfo(fr) {
+  const panel = $("projectionInfo");
+  if (!panel) return;
+  const side = $("tabSide").getAttribute("aria-selected") === "true";
+  const [a, b] = side ? [1, 2] : [0, 1];
+  const axes = side ? ["Y", "Z"] : ["X", "Y"];
+  const rows = [
+    ["Đầu kẹp", "hand", fr.ee],
+    ["Vật gắp", "box", fr.box],
+    ["Tâm bát", "bowl", S.bowl],
+    ["Đích IK", "goal", fr.tg],
+  ];
+  const coord = (point, axis) => point ? cm(point[axis]) : "—";
+  const gap = (from, to) => to ? `${cm(Math.hypot(from[a] - to[a], from[b] - to[b]))} cm` : "—";
+  panel.innerHTML = `
+    <h3>Số đo hình chiếu ${axes.join("")}</h3>
+    <table aria-label="Tọa độ theo đế (cm)">
+      <thead><tr><th scope="col">Điểm</th><th scope="col">${axes[0]} (cm)</th><th scope="col">${axes[1]} (cm)</th></tr></thead>
+      <tbody>${rows.map(([label, color, world]) => {
+        const point = basePoint(world);
+        return `<tr><th scope="row"><i style="background:var(--${color})" aria-hidden="true"></i>${label}</th><td>${coord(point, a)}</td><td>${coord(point, b)}</td></tr>`;
+      }).join("")}</tbody>
+    </table>
+    <dl><div><dt>Đầu kẹp → vật</dt><dd>${gap(fr.ee, fr.box)}</dd></div><div><dt>Vật → tâm bát</dt><dd>${gap(fr.box, S.bowl)}</dd></div></dl>`;
+}
+
 function render() {
   const fs = F(), fr = fs[i];
   const focus3d=window.STUDIO_WEBGL && document.documentElement.classList.contains('studio-focus3d');
   const projectionDue=!window.STUDIO_WEBGL || !timer || performance.now()-studioProjectionAt>=66;
-  if(!focus3d && projectionDue){if(!window.STUDIO_WEBGL)drawTop(fr, fs);drawSide(fr, fs);studioProjectionAt=performance.now();}
+  if(!focus3d && projectionDue){if(!window.STUDIO_WEBGL)drawTop(fr, fs);drawSide(fr, fs);drawProjectionInfo(fr);studioProjectionAt=performance.now();}
   draw3d(fr, fs); drawCams(fr);
   if(!focus3d){drawInfo(fr, fs);drawChk(fr);}
   $("rng").value = i;
@@ -1076,7 +1103,8 @@ function pickView(v) {
   $("tabTop").setAttribute("aria-selected", top); $("tabSide").setAttribute("aria-selected", !top);
   store.set("replayView2d", v);
 }
-$("tabTop").onclick = () => pickView("top"); $("tabSide").onclick = () => pickView("side");
+$("tabTop").onclick = () => { pickView("top"); drawProjectionInfo(F()[i]); };
+$("tabSide").onclick = () => { pickView("side"); drawProjectionInfo(F()[i]); };
 pickView(store.get("replayView2d") === "side" ? "side" : "top");
 $("q").oninput = () => renderPick();
 $("q").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); const b = $("selList").querySelector("button[data-k]"); if (b) { $("selPop").hidePopover(); loadEp(+b.dataset.k); } } e.stopPropagation(); };   // gõ chữ không kích hoạt phím tắt của replay
