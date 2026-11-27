@@ -20,8 +20,10 @@ Chỉ đổi V1; bản kết hợp vẫn chuyển sang V2 (không đổi) khi V1
 Chạy thử: python -m sim_engine.tools.make_replay --policy sim_engine.policies.scripted_minjerk:ScriptedPolicyHybridMinJerk --seeds 83,200
 """
 
+from copy import copy
 import math
 
+import mujoco
 import numpy as np
 
 from .. import config
@@ -252,15 +254,148 @@ class ScriptedPolicyMinJerk(ScriptedPolicy):
         return self._smoothed_action.copy()
 
 
+class ScriptedSphereMinJerk(ScriptedPolicyMinJerk):
+    """Biến thể đường gắp bóng để thử khi quỹ đạo cơ sở làm lăn hoặc tuột bóng."""
+
+    def __init__(self, env, bearing_offset, height_delta, side_delta):
+        super().__init__(env)
+        self._bearing_offset = bearing_offset
+        self._height_delta = height_delta
+        self._side_delta = side_delta
+
+    def _apply_object_profile(self):
+        super()._apply_object_profile()
+        self.GRASP_ALIGN = False
+        self._grasp_z += self._height_delta
+        self.GRASP_SIDE_OFFSET += self._side_delta
+
+    def _box_yaw(self):
+        # Bóng không có mặt để căn. Có thể ưu tiên hướng kẹp theo bán kính thay cho yaw của vật.
+        if self._bearing_offset is None:
+            return super()._box_yaw()
+        radial = self.env.get_box_pos()[:2] - config.PICK_PAN_XY
+        return math.atan2(radial[1], radial[0]) + math.radians(self._bearing_offset)
+
+
+class ScriptedSphereIntercept(ScriptedPolicyMinJerk):
+    """Đón bóng đã lăn ngay sau khi khởi tạo cảnh, rồi nâng theo policy thường."""
+
+    def __init__(self, env, horizon, roll, close_offset):
+        super().__init__(env)
+        self._horizon = horizon
+        self._intercept_roll = math.radians(roll)
+        self._close_step = horizon + close_offset
+
+    def reset(self):
+        super().reset()
+        self._intercept_step = 0
+        self._intercept_start = self.data.qpos[self._qpos_adr].copy()
+        adr = self.env._box_dof_adr
+        velocity = self.data.qvel[adr:adr + 2]
+        xy = self.env.get_box_pos()[:2] + velocity * (self._horizon / config.CONTROL_FREQ)
+        self._phase = 3
+        self._roll_hold = self._intercept_roll
+        target = np.array([*xy, self._grasp_z])
+        q = self._solve_ik(target, roll=self._roll_hold, limits=True)
+        target[:2] -= self.GRASP_SIDE_OFFSET * self._clamp_direction(q)[:2]
+        self._intercept_goal = self._solve_ik(target, roll=self._roll_hold, limits=True)
+        self._intercept_target = target
+
+    def select_action(self, observation):
+        if self._intercept_step is None:
+            return super().select_action(observation)
+        if self.env._grasped and self._intercept_step >= self._horizon - 4:
+            self._finish_intercept(self._smoothed_action, 5)
+            return super().select_action(observation)
+        self._intercept_step += 1
+        self._phase_step = self._intercept_step
+        fraction = min_jerk(self._intercept_step / (self._horizon - 3))
+        self._current_joint_targets = self._intercept_start + fraction * (self._intercept_goal - self._intercept_start)
+        self.motion_target = (self._intercept_target, 0.008)
+        grip = -1.0 if self._intercept_step >= self._close_step else 1.0
+        action = np.clip(np.array([*self._to_action(self._current_joint_targets), grip, grip]), -1.0, 1.0)
+        self._smoothed_action = action.copy()
+        if self._intercept_step >= self._horizon + 8:
+            self._roll_hold = None
+            self._finish_intercept(action, 1)
+        return action
+
+    def _finish_intercept(self, action, phase):
+        self._intercept_step = None
+        self._phase, self._phase_step = phase, 0
+        self._smoothed_action = action.copy()
+        self._gripper_target = self._prev_grip = float(action[5])
+
+
 class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
     """Bản kết hợp V1 + V2 như mặc định, chỉ thay V1 bằng bản minimum-jerk."""
 
+    # Seed 8 và 201: nâng điểm kẹp 4 mm tránh má kẹp đẩy quả bóng trước khi nâng.
+    # Hướng và độ lệch khác giúp kiểm tra điểm kẹp quanh quả cầu khi bị giới hạn khớp.
+    SPHERE_PROFILES = (
+        (None, .004, 0), (None, -.004, 0),
+        (0, 0, 0), (30, 0, 0), (60, 0, 0),
+        "v1", "v2",
+        (0, .004, 0), (30, .004, 0), (60, .004, 0),
+        (0, -.004, 0), (30, -.004, 0), (60, -.004, 0),
+        (0, 0, .004), (30, 0, .004), (60, 0, .004),
+        (0, 0, -.004), (30, 0, -.004), (60, 0, -.004),
+    )
+    # Seed 2317: bóng đã lăn 0,31 m/s sau reset. Đón trước 14 bước gắp được với roll 45° hoặc -135°.
+    SPHERE_INTERCEPT_SPEED = .10
+    SPHERE_INTERCEPTS = (("intercept", 14, 45, -3), ("intercept", 14, -135, -3), ("intercept", 18, -45, 0))
+
     def __init__(self, env):
         self.env = env
-        # Bóng: giữ V1 gốc. Quét 774 seed: hộp 3 cm 767 -> 774, hộp 4 cm 729 -> 753 với minimum-jerk, nhưng bóng 3 cm 765 -> 754 và bóng 4 cm
-        # 763 -> 752 (bóng lăn khi tay đi chậm lúc đầu đoạn / hạ hết đoạn rồi mới kẹp). Chưa điều tra kỹ nên tạm dùng cách đi cũ cho bóng.
+        # Thầy dùng dự báo vật lý cho bài một bóng 4 cm. Lab nhiều vật dùng policy chạy trực tiếp.
         sphere = getattr(env, "target_type", "box") == "sphere"
+        self._plan_sphere = sphere and abs(env.target_size - .04) < 1e-6 and len(env.lab_objects) == 1
         self.v1 = ScriptedPolicy(env) if sphere else ScriptedPolicyMinJerk(env)
         self.v2 = ScriptedPolicyV2(env)
         self._active = self.v1
         self.switched = False
+
+    def reset(self):
+        if self._plan_sphere:
+            self._reset_sphere_profile(self._choose_sphere_profile())
+        else:
+            super().reset()
+
+    def _reset_sphere_profile(self, profile):
+        if profile in ("v1", "v2"):
+            self.v1 = ScriptedPolicy(self.env)
+        elif profile is None:
+            self.v1 = ScriptedPolicyMinJerk(self.env)
+        elif profile[0] == "intercept":
+            self.v1 = ScriptedSphereIntercept(self.env, *profile[1:])
+        else:
+            self.v1 = ScriptedSphereMinJerk(self.env, *profile)
+        super().reset()
+        if profile == "v2":
+            self.v2.reset()
+            self._active, self.switched = self.v2, True
+
+    def _choose_sphere_profile(self):
+        """Kiểm tra phương án trên bản sao MuJoCo trước khi thầy thực thi trên cảnh thật."""
+        env = copy(self.env)
+        env.data = mujoco.MjData(env.model)
+        env.render_images = False
+        probe = type(self)(env)
+        adr = self.env._box_dof_adr
+        speed = np.linalg.norm(self.env.data.qvel[adr:adr + 2])
+        intercepts = self.SPHERE_INTERCEPTS if speed >= self.SPHERE_INTERCEPT_SPEED else ()
+        for profile in (None, *intercepts, *self.SPHERE_PROFILES):
+            mujoco.mj_copyData(env.data, env.model, self.env.data)
+            env._step_count = self.env._step_count
+            env._grasped = self.env._grasped
+            probe._reset_sphere_profile(profile)
+            obs = env._get_obs()
+            for _ in range(config.MAX_EPISODE_STEPS):
+                action = probe.select_action(obs)
+                obs, _, terminated, truncated, info = env.step(action)
+                if terminated or truncated or probe._phase > 10:
+                    break
+            _, info, _ = env.settle(action, info)
+            if info["success"]:
+                return profile
+        return "v1"

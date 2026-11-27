@@ -9,6 +9,7 @@ from sim_engine.env import SO101PickPlaceEnv
 from sim_engine.studio.runner import LabRun
 from sim_engine.studio.scene import normalize_objects
 from sim_engine.studio.server import Lab
+from sim_engine.tools.object_replay import sweep_seed
 from test_lab_run import pose, wait
 
 
@@ -126,6 +127,9 @@ if __name__ == "__main__":
 
 
 class ObjectAndBowlConfigTests(unittest.TestCase):
+    def test_scripted_teacher_intercepts_ball_already_rolling_at_reset(self):
+        self.assertTrue(sweep_seed((2317, "sphere", .04))["ok"])
+
     def test_sizes_and_bowl_are_applied_to_the_model(self):
         import mujoco
         env = SO101PickPlaceEnv(render_images=False, lab_objects=[
