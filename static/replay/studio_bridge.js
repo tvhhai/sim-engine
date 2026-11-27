@@ -2,6 +2,26 @@
 (() => {
   const params = new URLSearchParams(location.search);
   const sourceKey = params.get('source') || 'lab';
+  document.documentElement.classList.add('studio-replay');
+  const diagnosticTabs = [$('tabIk'), $('tabGrasp')];
+  function selectDiagnosticTab(active) {
+    for (const tab of diagnosticTabs) {
+      const selected = tab === active;
+      tab.setAttribute('aria-selected', String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      $(tab.getAttribute('aria-controls')).hidden = !selected;
+    }
+  }
+  diagnosticTabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => selectDiagnosticTab(tab));
+    tab.addEventListener('keydown', event => {
+      const next = { ArrowLeft: 1 - index, ArrowRight: 1 - index, Home: 0, End: 1 }[event.key];
+      if (next === undefined) return;
+      event.preventDefault();
+      selectDiagnosticTab(diagnosticTabs[next]);
+      diagnosticTabs[next].focus();
+    });
+  });
   let sample = null;
   let xy = null, xyAt = -Infinity;
   // React owns the XY viewport, just as it owns the two WebGL viewports.
@@ -22,7 +42,7 @@
   $('cameraFeeds').append(sensorSlot);
   const threeStyle = document.createElement('style');
   threeStyle.textContent = `#c3,#camA{display:none!important}#studio-three-main{position:absolute;inset:0}#studio-three-main .scene-canvas{width:100%;height:100%;position:relative}#studio-three-camera{aspect-ratio:4/3;position:relative;border:1px solid var(--line);border-radius:6px;overflow:hidden}#studio-three-camera .scene-canvas{width:100%;height:100%;position:relative}#studio-three-camera canvas{height:100%!important;aspect-ratio:auto;border:0} .canvas-caption{position:absolute;bottom:10px;left:12px;font-size:11px;color:#d1d7df;pointer-events:none}.scene-loading{padding:20px;color:var(--muted)}.viewbar,#cameraFeeds{z-index:2}.base-axis-label{white-space:nowrap;font:10px system-ui;color:#e7edf4;background:#172129c9;border-radius:3px;padding:2px 4px;pointer-events:none}`;
-  threeStyle.textContent += '.studio-focus3d .hd,.studio-focus3d .c-small,.studio-focus3d .col,.studio-focus3d .logcard{display:none}.studio-focus3d .main{display:block;height:100dvh;padding:8px;box-sizing:border-box}.studio-focus3d .c-3d{height:100%;display:flex;flex-direction:column}.studio-focus3d .cv{height:auto;flex:1;min-height:180px}';
+  threeStyle.textContent += '.studio-focus3d .hd,.studio-focus3d .c-small,.studio-focus3d .replay-diagnostics,.studio-focus3d .logcard{display:none}.studio-focus3d .main{display:block;height:100dvh;padding:8px;box-sizing:border-box}.studio-focus3d .c-3d{height:100%;display:flex;flex-direction:column}.studio-focus3d .cv{height:auto;flex:1;min-height:180px}';
   threeStyle.textContent += '.studio-focus3d #app{height:100dvh;padding:0;gap:0}.studio-focus3d .main{flex:1 1 auto}';
   document.head.append(threeStyle);
   threeStyle.textContent += '#top{display:flex;min-height:0}#top>.xy-view{flex:1;min-height:0;width:100%;height:100%}';

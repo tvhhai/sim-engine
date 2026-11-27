@@ -103,10 +103,19 @@ app.innerHTML = `
         <span class="sub keys">Phím: ← → từng bước · ↑ ↓ phase · Space · Home/End</span>
       </div>
     </div>
+    ${window.STUDIO_WEBGL ? `
+    <div class="card replay-diagnostics">
+      <div class="vtabs" role="tablist" aria-label="Thông tin mô phỏng">
+        <button type="button" role="tab" id="tabIk" aria-selected="true" aria-controls="ikPanel">Đích IK</button>
+        <button type="button" role="tab" id="tabGrasp" aria-selected="false" aria-controls="graspPanel" tabindex="-1">Kẹp và vào bát</button>
+      </div>
+      <div id="ikPanel" class="diagnostic-panel" role="tabpanel" aria-labelledby="tabIk" tabindex="0"><div id="info"></div></div>
+      <div id="graspPanel" class="diagnostic-panel" role="tabpanel" aria-labelledby="tabGrasp" tabindex="0" hidden><div id="chk"></div></div>
+    </div>` : `
     <div class="col">
       <div class="card"><h2>ĐÍCH · IK</h2><div id="info"></div></div>
       <div class="card"><h2>KẸP VÀ VÀO BÁT: điều kiện env kiểm tra</h2><div id="chk"></div></div>
-    </div>
+    </div>`}
   </main>
 <div class="card logcard"><h2>LOG TỪNG BƯỚC (bấm một dòng để nhảy tới)</h2><div class="logwrap" id="logw"></div></div>
 `;
