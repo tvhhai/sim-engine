@@ -25,7 +25,9 @@ def run_all(env, options, target_ids=None):
     pending = list(objects)
     frames, outcomes = [], {}
     attempts = 0
-    while pending:
+    start_raised = False
+
+    def reachable_targets():
         hand = env.get_ee_pos()
         reachable = []
         for obj in pending:
@@ -35,6 +37,10 @@ def run_all(env, options, target_ids=None):
                 outcomes[obj["id"]] = "placed"
             elif in_workspace(info["box_pos"][:2]):
                 reachable.append((math.dist(hand, info["box_pos"]), obj))
+        return reachable
+
+    while pending:
+        reachable = reachable_targets()
         pending = [obj for obj in pending if obj["id"] not in outcomes]
         if not reachable:
             outcomes.update((obj["id"], "unreachable") for obj in pending)
@@ -44,7 +50,17 @@ def run_all(env, options, target_ids=None):
         ident = obj["id"]
         env.select_lab_target(obj)
         attempts += 1
-        attempt = Recorder(env, default_policy(env)).run(LAB_SEED, continue_scene=True)
+
+        def has_next_pick():
+            try:
+                return bool(reachable_targets())
+            finally:
+                env.select_lab_target(obj)
+
+        attempt = Recorder(env, default_policy(env)).run(
+            LAB_SEED, continue_scene=True, start_raised=start_raised, has_next_pick=has_next_pick,
+        )
+        start_raised = attempt["ready_for_next"]
         offset = len(frames) - 1 if frames else 0
         for frame in attempt["frames"][1 if frames else 0:]:
             frames.append(dict(frame, t=offset + frame["t"], target_id=ident, target_index=attempts))

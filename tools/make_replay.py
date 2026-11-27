@@ -346,7 +346,7 @@ class Recorder:
                               for name in ARM_BODIES + [JAW_BODY, "wrist_cam_arm"]}
         return result
 
-    def run(self, seed, options=None, *, continue_scene=False):
+    def run(self, seed, options=None, *, continue_scene=False, start_raised=False, has_next_pick=None):
         env, policy = self.env, self.policy
         if continue_scene:
             env._step_count = 0
@@ -354,14 +354,18 @@ class Recorder:
         else:
             obs, info = env.reset(seed=seed, options=options)
         policy.reset()
+        if start_raised:
+            policy.start_from_raised_pose()
         self.target = None
         self.threshold = None
-        frames = [self.frame(0, 0, 0, 0, info, 1.0)]     # khung 0: trước khi chạy bước nào
+        start_phase = policy._phase if start_raised else 0
+        frames = [self.frame(0, start_phase, start_phase, 0, info, 1.0)]  # khung đầu trước khi chạy bước nào
         blocked = (options or {}).get("blocked_reason")
         if blocked:
             return {"seed": seed, "bowl": r3(env.get_bowl_pos()), "bowl_geoms": bowl_geom_list(env),
                     "success": False, "steps": 0, "frames": frames, "blocked_reason": blocked}
         ps = 0
+        ready_for_next = False
         for step in range(1, config.MAX_EPISODE_STEPS + 1):
             before = policy._phase
             self.target = None
@@ -374,6 +378,10 @@ class Recorder:
             frames.append(self.frame(step, before, after, ps, info, action[5]))
             if after != before:
                 ps = 0
+            if before == 9 and after == 10 and info["success"] and has_next_pick is not None and has_next_pick():
+                # Đã thả vật và rút tay. Giữ tư thế này để đổi mục tiêu.
+                ready_for_next = True
+                break
             if terminated or truncated or after > 10:
                 break
         if not (terminated or truncated):                                    # policy xong mà hộp còn lắc trong bát: chờ nằm yên (có ghi khung)
@@ -390,6 +398,7 @@ class Recorder:
             "success": bool(info["success"]),
             "steps": len(frames) - 1,
             "frames": frames,
+            "ready_for_next": ready_for_next,
         }
 
 

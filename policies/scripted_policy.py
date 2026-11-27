@@ -371,6 +371,15 @@ class ScriptedPolicy(BasePolicy):
         if self.unreachable:
             self._phase = 10
 
+    def start_from_raised_pose(self):
+        """Nối lượt gắp khi tay vừa rút khỏi bát và vẫn đang ở trên cao."""
+        if self.unreachable:
+            return
+        self._phase = 1
+        self._smoothed_action = self._build_action_from_current()
+        grip = (self.data.ctrl[5] - config.GRIPPER_CLOSED_RAD) / (config.GRIPPER_OPEN_RAD - config.GRIPPER_CLOSED_RAD)
+        self._prev_grip = float(np.clip(2.0 * grip - 1.0, -1.0, 1.0))
+
     def select_action(self, observation: dict) -> np.ndarray:
         """Hàm chính: nhìn tình hình hiện tại, trả về action (7 số trong [-1, 1]).
 

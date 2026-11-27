@@ -87,6 +87,9 @@ class LabSceneTests(unittest.TestCase):
             self.assertEqual([f["t"] for f in frames], list(range(len(frames))))
             first_box = next(f for f in frames if f["target_id"] == "box")
             self.assertLess(np.linalg.norm(np.array(first_box["objects"][1]["pos"][:2]) - episode["bowl"][:2]), .06)
+            self.assertTrue(all(f["ph"] != 10 for f in frames if f["target_id"] == "ball"))
+            self.assertEqual(first_box["ph"], 1)
+            self.assertEqual(frames[-1]["phn"], 11)
 
     def test_preview_switches_target_and_preserves_runner(self):
         lab = Lab()
