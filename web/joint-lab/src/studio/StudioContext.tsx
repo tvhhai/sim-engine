@@ -26,7 +26,7 @@ import { constrainBowl } from "../workspace";
 import { DEFAULT_SETTINGS, parseSettings } from "./settings";
 import type { Settings } from "./settings";
 import { navigate, useRoute } from "./router";
-import { clampSize, NEW_OBJECT_SIZE, parseBowl, parseScene, request } from "./scene";
+import { clampSize, fitsBowl, NEW_OBJECT_SIZE, parseBowl, parseScene, request } from "./scene";
 const DEFAULT_POSE: Pose = {
   pan: 0,
   lift: 0,
@@ -144,6 +144,7 @@ function useStudioController() {
           objects,
           target_id: saved?.target_id || objects[0].id,
           bowl: parseBowl(saved?.bowl),
+          mode: saved?.mode,
         });
         setSelected(objects[0].id);
         try {
@@ -207,9 +208,12 @@ function useStudioController() {
         if (!active) return;
         if (next.status === "done" && next.run_id !== lastReplay.current) {
           lastReplay.current = next.run_id || "";
-          await refreshCatalog();
+          void refreshCatalog().catch(() => {});
           if (requestedRun.current) {
             requestedRun.current = false;
+            setNotice(next.blocked_reason || (next.total !== undefined
+              ? `Gắp tất cả · ${next.placed}/${next.total} vật trong bát`
+              : next.success ? "Gắp thành công." : "Đã kết thúc mô phỏng. Xem Replay để kiểm tra lần gắp."));
             if (settingsRef.current.autoOpenReplay)
               navigate("replay", { source: "lab" });
           }
@@ -330,6 +334,11 @@ function useStudioController() {
   }
   async function runScene(candidate: Scene) {
     setError("");
+    setNotice("");
+    if (candidate.mode === "all" && !fitsBowl(candidate.objects, candidate.bowl)) {
+      setError("Bát chưa đủ chỗ cho tất cả vật. Hãy tăng bán kính bát hoặc giảm cỡ hay số vật.");
+      return;
+    }
     setSubmitting(true);
     requestedRun.current = true;
     try {
@@ -343,8 +352,8 @@ function useStudioController() {
       setSubmitting(false);
     }
   }
-  async function start(mode: Scene["mode"] = "single") {
-    if (scene) await runScene({ ...scene, mode });
+  async function start() {
+    if (scene) await runScene(scene);
   }
   async function loadCase(source: string, index = 0) {
     if (!meta) throw new Error("Mô hình chưa sẵn sàng");
@@ -377,6 +386,7 @@ function useStudioController() {
     error,
     setError,
     notice,
+    setNotice,
     previewing,
     ikBusy,
     run,

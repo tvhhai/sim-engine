@@ -74,16 +74,18 @@ class LabSceneTests(unittest.TestCase):
                 dict(id="ball", type="sphere", size=.025, x=.07, y=.03),
             ]
             runner.start(dict(pose(), pan=-.4, lift=-34.5, elbow=17.1, wflex=75.4, wroll=-5.5, grip=-.1,
-                              wx=-.19755, wy=.08118, objects=items, bowl={"radius": .065, "height": .05}, mode="all"))
+                              wx=-.19755, wy=.08118, objects=items, target_id="box",
+                              bowl={"radius": .065, "height": .05}, mode="all"))
             result = wait(runner)
             self.assertTrue(result.get("success"), result)
             episode = json.loads((Path(directory) / "replay_lab.json").read_text(encoding="utf-8"))["episodes"][0]
             self.assertTrue(episode["bowl_geoms"])
             self.assertEqual(episode["placements"], [{"id": "box", "status": "placed"}, {"id": "ball", "status": "placed"}])
             frames = episode["frames"]
+            self.assertEqual(frames[0]["target_id"], "ball")
             self.assertEqual([f["t"] for f in frames], list(range(len(frames))))
-            first_ball = next(f for f in frames if f["target_id"] == "ball")
-            self.assertLess(np.linalg.norm(np.array(first_ball["objects"][0]["pos"][:2]) - episode["bowl"][:2]), .06)
+            first_box = next(f for f in frames if f["target_id"] == "box")
+            self.assertLess(np.linalg.norm(np.array(first_box["objects"][1]["pos"][:2]) - episode["bowl"][:2]), .06)
 
     def test_preview_switches_target_and_preserves_runner(self):
         lab = Lab()

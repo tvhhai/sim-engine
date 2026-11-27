@@ -89,7 +89,7 @@ export type Meta = {
   limits: [number, number][];
   gopen: number;
   gclose: number;
-  saved_pose: (Pose & { objects?: Item[]; target_id?: string; bowl?: Bowl }) | null;
+  saved_pose: (Pose & { objects?: Item[]; target_id?: string; bowl?: Bowl; mode?: Scene["mode"] }) | null;
   pick_region: Region;
   pick_scan?: ScanPoint[];
   unreachable_region?: StopRegion;
@@ -134,6 +134,8 @@ export type Run = {
   steps?: number;
   error?: string;
   blocked_reason?: string;
+  placed?: number;
+  total?: number;
 };
 export type RunRecord = {
   id: string;

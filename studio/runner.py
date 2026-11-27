@@ -21,22 +21,33 @@ LAB_SEED = 2147483647
 def run_all(env, options):
     """Chạy từng vật trên một mô phỏng liên tục và chấm lại mọi vật ở khung cuối."""
     env.reset(seed=LAB_SEED, options=options)
-    objects = sorted(env.lab_objects, key=lambda obj: obj["body"] != "box")
+    objects = env.lab_objects
+    pending = list(objects)
     frames, outcomes = [], {}
-    for index, obj in enumerate(objects):
+    attempts = 0
+    while pending:
+        hand = env.get_ee_pos()
+        reachable = []
+        for obj in pending:
+            env.select_lab_target(obj)
+            info = env._get_info()
+            if info["success"]:
+                outcomes[obj["id"]] = "placed"
+            elif in_workspace(info["box_pos"][:2]):
+                reachable.append((math.dist(hand, info["box_pos"]), obj))
+        pending = [obj for obj in pending if obj["id"] not in outcomes]
+        if not reachable:
+            outcomes.update((obj["id"], "unreachable") for obj in pending)
+            break
+        _, obj = min(reachable, key=lambda candidate: candidate[0])
+        pending.remove(obj)
         ident = obj["id"]
         env.select_lab_target(obj)
-        info = env._get_info()
-        if info["success"]:
-            outcomes[ident] = "placed"
-            continue
-        if not in_workspace(info["box_pos"][:2]):
-            outcomes[ident] = "unreachable"
-            continue
+        attempts += 1
         attempt = Recorder(env, default_policy(env)).run(LAB_SEED, continue_scene=True)
         offset = len(frames) - 1 if frames else 0
         for frame in attempt["frames"][1 if frames else 0:]:
-            frames.append(dict(frame, t=offset + frame["t"], target_id=ident, target_index=index + 1))
+            frames.append(dict(frame, t=offset + frame["t"], target_id=ident, target_index=attempts))
         outcomes[ident] = "placed" if attempt["success"] else "failed"
         if env._grasped:
             # Dừng để lượt kế tiếp không mở hàm khi tay còn giữ vật của lượt trước.
@@ -136,9 +147,14 @@ class LabRun:
             all_objects = pose.get("mode") == "all"
             episode = run_all(env, options) if all_objects and not blocked else Recorder(env, default_policy(env)).run(LAB_SEED, options=options)
             episode.update(name="lab", group="mixed", tags=["LAB · lần chạy mới nhất"])
-            if "placements" in episode:
+            totals = {}
+            if all_objects:
+                if blocked:
+                    episode.update(mode="all", placements=[{"id": obj["id"], "status": "not_attempted"} for obj in env.lab_objects])
                 placed = sum(result["status"] == "placed" for result in episode["placements"])
-                episode["tags"].append(f"Gắp tất cả · {placed}/{len(episode['placements'])} vật trong bát")
+                total = len(episode["placements"])
+                totals = {"placed": placed, "total": total}
+                episode["tags"].append(f"Gắp tất cả · {placed}/{total} vật trong bát")
             episode["initial_options"] = options
             out = self.directory / "replay_lab.html"
             temporary = out.with_suffix(".tmp")
@@ -151,7 +167,7 @@ class LabRun:
             with self.lock:
                 self.state.update(status="done", success=episode["success"], steps=episode["steps"],
                                   blocked_reason=blocked,
-                                  replay="/replay-lab?run=" + self.state["run_id"])
+                                  replay="/replay-lab?run=" + self.state["run_id"], **totals)
         except Exception as exc:
             with self.lock:
                 self.state.update(status="error", error=f"{type(exc).__name__}: {exc}")

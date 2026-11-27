@@ -1,7 +1,6 @@
 import { Suspense, useEffect, useState } from "react";
 import {
   ActionIcon,
-  Alert,
   Badge,
   Burger,
   Button,
@@ -9,6 +8,7 @@ import {
   Group,
   Loader,
   Modal,
+  Notification,
   Stack,
   Text,
   Title,
@@ -32,6 +32,8 @@ export default function StudioShell() {
     setSettings,
     error,
     setError,
+    notice,
+    setNotice,
     run,
     running,
     connected,
@@ -45,6 +47,11 @@ export default function StudioShell() {
     document.title = `Sim Studio · ${active?.title || "Không tìm thấy"}`;
     setMobile(false);
   }, [active?.title]);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 6000);
+    return () => clearTimeout(timer);
+  }, [notice, setNotice]);
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
       if (event.altKey && ["1", "2", "3", "4"].includes(event.key)) {
@@ -201,26 +208,23 @@ export default function StudioShell() {
             )}
           </Group>
         </header>
-        {running && (
-          <div className="global-run-status" role="status">
-            <Loader size={14} color="teal" />
-            <span>
-              Đang mô phỏng seed lab. Bạn có thể xem các kết quả đã lưu trong
-              lúc đợi.
-            </span>
-          </div>
-        )}
-        {error && (
-          <Alert
-            color="red"
-            m="md"
-            withCloseButton
-            title="Có lỗi cần kiểm tra"
-            onClose={() => setError("")}
-          >
-            {error}
-          </Alert>
-        )}
+        <div className="studio-toasts">
+          {running && (
+            <Notification loading withCloseButton={false} role="status">
+              Đang chạy mô phỏng…
+            </Notification>
+          )}
+          {error && (
+            <Notification color="red" role="alert" onClose={() => setError("")} closeButtonProps={{ "aria-label": "Đóng thông báo lỗi" }}>
+              {error}
+            </Notification>
+          )}
+          {notice && (
+            <Notification color="teal" role="status" onClose={() => setNotice("")} closeButtonProps={{ "aria-label": "Đóng thông báo" }}>
+              {notice}
+            </Notification>
+          )}
+        </div>
         <main
           id="studio-content"
           tabIndex={-1}

@@ -1,7 +1,7 @@
 import {
-  Alert,
   Badge,
   Button,
+  Checkbox,
   ColorInput,
   FileButton,
   Group,
@@ -26,14 +26,13 @@ import {
   Map as MapIcon,
 } from "lucide-react";
 import { JOINTS } from "../types";
-import { reachable } from "../workspace";
 import { Panel } from "../components/Panel";
 import { TopView } from "../components/TopView";
 import { labTopView } from "../components/topViewGeometry";
 import { SceneView } from "../components/LazySceneView";
 import { ObjectPanel } from "../components/ObjectPanel";
 import { useStudio } from "../studio/StudioContext";
-import { bowlGeoms, downloadJson, fitsBowl, minBowlRadius, parseScene } from "../studio/scene";
+import { bowlGeoms, downloadJson, minBowlRadius, parseScene } from "../studio/scene";
 import { toBase } from "../studio/coordinates";
 export default function LabScreen() {
   const {
@@ -47,7 +46,6 @@ export default function LabScreen() {
     visible,
     move,
     setJoint,
-    notice,
     previewing,
     error,
     setError,
@@ -70,11 +68,7 @@ export default function LabScreen() {
         <Text c="dimmed">{error || "Đang nạp mô hình và cảnh đã lưu."}</Text>
       </div>
     );
-  const target = scene.objects.find((o) => o.id === scene.target_id)!;
-  const bowlOK = reachable(scene.pose.wx, scene.pose.wy, meta.pick_region),
-    targetOK = reachable(target.x, target.y, meta.pick_region);
   const showScene = visible.map;
-  const allFit = fitsBowl(scene.objects, scene.bowl);
   // Vùng gắp xanh / hỗn hợp / đỏ và điểm quét, cùng dữ liệu với replay (server /meta)
   const zones = {
     region: meta.pick_region,
@@ -127,6 +121,12 @@ export default function LabScreen() {
               </Button>
             )}
           </FileButton>
+          <Checkbox
+            label="Gắp tất cả"
+            checked={scene.mode === "all"}
+            disabled={running}
+            onChange={(event) => setScene({ ...scene, mode: event.currentTarget.checked ? "all" : "single" })}
+          />
           <Button
             leftSection={<MonitorPlay size={16} />}
             loading={running}
@@ -135,25 +135,8 @@ export default function LabScreen() {
           >
             Chạy mô phỏng
           </Button>
-          <Button
-            variant="light"
-            loading={running}
-            disabled={previewing || ikBusy || scene.objects.length < 2 || !allFit}
-            onClick={() => start("all")}
-          >
-            Gắp tất cả
-          </Button>
         </Group>
       </div>
-      {!allFit && (
-        <Alert color="orange" mx="lg" mt="md">Bát chưa đủ chỗ cho tất cả vật. Hãy tăng bán kính bát hoặc giảm cỡ hay số vật.</Alert>
-      )}
-      {(!bowlOK || !targetOK) && (
-        <Alert color="orange" mx="lg" mt="md" title="Cánh tay sẽ đứng yên">
-          {!bowlOK ? "Bát" : "Vật cần gắp"} đang ngoài vùng thao tác. Bạn có thể
-          chạy để ghi lại trường hợp này.
-        </Alert>
-      )}
       <div className="workspace lab-workspace">
         <div className="main-column">
           {/* Đặt cảnh (XY) là việc chính của Lab nên đứng trước; 3D là tab kết quả để xem tư thế và va chạm */}
@@ -422,11 +405,6 @@ export default function LabScreen() {
                     </Button>
                   </Group>
                 </div>
-                {notice && (
-                  <Text size="xs" c="dimmed" aria-live="polite">
-                    {notice}
-                  </Text>
-                )}
               </Stack>
             </Panel>
           )}
