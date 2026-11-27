@@ -1,5 +1,4 @@
 import {
-  ActionIcon,
   Alert,
   Badge,
   Button,
@@ -336,19 +335,19 @@ export default function LabScreen() {
             <Panel
               title="Khớp và hàm kẹp"
               tools={
-                <ActionIcon
+                <Button
+                  size="compact-sm"
                   variant="subtle"
                   color="gray"
-                  aria-label="Đưa tay về home"
-                  onClick={() =>
-                    setScene({
-                      ...scene,
-                      pose: { ...scene.pose, ...meta.home },
-                    })
-                  }
+                  leftSection={<RotateCcw size={14} />}
+                  onClick={() => {
+                    const pose = { ...scene.pose };
+                    for (const [key] of JOINTS) pose[key] = meta.home[key] ?? pose[key];
+                    setScene({ ...scene, pose });
+                  }}
                 >
-                  <RotateCcw size={16} />
-                </ActionIcon>
+                  Về tư thế nghỉ
+                </Button>
               }
             >
               <Stack p="sm" gap="sm">

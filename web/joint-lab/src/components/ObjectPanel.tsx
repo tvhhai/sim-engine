@@ -31,17 +31,20 @@ export function ObjectPanel({
   onChange: (scene: Scene) => void;
 }) {
   const [kind, setKind] = useState<string | null>("box"),
-    [color, setColor] = useState(PALETTE[0]),
-    [yaw, setYaw] = useState<string | number>(0),
-    [size, setSize] = useState<string | number>(NEW_OBJECT_SIZE * 100),
     [count, setCount] = useState<string | number>(1),
     [undo, setUndo] = useState<Scene | null>(null);
-  const newSize = (Number(size) || NEW_OBJECT_SIZE * 100) / 100;
   const newType = kind === "sphere" ? "sphere" : "box";
   const amount = Math.max(1, Math.floor(Number(count) || 1));
   const withinCount = scene.objects.length + amount <= 5;
-  const canAdd = withinCount && newSize >= .02 && newSize <= maxObjectSize(scene.bowl) + 1e-9 &&
-    fitsBowl([...scene.objects, ...Array.from({ length: amount }, (): Pick<Item, "type" | "size"> => ({ type: newType, size: newSize }))], scene.bowl);
+  const preferredSize = Math.min(NEW_OBJECT_SIZE, maxObjectSize(scene.bowl));
+  const newSize = withinCount
+    ? [preferredSize, .035, .03, .025, .02].find((size) =>
+        size <= preferredSize && fitsBowl([
+          ...scene.objects,
+          ...Array.from({ length: amount }, (): Pick<Item, "type" | "size"> => ({ type: newType, size })),
+        ], scene.bowl),
+      )
+    : undefined;
   const [sizeError, setSizeError] = useState("");
   function update(id: string, patch: Partial<Item>) {
     if (
@@ -59,22 +62,20 @@ export function ObjectPanel({
     onChange({ ...scene, objects });
   }
   function add() {
-    if (!canAdd) return;
+    if (newSize === undefined) return;
     const added = Array.from(
       { length: amount },
       (_, i): Item => ({
         id: crypto.randomUUID().slice(0, 8),
         type: newType,
-        color,
+        color: PALETTE[(scene.objects.length + i) % PALETTE.length],
         x: -0.1 + (scene.objects.length + i) * 0.055,
         y: 0.12,
-        yaw: kind === "sphere" ? 0 : Number(yaw) || 0,
+        yaw: 0,
         size: newSize,
       }),
     );
     onChange({ ...scene, objects: [...scene.objects, ...added] });
-    const next = PALETTE.indexOf(color);
-    if (next >= 0) setColor(PALETTE[(next + 1) % PALETTE.length]);
     if (added[0]) onSelect(added[0].id);
   }
   return (
@@ -102,51 +103,13 @@ export function ObjectPanel({
             allowDecimal={false}
           />
         </div>
-        <div className="lab-object-fields">
-          <NumberInput
-            size="xs"
-            label={kind === "sphere" ? "Đường kính (cm)" : "Cạnh hộp (cm)"}
-            description={`2 – ${(maxObjectSize(scene.bowl) * 100).toFixed(1)} (theo bát)`}
-            value={size}
-            onChange={setSize}
-            min={2}
-            max={maxObjectSize(scene.bowl) * 100}
-            step={0.5}
-          />
-        <NumberInput
-            size="xs"
-          label="Góc xoay hộp mới (°)"
-          description="0° là hộp thẳng trục; hộp vuông lặp lại sau 90°"
-          value={kind === "sphere" ? 0 : yaw}
-          onChange={setYaw}
-          disabled={kind === "sphere"}
-          min={-180}
-          max={180}
-          step={5}
-        />
-        </div>
-        <Group align="end" wrap="nowrap">
-          <ColorInput
-            size="xs"
-            eyeDropperButtonProps={{ "aria-label": "Lấy màu cho vật mới" }}
-            label="Màu vật mới"
-            value={color}
-            onChange={setColor}
-            format="hex"
-            swatches={PALETTE}
-          />
-          <Button
-            leftSection={<Plus size={16} />}
-            onClick={add}
-            disabled={!canAdd}
-          >
-            Thêm
-          </Button>
-        </Group>
+        <Button leftSection={<Plus size={16} />} onClick={add} disabled={newSize === undefined}>
+          Thêm
+        </Button>
         <Text size="xs" c="dimmed">
-          {!withinCount ? "Tối đa 5 vật trong cảnh." : !canAdd
-            ? "Bát chưa đủ chỗ. Thử giảm cỡ, số vật hoặc tăng bán kính bát."
-            : "Tối đa 5 vật. Vật được chọn là đích của chế độ gắp một vật."}
+          {!withinCount ? "Tối đa 5 vật trong cảnh." : newSize === undefined
+            ? "Bát chưa đủ chỗ. Thử giảm số vật hoặc tăng bán kính bát."
+            : `Cỡ vật khi thêm: ${Number((newSize * 100).toFixed(2))} cm.`}
         </Text>
         {sizeError && <Text size="xs" c="red" role="status">{sizeError}</Text>}
         <Select
