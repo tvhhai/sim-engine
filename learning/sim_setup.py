@@ -44,8 +44,9 @@ CAMERAS = {"front": "webcam", "wrist": "arm_cam", "top": "topcam", "rear": "rear
                                                #   điểm ảnh, thấy hộp ở 97 % seed). Bộ camera mặc định từ 2026-11-27: rear + wrist.
 CAMERAS.update(camera1="topcam", camera2="arm_cam")
                                                # Tên camera của SmolVLA: smolvla_base được train sẵn với camera1/2/3. Khi fine-tune ta
-                                               # đổi top -> camera1, wrist -> camera2 (rename_map trong configs/smolvla_finetune.yaml);
-                                               # checkpoint SmolVLA vì vậy đòi camera1/camera2, hai dòng này để eval / DAgger dựng đúng.
+                                               # đổi tên camera dataset -> camera1/2 (rename_map trong configs/smolvla_finetune.yaml).
+                                               # eval / DAgger đọc rename_map từ checkpoint (spec_from_features) nên camera1 trỏ đúng
+                                               # camera đã học (top hay rear); hai dòng này chỉ là dự phòng cho checkpoint không có bảng.
 DEFAULT_CAMERAS = ("front", "wrist")           # bộ camera của dataset v1
 ENV_STATE_NAMES = ["box_x", "box_y", "box_z", "bowl_x", "bowl_y"]
                                                # "thông tin ăn gian" (privileged): toạ độ thật của vật và bát, đọc thẳng từ mô phỏng.
@@ -132,11 +133,19 @@ def to_frame(env, obs, action, task, cameras=DEFAULT_CAMERAS, env_state=False):
     return frame
 
 
-def spec_from_features(keys):
+def spec_from_features(keys, rename_map=None):
     """Ngược lại của features(): từ tên các trường đầu vào của một mạng đã train, suy ra (camera, có env_state không).
-    eval_policy dùng để dựng đúng loại quan sát mà mạng đó được train, không cần ghi tay."""
+    eval_policy / dagger dùng để dựng đúng loại quan sát mà mạng đó được train, không cần ghi tay.
+
+    rename_map: bảng đổi tên camera lúc train (tên trong dataset -> tên mạng đòi, vd {"observation.images.rear":
+    "observation.images.camera1"} của SmolVLA), đọc từ bộ tiền xử lý của checkpoint (xem eval_policy.rename_map_of). Có bảng thì
+    trả về tên camera của DATASET (rear), to_frame dựng ảnh dưới tên đó và bộ tiền xử lý tự đổi sang camera1, giống hệt lúc train;
+    ván DAgger ghi ra cũng mang tên của dataset nên gộp được với dataset gốc.
+    """
+    back = {new.split(".")[-1]: old.split(".")[-1] for old, new in (rename_map or {}).items()}
+    names = (back.get(k.split(".")[-1], k.split(".")[-1]) for k in keys if k.startswith("observation.images."))
     # Bỏ những camera ta không có (vd camera3 / empty_camera_0 của SmolVLA): mạng tự bù ảnh trống cho chúng.
-    cameras = tuple(k.split(".")[-1] for k in keys if k.startswith("observation.images.") and k.split(".")[-1] in CAMERAS)
+    cameras = tuple(n for n in names if n in CAMERAS)
     return cameras, "observation.environment_state" in keys
 
 

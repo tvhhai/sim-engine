@@ -31,7 +31,7 @@ import numpy as np
 
 from .. import config
 from . import sim_setup
-from .eval_policy import act, load_policy
+from .eval_policy import act, camera_spec, load_policy
 
 GRASP_WAIT_MAX = 60      # AI đang kẹp vật ở bước t_b: chờ tối đa chừng này bước cho tới lúc không kẹp nữa rồi mới tách nhánh
 TEACHER_FRAMES_MAX = 400 # thầy mất nhiều bước hơn thế (lòng vòng, thử lại nhiều lần) thì bỏ ván: dạy AI lòng vòng chẳng ích gì
@@ -58,7 +58,7 @@ def make_teacher(env):
 def run_episode(seed, members, device, kind, size, task, t_branch):
     """Một ván DAgger. members = [(mạng, pre, post), ...]: một mạng, hoặc nhiều checkpoint lái chung (trung bình action, xem
     eval_policy.act). Trả (kết quả: "ai_ok" / "no_branch" / "teacher_ok" / "teacher_fail", số bước AI đã lái, danh sách khung)."""
-    cameras, env_state = sim_setup.spec_from_features(members[0][0].config.input_features)
+    cameras, env_state = camera_spec(members[0])
     env, options = sim_setup.make_env(seed, kind, size, images=bool(cameras))
     obs, info = env.reset(seed=seed, options=options)
     for policy, pre, post in members:
@@ -117,7 +117,7 @@ def main():
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
     members = [load_policy(path, args.device) for path in args.policy]
-    cameras, env_state = sim_setup.spec_from_features(members[0][0].config.input_features)
+    cameras, env_state = camera_spec(members[0])
     task = sim_setup.TASKS[args.kind].format(color=args.color_name)
     ds = LeRobotDataset.create(args.repo_id, sim_setup.FPS, sim_setup.features(cameras, env_state), root=args.root,
                                robot_type="so101_follower", use_videos=bool(cameras), streaming_encoding=bool(cameras))

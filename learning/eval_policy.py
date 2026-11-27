@@ -59,6 +59,20 @@ def load_policy(path, device, n_action_steps=None, temporal_ensemble=None):
     return policy, pre, post
 
 
+def rename_map_of(member):
+    """Bảng đổi tên camera lúc train (tên dataset -> tên mạng đòi) nằm trong bộ tiền xử lý của checkpoint; không có thì {}.
+    SmolVLA có (vd rear -> camera1); ACT / Diffusion không đổi tên nên rỗng."""
+    for step in getattr(member[1], "steps", []):
+        if getattr(step, "rename_map", None):
+            return dict(step.rename_map)
+    return {}
+
+
+def camera_spec(member):
+    """(camera cần dựng theo tên dataset, có env_state không) của một mạng (policy, pre, post)."""
+    return sim_setup.spec_from_features(member[0].config.input_features, rename_map_of(member))
+
+
 def _recorder(env):
     """Recorder của replay chuẩn (tools/make_replay) dùng cho policy AI.
 
@@ -91,7 +105,7 @@ def act(members, observation, device, task):
 def run_episode(seed, members, device, kind, size, task, max_steps, record=False):
     """Cho policy AI tự chạy một ván. members = [(mạng, pre, post), ...]. Trả (dict kết quả, ván replay hoặc None)."""
     # Mạng được train với những đầu vào nào (camera nào, có toạ độ vật không) thì dựng đúng những đầu vào đó.
-    cameras, env_state = sim_setup.spec_from_features(members[0][0].config.input_features)
+    cameras, env_state = camera_spec(members[0])
     env, options = sim_setup.make_env(seed, kind, size, images=bool(cameras))   # cùng cảnh với seed đó của policy viết tay
     obs, info = env.reset(seed=seed, options=options)
     rec = _recorder(env) if record else None
