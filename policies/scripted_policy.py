@@ -291,10 +291,9 @@ class ScriptedPolicy(BasePolicy):
         }
 
         # Các độ cao (z trong hệ tọa độ world, đơn vị mét)
-        self._safe_z = self.CARRY_Z   # độ cao an toàn để di chuyển ngang (đi tới hộp và mang hộp), tránh va vật thể
+        self._safe_z = self.CARRY_Z   # độ cao khi tiếp cận vật trước khi kẹp
         self._pre_grasp_z = 0.46   # độ cao chuẩn bị kẹp
         self._grasp_z = self.GRASP_Z   # độ cao kẹp: đầu tay ngang tâm hộp
-        self._place_z = self.PLACE_Z   # độ cao thả hộp vào bát
 
     def _apply_object_profile(self):
         """Cấu hình kẹp theo VẬT cần gắp (loại và cỡ). Hộp 3 cm: giữ nguyên mọi thông số đã chỉnh.
@@ -325,6 +324,10 @@ class ScriptedPolicy(BasePolicy):
             self._plan = None
     def reset(self):
         """Gọi mỗi đầu episode: đưa policy về phase 0."""
+        # Giữ khoảng hở đã hiệu chỉnh so với miệng bát: cảnh Lab bát 8 cm cần nâng đích thêm 4 cm.
+        rise = max(0.0, self.env.bowl_height - config.BOWL_HEIGHT)
+        self._carry_z = self.CARRY_Z + rise
+        self._place_z = self.PLACE_Z + rise
         self._profile_alt = False
         self._rest_wait = 0
         self._apply_object_profile()
@@ -428,7 +431,7 @@ class ScriptedPolicy(BasePolicy):
                 self._lift_box(ee_pos)
             case 6:
                 if not self._carry_via(bowl_pos, ee_pos):
-                    self._move_box_to_bowl(box_pos, bowl_pos, ee_pos, self._safe_z, 0.02)
+                    self._move_box_to_bowl(box_pos, bowl_pos, ee_pos, self._carry_z, 0.02)
             case 7:
                 self._lower_into_bowl(box_pos, bowl_pos, ee_pos)
                 if self._place_hold_action is not None:
@@ -652,7 +655,7 @@ class ScriptedPolicy(BasePolicy):
         if self._drag_box(ee_pos):
             return
         if self._phase_step == 0 or self._lift_z is None or self._lift_xy0 is None:
-            self._lift_z = self._reachable_z(ee_pos[:2], z_lo=self._grasp_z + 0.04) if self.PHASE5_ADAPTIVE_Z else self._safe_z
+            self._lift_z = self._reachable_z(ee_pos[:2], z_lo=self._grasp_z + 0.04, z_hi=self._carry_z) if self.PHASE5_ADAPTIVE_Z else self._carry_z
             self._lift_xy0, self._lift_z0 = np.array(ee_pos[:2], dtype=float), float(ee_pos[2])
         target = np.array([*self._lift_xy(self._lift_xy0, self._lift_z0, ee_pos), self._lift_z])
         self._gripper_target = -1.0
@@ -744,7 +747,7 @@ class ScriptedPolicy(BasePolicy):
             return False
         mid = math.radians((a_ee + a_bw) / 2)
         r = float(np.clip((np.linalg.norm(ee_pos[:2] - pan) + np.linalg.norm(bowl_pos[:2] - pan)) / 2, 0.20, 0.30))
-        via = np.array([pan[0] + r * math.sin(mid), pan[1] + r * math.cos(mid), self._safe_z])
+        via = np.array([pan[0] + r * math.sin(mid), pan[1] + r * math.cos(mid), self._carry_z])
         self._gripper_target = -1.0
         self._move_toward(via, ee_pos, threshold=0.04)
         if self._phase != 6:                                       # tới nơi hoặc hết hạn: ở lại phase 6, đi tiếp tới bát
@@ -791,7 +794,7 @@ class ScriptedPolicy(BasePolicy):
             return
 
         self._place_retries += 1
-        self._place_retract_target = np.array([ee_pos[0], ee_pos[1], self._safe_z])
+        self._place_retract_target = np.array([ee_pos[0], ee_pos[1], self._carry_z])
         self._phase_step, self._best_dist, self._stall = 0, 0.0, 0
         self.last_exit = "place_retract"
         # Stop issuing the lowering goal as soon as we start the retry.
@@ -813,7 +816,7 @@ class ScriptedPolicy(BasePolicy):
 
     def _retract_from_bowl(self, box_pos, bowl_pos, ee_pos):
         # Rút tay lên khỏi bát (vẫn mở vừa, để ngón không quét vào thành bát khi rút)
-        target = np.array([bowl_pos[0], bowl_pos[1], self._safe_z])
+        target = np.array([bowl_pos[0], bowl_pos[1], self._carry_z])
         self._gripper_target = self.RELEASE_OPEN_CMD
         self._move_toward(target, ee_pos, threshold=0.025)
         if self._phase == 10:                       # đã rút lên tới nơi: xem hộp đang ở đâu rồi mới đi tiếp
@@ -865,15 +868,15 @@ class ScriptedPolicy(BasePolicy):
             self._last_finger = None
             self._lost_steps = 0
 
-    def _reachable_z(self, xy, z_lo=None):
+    def _reachable_z(self, xy, z_lo=None, z_hi=None):
         """Độ cao đích (phase 1 và phase 5): cao nhất trong [z_lo, độ cao an toàn] mà IK (có giới hạn khớp) còn tới được trong 4 mm.
 
         Hộp sát đế (r < 15 cm) thì độ cao an toàn CARRY_Z nằm ngoài tầm với của cánh tay: IK không giới hạn khớp từng báo "tới được", nhưng
         khớp thật dừng ở giới hạn nên đầu tay kẹt cách đích ~4 cm cho tới khi hết hạn phase. Hạ độ cao đích xuống mức tới được thì phase 1 kết
         thúc ngay khi tới nơi. Nếu không độ cao nào tới được thì lấy độ cao có sai số IK nhỏ nhất."""
         z_lo = self._pre_grasp_z + 0.02 if z_lo is None else z_lo
-        best = (1e9, self._safe_z)
-        z = self._safe_z
+        z = self._safe_z if z_hi is None else z_hi
+        best = (1e9, z)
         while z >= z_lo - 1e-9:
             target = np.array([xy[0], xy[1], z])
             self._solve_ik(target, limits=True)      # chỉ để THĂM DÒ tầm với: có kẹp giới hạn khớp nên sai số IK phản ánh đúng thực tế
@@ -953,7 +956,7 @@ class ScriptedPolicy(BasePolicy):
             self._solve_ik(target, limits=True)
             if float(np.linalg.norm(self._ik_data.site_xpos[self._ee_site] - target)) < 0.004:
                 return z
-        return self._reachable_z(xy, z_lo=rim + 0.01)
+        return self._reachable_z(xy, z_lo=rim + 0.01, z_hi=self._carry_z)
 
     def _recover_roll(self, ee_pos):
         """Hai bước sau khi tay chạm bát (xem _flip_roll): "lift" nhấc thẳng lên, "turn" xoay wrist_roll tại chỗ; xong thì sang phase 2."""
@@ -1192,9 +1195,9 @@ class ScriptedPolicy(BasePolicy):
                 ee = ik.site_xpos[self._ee_site].copy()
                 if xy0 is None:
                     xy0, z0 = ee[:2].copy(), float(ee[2])
-                if ee[2] >= self._safe_z - 0.02:
+                if ee[2] >= self._carry_z - 0.02:
                     break
-                q_ik = self._solve_ik(np.array([*self._lift_xy(xy0, z0, ee), self._safe_z]), roll=roll, q0=q)
+                q_ik = self._solve_ik(np.array([*self._lift_xy(xy0, z0, ee), self._carry_z]), roll=roll, q0=q)
                 step = np.clip(alpha * (self._to_action(q_ik) - smoothed), -self.LIFT_STEP_LIMIT, self.LIFT_STEP_LIMIT)
                 smoothed = smoothed + step
                 q = (smoothed + 1.0) / 2.0 * (hi - lo) + lo

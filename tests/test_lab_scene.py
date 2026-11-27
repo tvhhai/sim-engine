@@ -100,6 +100,23 @@ class LabSceneTests(unittest.TestCase):
         finally:
             lab.env.close()
 
+    def test_pick_clears_an_eight_centimeter_bowl(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runner = LabRun(directory)
+            items = [
+                dict(id="ball", type="sphere", size=.04, x=-.045, y=.12),
+                dict(id="box", type="box", size=.04, x=.0230386, y=.1194492),
+            ]
+            runner.start(dict(pose(), lift=-91.7, elbow=88.8, wflex=51.6, grip=-.1,
+                              wx=-.229998, wy=-.1343581, objects=items, target_ids=["box"],
+                              bowl={"radius": .055, "height": .08}))
+            result = wait(runner)
+            self.assertTrue(result.get("success"), result)
+            episode = json.loads((Path(directory) / "replay_lab.json").read_text(encoding="utf-8"))["episodes"][0]
+            first_carry = next(f for f in episode["frames"] if f["ph"] == 6)
+            rim_z = episode["bowl"][2] + .08
+            self.assertGreater(first_carry["box"][2] - .02, rim_z)
+
 
 if __name__ == "__main__":
     unittest.main()

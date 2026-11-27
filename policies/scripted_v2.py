@@ -126,6 +126,9 @@ class ScriptedPolicyV2(BasePolicy):
     # ------------------------------------------------------------------ vòng đời
 
     def reset(self):
+        rise = max(0.0, self.env.bowl_height - config.BOWL_HEIGHT)
+        self._carry_z = self.CARRY_Z + rise
+        self._place_z = self.PLACE_Z + rise
         self._phase, self._phase_step = 0, 0
         self.last_exit, self.motion_target = None, None
         self._traj = []                     # danh sách lệnh 5 khớp (rad) còn phải chạy trong phase này
@@ -502,7 +505,7 @@ class ScriptedPolicyV2(BasePolicy):
             else:
                 if not self._entered:
                     ee = self._ee_cmd_pos()
-                    seg, _ = self._seg_line(ee, [ee[0], ee[1], self.CARRY_Z], self._plan["roll"], self._q_cmd, self.CART_SPEED_SLOW)
+                    seg, _ = self._seg_line(ee, [ee[0], ee[1], self._carry_z], self._plan["roll"], self._q_cmd, self.CART_SPEED_SLOW)
                     self._traj = seg
                     self._entered = True
                 elif self._segment_done():
@@ -512,7 +515,7 @@ class ScriptedPolicyV2(BasePolicy):
             if not self._entered:
                 bowl = self.env.get_bowl_pos()
                 off = np.clip((box - ee)[:2], -0.04, 0.04)
-                tgt = np.array([bowl[0] - off[0], bowl[1] - off[1], self.CARRY_Z])
+                tgt = np.array([bowl[0] - off[0], bowl[1] - off[1], self._carry_z])
                 self._place_xy = tgt[:2].copy()
                 q_t, _, _ = self._ik(tgt, self._q_cmd[4], self._q_cmd, multi=True, tool_w=0.1)
                 self._traj = self._seg_joint(self._q_cmd, q_t, self.VMAX_CARRY)
@@ -522,7 +525,7 @@ class ScriptedPolicyV2(BasePolicy):
         elif ph == 7:
             self._grip_target = -1.0
             if not self._entered:
-                seg, _ = self._seg_line(self._ee_cmd_pos(), [self._place_xy[0], self._place_xy[1], self.PLACE_Z], self._q_cmd[4], self._q_cmd,
+                seg, _ = self._seg_line(self._ee_cmd_pos(), [self._place_xy[0], self._place_xy[1], self._place_z], self._q_cmd[4], self._q_cmd,
                                         self.CART_SPEED_SLOW)
                 self._traj = seg
                 self._entered = True
@@ -540,7 +543,7 @@ class ScriptedPolicyV2(BasePolicy):
             self._grip_target = self.RELEASE_OPEN_CMD
             if not self._entered:
                 ee = self._ee_cmd_pos()
-                seg, _ = self._seg_line(ee, [ee[0], ee[1], self.CARRY_Z], self._q_cmd[4], self._q_cmd, self.CART_SPEED)
+                seg, _ = self._seg_line(ee, [ee[0], ee[1], self._carry_z], self._q_cmd[4], self._q_cmd, self.CART_SPEED)
                 self._traj = seg
                 self._entered = True
             elif self._segment_done():
