@@ -130,6 +130,9 @@ class ObjectAndBowlConfigTests(unittest.TestCase):
     def test_scripted_teacher_intercepts_ball_already_rolling_at_reset(self):
         self.assertTrue(sweep_seed((2317, "sphere", .04))["ok"])
 
+    def test_scripted_teacher_replans_a_four_centimeter_box_grasp(self):
+        self.assertTrue(sweep_seed((246, "box", .04))["ok"])
+
     def test_sizes_and_bowl_are_applied_to_the_model(self):
         import mujoco
         env = SO101PickPlaceEnv(render_images=False, lab_objects=[

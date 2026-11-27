@@ -254,6 +254,21 @@ class ScriptedPolicyMinJerk(ScriptedPolicy):
         return self._smoothed_action.copy()
 
 
+class ScriptedBoxMinJerk(ScriptedPolicyMinJerk):
+    """Phương án kẹp hộp với độ cao, độ lệch và cách rời tư thế nghỉ khác."""
+
+    def __init__(self, env, height_delta, side_delta, staged=True):
+        super().__init__(env)
+        self._height_delta = height_delta
+        self._side_delta = side_delta
+        self.STAGED_LIFT = staged
+
+    def _apply_object_profile(self):
+        super()._apply_object_profile()
+        self._grasp_z += self._height_delta
+        self.GRASP_SIDE_OFFSET += self._side_delta
+
+
 class ScriptedSphereMinJerk(ScriptedPolicyMinJerk):
     """Biến thể đường gắp bóng để thử khi quỹ đạo cơ sở làm lăn hoặc tuột bóng."""
 
@@ -330,6 +345,13 @@ class ScriptedSphereIntercept(ScriptedPolicyMinJerk):
 class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
     """Bản kết hợp V1 + V2 như mặc định, chỉ thay V1 bằng bản minimum-jerk."""
 
+    # Hộp 4 cm: nhấc các khớp đồng thời sửa seed 204 và 248. Nâng điểm kẹp 4 mm sửa seed 87
+    # và dời điểm kẹp theo trục hàm 4 mm sửa seed 244.
+    BOX_PROFILES = (
+        (0, 0, False), (.004, 0), (-.004, 0), (0, .004), (0, -.004),
+        (.004, .004), (-.004, .004), "v1", "v2",
+    )
+
     # Seed 8 và 201: nâng điểm kẹp 4 mm tránh má kẹp đẩy quả bóng trước khi nâng.
     # Hướng và độ lệch khác giúp kiểm tra điểm kẹp quanh quả cầu khi bị giới hạn khớp.
     SPHERE_PROFILES = (
@@ -347,25 +369,34 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
 
     def __init__(self, env):
         self.env = env
-        # Thầy dùng dự báo vật lý cho bài một bóng 4 cm. Lab nhiều vật dùng policy chạy trực tiếp.
+        # Chọn quỹ đạo bằng dự báo vật lý cho bài một vật 4 cm.
         sphere = getattr(env, "target_type", "box") == "sphere"
-        self._plan_sphere = sphere and abs(env.target_size - .04) < 1e-6 and len(env.lab_objects) == 1
+        plan = abs(env.target_size - .04) < 1e-6 and len(env.lab_objects) == 1
+        self._plan_box = plan and not sphere
+        self._plan_sphere = plan and sphere
         self.v1 = ScriptedPolicy(env) if sphere else ScriptedPolicyMinJerk(env)
         self.v2 = ScriptedPolicyV2(env)
         self._active = self.v1
         self.switched = False
 
     def reset(self):
-        if self._plan_sphere:
-            self._reset_sphere_profile(self._choose_sphere_profile())
+        if self._plan_box:
+            self._reset_profile(self._choose_profile(self.BOX_PROFILES))
+        elif self._plan_sphere:
+            adr = self.env._box_dof_adr
+            speed = np.linalg.norm(self.env.data.qvel[adr:adr + 2])
+            intercepts = self.SPHERE_INTERCEPTS if speed >= self.SPHERE_INTERCEPT_SPEED else ()
+            self._reset_profile(self._choose_profile((*intercepts, *self.SPHERE_PROFILES)))
         else:
             super().reset()
 
-    def _reset_sphere_profile(self, profile):
+    def _reset_profile(self, profile):
         if profile in ("v1", "v2"):
             self.v1 = ScriptedPolicy(self.env)
         elif profile is None:
             self.v1 = ScriptedPolicyMinJerk(self.env)
+        elif self._plan_box:
+            self.v1 = ScriptedBoxMinJerk(self.env, *profile)
         elif profile[0] == "intercept":
             self.v1 = ScriptedSphereIntercept(self.env, *profile[1:])
         else:
@@ -375,20 +406,17 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
             self.v2.reset()
             self._active, self.switched = self.v2, True
 
-    def _choose_sphere_profile(self):
+    def _choose_profile(self, profiles):
         """Kiểm tra phương án trên bản sao MuJoCo trước khi thầy thực thi trên cảnh thật."""
         env = copy(self.env)
         env.data = mujoco.MjData(env.model)
         env.render_images = False
         probe = type(self)(env)
-        adr = self.env._box_dof_adr
-        speed = np.linalg.norm(self.env.data.qvel[adr:adr + 2])
-        intercepts = self.SPHERE_INTERCEPTS if speed >= self.SPHERE_INTERCEPT_SPEED else ()
-        for profile in (None, *intercepts, *self.SPHERE_PROFILES):
+        for profile in (None, *profiles):
             mujoco.mj_copyData(env.data, env.model, self.env.data)
             env._step_count = self.env._step_count
             env._grasped = self.env._grasped
-            probe._reset_sphere_profile(profile)
+            probe._reset_profile(profile)
             obs = env._get_obs()
             for _ in range(config.MAX_EPISODE_STEPS):
                 action = probe.select_action(obs)
