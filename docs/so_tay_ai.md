@@ -202,6 +202,17 @@ Rút ra:
     - Vì sao yếu (giả thuyết, chưa kiểm): phần nhìn SmolVLM bị khoá, ảnh resize lên 512 có pad, hộp 4 cm còn ~10 điểm ảnh trong ảnh
       gốc; mạng định vị hộp thô hơn ACT (ResNet18 train cùng). Thử tiếp: mở khoá phần nhìn (`--policy.freeze_vision_encoder=false`,
       chậm và tốn bộ nhớ hơn); train lâu hơn đã thử, chững ở 30k-40k.
+    - Đo offline (2026-11-27, 31 seed chấm, script ngoài repo `probe_offline.py`): thầy chạy ván, mỗi 5-10 bước hỏi mạng 10 action
+      tới từ đúng quan sát đó (không vòng kín), so lệch trung bình với 10 action thầy (thang [-1, 1]). ACT d4 20k / SmolVLA 30k /
+      Diffusion 60k:
+      - đi tới hộp (phase 0-1): khớp 0,020 / **0,048** / 0,044; riêng wrist_roll 0,014 / **0,054** / 0,042.
+      - hạ xuống hộp (2-3): khớp 0,017 / **0,029** / 0,024; wrist_roll 0,030 / **0,058** / 0,049; lệnh kẹp 0,26 / **0,37** / 0,33.
+      - kẹp, mang (4-7): ba mạng như nhau (~0,007-0,010) -> dữ liệu và nối pipeline không lỗi.
+      - thả, về (8-10): 0,017 / 0,023 / **0,049** -> chỗ yếu của Diffusion (khớp "gắp được rồi vẫn hỏng" 21 ván).
+      Dời hộp ±1-2 cm lúc tay lơ lửng trên hộp, cho mạng tự lái tới lúc khép kẹp: đầu kẹp dời theo hộp (1 = theo đúng) ACT 0,67 /
+      0,77 (x / y, trung vị), SmolVLA **0,55 / 0,59**, Diffusion 0,69 / 0,63. Kết luận: SmolVLA không hỏng, nhưng bám vị trí hộp yếu
+      hơn ACT ~20 %, xoay cổ tay và canh lúc khép kẹp kém gấp ~1,5-2 lần, đúng chỗ phải nhìn chi tiết hộp. Khớp với 22 ván không gắp
+      được (ACT 11) và lệch độ cao lúc khép 12 mm (ACT 7). Bước tiếp: mở khoá phần nhìn.
 18. **Diffusion Policy (train từ đầu) tăng đều theo số step, chưa bão hoà.** `learning/configs/diffusion_scratch.yaml` (mục 8b), cùng
     dữ liệu, U-Net 256/512/1024 (89 triệu tham số), DDIM 10 bước, batch 32. L4 ~2,9 step/s một mình (~1,3 khi chung GPU với SmolVLA).
     100 seed: ck 10k / 20k / 30k = 11 / 32 / **53** %. Loss 0,022 (2k) -> 0,004 (30k). Train tiếp 30k -> 60k (resume với `--steps=60000`:
