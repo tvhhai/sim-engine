@@ -12,7 +12,7 @@ import {
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type { Item, Region, Scene } from "../types";
-import { maxObjectSize, NEW_OBJECT_SIZE } from "../studio/scene";
+import { fitsBowl, maxObjectSize, NEW_OBJECT_SIZE } from "../studio/scene";
 import { reachable } from "../workspace";
 import { Panel } from "./Panel";
 // Màu chọn nhanh cho vật mới: đỏ, xanh, vàng (vật mới lần lượt lấy màu kế tiếp)
@@ -36,6 +36,13 @@ export function ObjectPanel({
     [size, setSize] = useState<string | number>(NEW_OBJECT_SIZE * 100),
     [count, setCount] = useState<string | number>(1),
     [undo, setUndo] = useState<Scene | null>(null);
+  const newSize = (Number(size) || NEW_OBJECT_SIZE * 100) / 100;
+  const newType = kind === "sphere" ? "sphere" : "box";
+  const amount = Math.max(1, Math.floor(Number(count) || 1));
+  const withinCount = scene.objects.length + amount <= 5;
+  const canAdd = withinCount && newSize >= .02 && newSize <= maxObjectSize(scene.bowl) + 1e-9 &&
+    fitsBowl([...scene.objects, ...Array.from({ length: amount }, (): Pick<Item, "type" | "size"> => ({ type: newType, size: newSize }))], scene.bowl);
+  const [sizeError, setSizeError] = useState("");
   function update(id: string, patch: Partial<Item>) {
     if (
       [patch.x, patch.y, patch.yaw].some(
@@ -43,28 +50,26 @@ export function ObjectPanel({
       )
     )
       return;
-    onChange({
-      ...scene,
-      objects: scene.objects.map((obj) =>
-        obj.id === id ? { ...obj, ...patch } : obj,
-      ),
-    });
+    const objects = scene.objects.map((obj) => obj.id === id ? { ...obj, ...patch } : obj);
+    if (patch.size !== undefined && !fitsBowl(objects, scene.bowl)) {
+      setSizeError("Bát chưa đủ chỗ cho cỡ vật này.");
+      return;
+    }
+    setSizeError("");
+    onChange({ ...scene, objects });
   }
   function add() {
-    const amount = Math.min(
-      5 - scene.objects.length,
-      Math.max(1, Number(count) || 1),
-    );
+    if (!canAdd) return;
     const added = Array.from(
       { length: amount },
       (_, i): Item => ({
         id: crypto.randomUUID().slice(0, 8),
-        type: kind === "sphere" ? "sphere" : "box",
+        type: newType,
         color,
         x: -0.1 + (scene.objects.length + i) * 0.055,
         y: 0.12,
         yaw: kind === "sphere" ? 0 : Number(yaw) || 0,
-        size: Math.max(0.02, Math.min(maxObjectSize(scene.bowl), (Number(size) || NEW_OBJECT_SIZE * 100) / 100)),
+        size: newSize,
       }),
     );
     onChange({ ...scene, objects: [...scene.objects, ...added] });
@@ -133,15 +138,17 @@ export function ObjectPanel({
           <Button
             leftSection={<Plus size={16} />}
             onClick={add}
-            disabled={scene.objects.length >= 5}
+            disabled={!canAdd}
           >
             Thêm
           </Button>
         </Group>
         <Text size="xs" c="dimmed">
-          Tổng tối đa 5 vật. Vật được chọn làm đích sẽ được policy gắp; những
-          vật còn lại có va chạm thật.
+          {!withinCount ? "Tối đa 5 vật trong cảnh." : !canAdd
+            ? "Bát chưa đủ chỗ. Thử giảm cỡ, số vật hoặc tăng bán kính bát."
+            : "Tối đa 5 vật. Vật được chọn là đích của chế độ gắp một vật."}
         </Text>
+        {sizeError && <Text size="xs" c="red" role="status">{sizeError}</Text>}
         <Select
             size="xs"
           label="Vật cần gắp"

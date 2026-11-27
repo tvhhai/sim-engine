@@ -308,6 +308,16 @@ class SO101PickPlaceEnv(gym.Env):
                     touching.add(self._pad_geoms[pad])
         return len(touching) == 2
 
+    def select_lab_target(self, obj):
+        """Đổi vật đang gắp trong cùng cảnh, giữ nguyên vị trí và vận tốc mọi vật."""
+        body = self.model.body(obj["body"]).id
+        joint = self.model.body_jntadr[body]
+        self._box_body = body
+        self._box_qpos_adr = self.model.jnt_qposadr[joint]
+        self._box_dof_adr = self.model.jnt_dofadr[joint]
+        self.target_type, self.target_size = obj["type"], obj["size"]
+        self._grasped = self._both_pads_touch_box()
+
     def _get_obs(self):
         """Lấy quan sát hiện tại: state (7 số) và ảnh camera (nếu bật render_images)."""
         # Góc 5 khớp tay, đổi từ radian sang độ.

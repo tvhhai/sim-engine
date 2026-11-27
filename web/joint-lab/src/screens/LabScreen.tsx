@@ -34,7 +34,7 @@ import { labTopView } from "../components/topViewGeometry";
 import { SceneView } from "../components/LazySceneView";
 import { ObjectPanel } from "../components/ObjectPanel";
 import { useStudio } from "../studio/StudioContext";
-import { bowlGeoms, downloadJson, minBowlRadius, parseScene } from "../studio/scene";
+import { bowlGeoms, downloadJson, fitsBowl, minBowlRadius, parseScene } from "../studio/scene";
 import { toBase } from "../studio/coordinates";
 export default function LabScreen() {
   const {
@@ -75,6 +75,7 @@ export default function LabScreen() {
   const bowlOK = reachable(scene.pose.wx, scene.pose.wy, meta.pick_region),
     targetOK = reachable(target.x, target.y, meta.pick_region);
   const showScene = visible.map;
+  const allFit = fitsBowl(scene.objects, scene.bowl);
   // Vùng gắp xanh / hỗn hợp / đỏ và điểm quét, cùng dữ liệu với replay (server /meta)
   const zones = {
     region: meta.pick_region,
@@ -135,8 +136,19 @@ export default function LabScreen() {
           >
             Chạy mô phỏng
           </Button>
+          <Button
+            variant="light"
+            loading={running}
+            disabled={previewing || ikBusy || scene.objects.length < 2 || !allFit}
+            onClick={() => start("all")}
+          >
+            Gắp tất cả
+          </Button>
         </Group>
       </div>
+      {!allFit && (
+        <Alert color="orange" mx="lg" mt="md">Bát chưa đủ chỗ cho tất cả vật. Hãy tăng bán kính bát hoặc giảm cỡ hay số vật.</Alert>
+      )}
       {(!bowlOK || !targetOK) && (
         <Alert color="orange" mx="lg" mt="md" title="Cánh tay sẽ đứng yên">
           {!bowlOK ? "Bát" : "Vật cần gắp"} đang ngoài vùng thao tác. Bạn có thể

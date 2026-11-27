@@ -26,7 +26,7 @@ export type Pose = {
   wy: number;
 };
 export type Bowl = { color: string; radius: number; height: number }; // radius: tới tâm tường (m), height: chiều cao tường (m)
-export type Scene = { pose: Pose; objects: Item[]; target_id: string; bowl: Bowl };
+export type Scene = { pose: Pose; objects: Item[]; target_id: string; bowl: Bowl; mode?: "single" | "all" };
 export type Region = {
   pan: [number, number];
   r_min: number;

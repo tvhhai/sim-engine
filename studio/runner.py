@@ -11,11 +11,53 @@ from .. import paths
 from ..env import SO101PickPlaceEnv
 from .. import config
 from ..policies import default_policy
-from ..tools.make_replay import Recorder, write_replay
-from .scene import in_workspace, normalize_bowl, normalize_objects
+from ..tools.make_replay import Recorder, bowl_geom_list, write_replay
+from .scene import check_bowl_capacity, check_bowl_fits, in_workspace, normalize_bowl, normalize_objects
 from .store import StudioStore
 
 LAB_SEED = 2147483647
+
+
+def run_all(env, options):
+    """Chạy từng vật trên một mô phỏng liên tục và chấm lại mọi vật ở khung cuối."""
+    env.reset(seed=LAB_SEED, options=options)
+    objects = sorted(env.lab_objects, key=lambda obj: obj["body"] != "box")
+    frames, outcomes = [], {}
+    for index, obj in enumerate(objects):
+        ident = obj["id"]
+        env.select_lab_target(obj)
+        info = env._get_info()
+        if info["success"]:
+            outcomes[ident] = "placed"
+            continue
+        if not in_workspace(info["box_pos"][:2]):
+            outcomes[ident] = "unreachable"
+            continue
+        attempt = Recorder(env, default_policy(env)).run(LAB_SEED, continue_scene=True)
+        offset = len(frames) - 1 if frames else 0
+        for frame in attempt["frames"][1 if frames else 0:]:
+            frames.append(dict(frame, t=offset + frame["t"], target_id=ident, target_index=index + 1))
+        outcomes[ident] = "placed" if attempt["success"] else "failed"
+        if env._grasped:
+            # Dừng để lượt kế tiếp không mở hàm khi tay còn giữ vật của lượt trước.
+            break
+    placements = []
+    for obj in objects:
+        env.select_lab_target(obj)
+        ident = obj["id"]
+        status = outcomes.get(ident, "not_attempted")
+        if env._get_info()["success"]:
+            status = "placed"
+        elif status == "placed":
+            status = "displaced"
+        placements.append({"id": ident, "status": status})
+    if not frames:
+        env.select_lab_target(objects[0])
+        rec = Recorder(env, default_policy(env))
+        frames = [rec.frame(0, 0, 0, 0, env._get_info(), 1.0)]
+    return {"seed": LAB_SEED, "bowl": env.get_bowl_pos().tolist(), "bowl_geoms": bowl_geom_list(env), "frames": frames,
+            "success": all(result["status"] == "placed" for result in placements),
+            "steps": len(frames) - 1, "placements": placements, "mode": "all"}
 
 
 class LabRun:
@@ -40,6 +82,9 @@ class LabRun:
         objects = pose.get("objects")
         target_id = pose.get("target_id")
         bowl = pose.get("bowl")
+        mode = pose.get("mode", "single")
+        if mode not in ("single", "all") or (mode == "all" and objects is None):
+            raise ValueError("Chế độ gắp không hợp lệ")
         pose = {key: float(pose[key]) for key in keys}
         if not all(math.isfinite(value) for value in pose.values()):
             raise ValueError("Tọa độ và góc phải là số hữu hạn")
@@ -48,8 +93,12 @@ class LabRun:
         if objects is not None:
             pose["objects"] = normalize_objects(objects, target_id)
             pose["bowl"] = normalize_bowl(bowl)
+            validate_bowl = check_bowl_capacity if mode == "all" else check_bowl_fits
+            validate_bowl(pose["objects"], pose["bowl"])
             target = next(obj for obj in pose["objects"] if obj["body"] == "box")
             pose.update(target_id=target["id"], bx=target["x"], by=target["y"], byaw=target["yaw"])
+        if mode == "all":
+            pose["mode"] = mode
         with self.lock:
             if self.state["status"] == "running":
                 return dict(self.state)
@@ -72,7 +121,7 @@ class LabRun:
             blocked = None
             if not in_workspace(options["bowl_xy"]):
                 blocked = "Bát ngoài vùng thao tác: giữ nguyên cánh tay"
-            elif not in_workspace(options["box_xy"]):
+            elif pose.get("mode") != "all" and not in_workspace(options["box_xy"]):
                 blocked = "Vật cần gắp ngoài vùng thao tác: giữ nguyên cánh tay"
             if blocked:
                 options.update(blocked_reason=blocked, skip_settle=True)
@@ -84,8 +133,12 @@ class LabRun:
             env = SO101PickPlaceEnv(render_images=False, end_on_success=False,
                                     lab_objects=pose.get("objects"), target_id=pose.get("target_id"),
                                     lab_bowl=pose.get("bowl"))
-            episode = Recorder(env, default_policy(env)).run(LAB_SEED, options=options)
+            all_objects = pose.get("mode") == "all"
+            episode = run_all(env, options) if all_objects and not blocked else Recorder(env, default_policy(env)).run(LAB_SEED, options=options)
             episode.update(name="lab", group="mixed", tags=["LAB · lần chạy mới nhất"])
+            if "placements" in episode:
+                placed = sum(result["status"] == "placed" for result in episode["placements"])
+                episode["tags"].append(f"Gắp tất cả · {placed}/{len(episode['placements'])} vật trong bát")
             episode["initial_options"] = options
             out = self.directory / "replay_lab.html"
             temporary = out.with_suffix(".tmp")

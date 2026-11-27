@@ -20,8 +20,8 @@ def in_workspace(xy):
             and region["angle_min_deg"] - 1e-8 <= angle <= region["angle_max_deg"] + 1e-8)
 
 
-# cạnh hộp / đường kính bóng (m). Tối đa 4 cm: quét 45 seed, hộp 3,5 cm 45/45, 4 cm 43/45, 4,5 cm 35/45, 5 cm 24/45
-DEFAULT_SIZE, MIN_SIZE, MAX_SIZE = 0.03, 0.02, 0.04
+# Cạnh hộp / đường kính bóng (m). 5 cm là cỡ thử nghiệm: hộp 5 cm đạt 24/45 trong phép quét trước.
+DEFAULT_SIZE, MIN_SIZE, MAX_SIZE = 0.03, 0.02, 0.05
 BOWL_FIT_MARGIN = 0.02                                        # đường kính lòng bát >= cỡ vật + 2 cm
 BOWL_WALL = 0.003                                             # nửa độ dày tường bát (m)
 DEFAULT_BOWL = {"color": "#3366d9", "radius": 0.045, "height": 0.04}   # radius = bán kính tới TÂM tường; lòng bát = radius - BOWL_WALL
@@ -43,11 +43,31 @@ def normalize_bowl(bowl=None):
 
 
 def check_bowl_fits(objects, bowl):
-    """Bát phải chứa được vật lớn nhất: đường kính lòng bát >= cỡ vật + BOWL_FIT_MARGIN."""
+    """Kiểm tra khoảng hở khi thả vật lớn nhất."""
     biggest = max((o["size"] for o in objects), default=DEFAULT_SIZE)
     inner = 2 * (bowl["radius"] - BOWL_WALL)
     if inner < biggest + BOWL_FIT_MARGIN - 1e-9:
         raise ValueError(f"Bát quá nhỏ cho vật {biggest * 100:.1f} cm: cần bán kính >= {((biggest + BOWL_FIT_MARGIN) / 2 + BOWL_WALL) * 100:.1f} cm")
+
+
+def check_bowl_capacity(objects, bowl):
+    """Ước lượng các vật có thể xếp một lớp ở đáy bát."""
+    check_bowl_fits(objects, bowl)
+    if len(objects) < 2:
+        return
+    inner = 2 * (bowl["radius"] - BOWL_WALL)
+    # Đĩa bao vật theo mặt XY. Xếp vật lớn trước, sát mép trước để chừa giữa bát.
+    radii = sorted((o["size"] * (math.sqrt(2) if o.get("type") == "box" else 1) / 2 for o in objects), reverse=True)
+    placed = []
+    for radius in radii:
+        edge = inner / 2 - radius
+        candidates = ((r * math.cos(a * math.tau / 24), r * math.sin(a * math.tau / 24))
+                      for r in (edge, edge * .75, edge * .5, edge * .25, 0) for a in range(24))
+        point = next(((x, y) for x, y in candidates
+                      if all(math.hypot(x - px, y - py) + 1e-9 >= radius + pr for px, py, pr in placed)), None)
+        if point is None:
+            raise ValueError("Bát chưa đủ chỗ cho các vật theo kích thước hiện tại. Hãy tăng bán kính bát hoặc giảm cỡ/số vật.")
+        placed.append((*point, radius))
 
 
 def normalize_objects(objects, target_id=None):
@@ -68,7 +88,7 @@ def normalize_objects(objects, target_id=None):
         values["size"] = float(obj.get("size", DEFAULT_SIZE))          # hộp: cạnh; bóng: đường kính (m)
         if not math.isfinite(values["size"]):
             raise ValueError("Kích thước vật không hợp lệ")
-        values["size"] = min(MAX_SIZE, max(MIN_SIZE, values["size"]))   # cảnh lưu từ trước có thể có vật 6 cm: kẹp về 2-4 cm thay vì báo lỗi
+        values["size"] = min(MAX_SIZE, max(MIN_SIZE, values["size"]))   # tự đưa cảnh cũ về giới hạn cỡ hiện tại
         if not all(math.isfinite(v) for v in values.values()):
             raise ValueError("Tọa độ và góc phải hữu hạn")
         if abs(values["x"]) > config.TABLE_HALF[0] or abs(values["y"]) > config.TABLE_HALF[1]:

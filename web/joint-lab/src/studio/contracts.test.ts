@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { parseSettings, DEFAULT_SETTINGS } from "./settings";
-import { parseScene, request } from "./scene";
+import { DEFAULT_BOWL, fitsBowl, parseScene, request } from "./scene";
 import type { Meta } from "../types";
 const meta = {
   limits: [
@@ -72,5 +72,13 @@ describe("Studio import contracts", () => {
       meta,
     );
     expect(next.objects[0].x).toBe(-0.43);
+  });
+  it("checks combined footprints against the current bowl radius", () => {
+    const box = { type: "box", size: .05 } as const;
+    const ball = { type: "sphere", size: .025 } as const;
+    expect(fitsBowl([box], DEFAULT_BOWL)).toBe(true);
+    expect(fitsBowl([box, ball], DEFAULT_BOWL)).toBe(false);
+    expect(fitsBowl([box, ball], { ...DEFAULT_BOWL, radius: .065 })).toBe(true);
+    expect(fitsBowl(Array(5).fill(ball), { ...DEFAULT_BOWL, radius: .065 })).toBe(true);
   });
 });

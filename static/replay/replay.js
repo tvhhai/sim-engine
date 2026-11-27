@@ -607,6 +607,18 @@ function drawInfo(fr, fs) {
   const learned = isLearnedReplay();
   const prev = fs[Math.max(0, i - 1)], box0 = fs[0].box;
   let al = "";
+  const placements = EPS[ep].placements;
+  if (placements) {
+    const results = { placed:"trong bát", failed:"gắp không xong", unreachable:"ngoài vùng", displaced:"đã rời bát", not_attempted:"chưa thử" };
+    const current = fr.objects?.findIndex(obj => obj.id === fr.target_id);
+    const active = current >= 0 ? ` · đang xử lý vật ${current + 1}` : "";
+    const placed = placements.filter(result => result.status === "placed").length;
+    al += `<div class="alert info"><b>Gắp tất cả${active}</b><br>Kết quả cuối: ${placed}/${placements.length} vật trong bát.
+      <div>${placements.map(result => {
+        const index = fr.objects?.findIndex(obj => obj.id === result.id) ?? -1;
+        return `Vật ${index >= 0 ? index + 1 : "—"}: ${results[result.status] ?? "—"}`;
+      }).join(" · ")}</div></div>`;
+  }
 
   // Cảnh báo 1: IK tin tới được nhưng tay thật không tới -> tay có thể bị chặn
   if (d !== null && fr.ie !== null && fr.ie < 0.005 && d > fr.th && fr.ps >= 5)

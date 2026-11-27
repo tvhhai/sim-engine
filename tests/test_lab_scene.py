@@ -66,6 +66,25 @@ class LabSceneTests(unittest.TestCase):
                 self.assertIn("wrist_cam_arm", frame["pose"])
                 self.assertEqual(len(frame["objects"][1]["quat"]), 4)
 
+    def test_all_mode_keeps_first_object_in_bowl_when_switching_to_second(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runner = LabRun(directory)
+            items = [
+                dict(id="box", type="box", size=.025, x=-.08109, y=.00811, yaw=6),
+                dict(id="ball", type="sphere", size=.025, x=.07, y=.03),
+            ]
+            runner.start(dict(pose(), pan=-.4, lift=-34.5, elbow=17.1, wflex=75.4, wroll=-5.5, grip=-.1,
+                              wx=-.19755, wy=.08118, objects=items, bowl={"radius": .065, "height": .05}, mode="all"))
+            result = wait(runner)
+            self.assertTrue(result.get("success"), result)
+            episode = json.loads((Path(directory) / "replay_lab.json").read_text(encoding="utf-8"))["episodes"][0]
+            self.assertTrue(episode["bowl_geoms"])
+            self.assertEqual(episode["placements"], [{"id": "box", "status": "placed"}, {"id": "ball", "status": "placed"}])
+            frames = episode["frames"]
+            self.assertEqual([f["t"] for f in frames], list(range(len(frames))))
+            first_ball = next(f for f in frames if f["target_id"] == "ball")
+            self.assertLess(np.linalg.norm(np.array(first_ball["objects"][0]["pos"][:2]) - episode["bowl"][:2]), .06)
+
     def test_preview_switches_target_and_preserves_runner(self):
         lab = Lab()
         runner = lab.runner
@@ -100,8 +119,8 @@ class ObjectAndBowlConfigTests(unittest.TestCase):
 
     def test_invalid_size_and_bowl_are_rejected(self):
         from sim_engine.studio.scene import normalize_bowl
-        # cỡ ngoài 2-4 cm (vd cảnh lưu từ trước có hộp 6 cm) được kẹp về giới hạn; cỡ không phải số thì báo lỗi
-        self.assertEqual(normalize_objects([{"id": "a", "type": "box", "x": 0, "y": 0, "yaw": 0, "size": .06}])[0]["size"], .04)
+        # Cảnh cũ có hộp 6 cm được đưa về giới hạn thử nghiệm 5 cm.
+        self.assertEqual(normalize_objects([{"id": "a", "type": "box", "x": 0, "y": 0, "yaw": 0, "size": .06}])[0]["size"], .05)
         with self.assertRaises(ValueError):
             normalize_objects([{"id": "a", "type": "box", "x": 0, "y": 0, "yaw": 0, "size": float("nan")}])
         with self.assertRaises(ValueError):

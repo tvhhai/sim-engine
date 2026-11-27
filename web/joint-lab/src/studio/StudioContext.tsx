@@ -333,7 +333,7 @@ function useStudioController() {
     setSubmitting(true);
     requestedRun.current = true;
     try {
-      const next = await api<Run>("/run", request(candidate));
+      const next = await api<Run>("/run", { ...request(candidate), mode: candidate.mode });
       setRun(next);
     } catch (e) {
       requestedRun.current = false;
@@ -343,8 +343,8 @@ function useStudioController() {
       setSubmitting(false);
     }
   }
-  async function start() {
-    if (scene) await runScene(scene);
+  async function start(mode: Scene["mode"] = "single") {
+    if (scene) await runScene({ ...scene, mode });
   }
   async function loadCase(source: string, index = 0) {
     if (!meta) throw new Error("Mô hình chưa sẵn sàng");

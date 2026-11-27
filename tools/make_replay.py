@@ -346,9 +346,13 @@ class Recorder:
                               for name in ARM_BODIES + [JAW_BODY, "wrist_cam_arm"]}
         return result
 
-    def run(self, seed, options=None):
+    def run(self, seed, options=None, *, continue_scene=False):
         env, policy = self.env, self.policy
-        obs, info = env.reset(seed=seed, options=options)
+        if continue_scene:
+            env._step_count = 0
+            obs, info = env._get_obs(), env._get_info()
+        else:
+            obs, info = env.reset(seed=seed, options=options)
         policy.reset()
         self.target = None
         self.threshold = None

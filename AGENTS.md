@@ -58,8 +58,9 @@ Chạy song song nhiều phần ghi demo / DAgger: phần k dùng `--seed-start 
 - Điều tra lỗi theo `systematic-debugging`: dựng lại ván, in timeline phase / tiếp xúc (`tools/trace_episode.py`, `Recorder` trong
   `tools/make_replay.py`), tìm nguyên nhân gốc trước khi sửa.
 - Thông số mới của policy là hằng số lớp có comment ghi lý do và số đo (seed, tỉ lệ trước/sau).
-- Giới hạn Lab: vật 2-4 cm (hai hàm SO-101 không ôm nổi vật lớn hơn: hộp 4,5 cm chỉ 35/45); lòng bát >= cỡ vật + 2 cm. Kiểm tra ở cả
-  `studio/scene.py` và `web/joint-lab/src/studio/scene.ts`.
+- Giới hạn Lab: tối đa 5 vật, cỡ 2–5 cm. Cỡ 5 cm dùng để thử nghiệm (hộp 5 cm đạt 24/45 trong phép quét trước). Lòng bát phải rộng
+  hơn cỡ vật ít nhất 2 cm và chế độ gắp tất cả kiểm tra chỗ xếp một lớp theo kích thước từng vật. Đồng bộ `studio/scene.py` và
+  `web/joint-lab/src/studio/scene.ts`.
 - Nhiều agent có thể sửa cùng lúc: trước khi commit xem `git diff`, chỉ stage phần của mình (lọc hunk), không commit bản build lẫn việc dở
   của người khác.
 - Commit nhỏ theo từng tính năng, push lên `my-work`. Không thêm dòng Co-Authored-By.

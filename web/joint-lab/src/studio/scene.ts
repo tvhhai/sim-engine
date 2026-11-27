@@ -2,8 +2,8 @@ import type { Bowl, BowlGeom, Item, Meta, Pose, Scene } from "../types";
 import { JOINTS } from "../types";
 export const DEFAULT_SIZE = 0.03; // cỡ của vật lưu từ trước chưa có trường size (giữ 3 cm để mở lại đúng cảnh cũ)
 export const NEW_OBJECT_SIZE = 0.04; // cỡ mặc định cho vật mới thêm trong Lab
-// Cỡ vật tối đa 4 cm: quét 45 seed, hộp 3,5 cm 45/45, 4 cm 43/45, 4,5 cm 35/45, 5 cm 24/45 (hai hàm SO-101 không ôm nổi vật lớn hơn)
-export const SIZE_RANGE = [0.02, 0.04] as const;
+// 5 cm là cỡ thử nghiệm; hộp 5 cm đạt 24/45 trong phép quét trước.
+export const SIZE_RANGE = [0.02, 0.05] as const;
 // Bát phải chứa được vật: đường kính lòng bát >= cỡ vật + BOWL_FIT_MARGIN (chừa chỗ cho hai hàm kẹp khi thả)
 export const BOWL_FIT_MARGIN = 0.02;
 export const DEFAULT_BOWL: Bowl = { color: "#3366d9", radius: 0.045, height: 0.04 };
@@ -38,7 +38,31 @@ export function maxObjectSize(bowl: Bowl): number {
 // Bán kính bát nhỏ nhất chứa được vật lớn nhất trong cảnh (m)
 export function minBowlRadius(objects: Item[]): number {
   const biggest = Math.max(DEFAULT_SIZE, ...objects.map((o) => o.size ?? DEFAULT_SIZE));
-  return Math.max(0.03, Math.ceil(((biggest + BOWL_FIT_MARGIN) / 2 + BOWL_WALL) * 200) / 200);
+  const start = Math.max(6, Math.ceil(((biggest + BOWL_FIT_MARGIN) / 2 + BOWL_WALL) * 200 - 1e-9));
+  for (let step = start; step <= 18; step++) {
+    const radius = step / 200;
+    if (fitsBowl(objects, { ...DEFAULT_BOWL, radius })) return radius;
+  }
+  return 0.09;
+}
+// Cùng phép kiểm tra xếp một lớp với studio/scene.py.
+export function fitsBowl(objects: Pick<Item, "size" | "type">[], bowl: Bowl): boolean {
+  const inner = bowl.radius - BOWL_WALL;
+  if (objects.some((o) => (o.size ?? DEFAULT_SIZE) + BOWL_FIT_MARGIN > 2 * inner + 1e-9)) return false;
+  if (objects.length < 2) return true;
+  const radii = objects.map((o) => (o.size ?? DEFAULT_SIZE) * (o.type === "box" ? Math.SQRT2 : 1) / 2).sort((a, b) => b - a);
+  const placed: { x: number; y: number; radius: number }[] = [];
+  for (const radius of radii) {
+    const edge = inner - radius;
+    const candidates = [1, .75, .5, .25, 0].flatMap((fraction) => Array.from({ length: 24 }, (_, i) => {
+      const angle = i * 2 * Math.PI / 24;
+      return { x: edge * fraction * Math.cos(angle), y: edge * fraction * Math.sin(angle), radius };
+    }));
+    const point = candidates.find(({ x, y }) => placed.every((p) => Math.hypot(x - p.x, y - p.y) + 1e-9 >= radius + p.radius));
+    if (!point) return false;
+    placed.push(point);
+  }
+  return true;
 }
 export function parseScene(input: unknown, meta: Meta): Scene {
   if (!input || typeof input !== "object")
@@ -102,7 +126,8 @@ export function parseScene(input: unknown, meta: Meta): Scene {
   const target = items.find((item) => item.id === target_id);
   if (!target) throw new Error("Vật cần gắp không tồn tại");
   Object.assign(pose, { bx: target.x, by: target.y, byaw: target.yaw });
-  return { pose, objects: items, target_id, bowl: parseBowl(value.bowl ?? raw.bowl) };
+  const mode = (value.mode ?? raw.mode) === "all" ? "all" : undefined;
+  return { pose, objects: items, target_id, bowl: parseBowl(value.bowl ?? raw.bowl), ...(mode && { mode }) };
 }
 export function request(scene: Scene) {
   const target = scene.objects.find((item) => item.id === scene.target_id)!;

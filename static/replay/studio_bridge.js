@@ -109,7 +109,8 @@
     }
     return {
       origin:S.pick_region?.pan||S.reach?.base||fr.arm[1].slice(0,2),table:S.table.slice(0,2),
-      objects:replayObjects(fr).map(xyObject),initialObject:xyObject(replayObjects(fs[0])[0],0),
+      objects:replayObjects(fr).map(xyObject),targetId:fr.target_id,
+      initialObject:xyObject(replayObjects(fs[0]).find(obj=>obj.id===fr.target_id)||replayObjects(fs[0])[0],0),
       bowl:{pos:S.bowl,color:S.bowl_color,radius:S.bowl_radius,geoms:S.bowl_geoms},
       ee:fr.ee,target:fr.tg,zones:S.pick_region?{region:S.pick_region,stop:S.unreachable_region||null,scan:S.pick_scan||[]}:null,
       arm:{joints:[...fr.arm,fr.ee],hulls,colors:S.arm_bodies.map(name=>fr.ct.includes(name)?'var(--bad)':fr.tb.includes(name)?TABLEC:touchBowl(fr,name)?BOWLC:'var(--arm)')},paths,ghosts,
