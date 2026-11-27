@@ -186,11 +186,13 @@ Rút ra:
     - Chưa kẹp được (79): 49 ca đẩy hộp lệch > 2 cm; 28 ca không khép kẹp lần nào; lần khép đầu lệch ngang (y) trung vị 34 mm,
       tức kẹp trượt sang cạnh hộp chứ không phải sai độ cao (z lệch ~6 mm).
     Hướng: thêm dữ liệu đúng chỗ yếu (DAgger chỉ trên seed r >= 37 cm và r < 20 cm), hoặc mô hình giữ được nhiều cách làm (Diffusion).
-17. **SmolVLA (fine-tune từ `lerobot/smolvla_base`) còn xa ACT: tốt nhất ~53 % trên 100 seed.** Cùng dữ liệu ACT tốt nhất (~2 100
+17. **SmolVLA (fine-tune từ `lerobot/smolvla_base`) còn xa ACT: tốt nhất 61 % trên 100 seed, chững từ 30k.** Cùng dữ liệu ACT tốt nhất (~2 100
     ván, 318k khung), batch 32, lr 1e-4 cosine, khoá phần nhìn (mặc định). L4: ~1,05 s/step một mình, 20k step 5,4 giờ. Chấm 100 seed
     (`--limit 100`, cách đều trong bộ 774), con số trong ngoặc là số action làm trước khi đoán lại (`--n-action-steps`):
     - 10k (50): 22/94 (dừng giữa chừng); 10k (10): 7/52 (dừng). 20k (50): 30/100; **20k (10): 53/100**; 20k (5): 17/63 (dừng).
-    - Train tiếp 20k -> 40k (resume `--steps=40000`): **30k (10): 61/100** (gần 74 %, xa 34 %). Còn tăng: 10k -> 20k -> 30k = 13 -> 53 -> 61.
+    - Train tiếp 20k -> 40k (resume `--steps=40000`): **30k (10): 61/100** (gần 74 %, xa 34 %); 40k (10): 57/100 (gần 74 %, xa
+      22 %). 10k -> 20k -> 30k -> 40k = 13 -> 53 -> 61 -> 57: **đã chững** (lệch 4 điểm nằm trong sai số 100 seed), train thêm với
+      phần nhìn khoá không đủ đuổi ACT.
     - **Đoán lại sau 10 action** gần gấp đôi so với làm hết 50 (mặc định): SmolVLA đoán 50 action một lần rồi chạy mù 50 bước (~1,7 s
       sim), sai lệch tích lại; đoán lại sau 5 thì tệ đi (chuỗi mới hay "giật" khỏi chuỗi cũ). ACT ngược lại: 50 tốt nhất (mục 10).
     - Đã kiểm tra pipeline không lệch: config sau fine-tune có `camera1/2/3`, preprocessor đổi `top -> camera1`, `wrist -> camera2`,
@@ -199,13 +201,14 @@ Rút ra:
       khi đã sát ACT.
     - Vì sao yếu (giả thuyết, chưa kiểm): phần nhìn SmolVLM bị khoá, ảnh resize lên 512 có pad, hộp 4 cm còn ~10 điểm ảnh trong ảnh
       gốc; mạng định vị hộp thô hơn ACT (ResNet18 train cùng). Thử tiếp: mở khoá phần nhìn (`--policy.freeze_vision_encoder=false`,
-      chậm và tốn bộ nhớ hơn), train lâu hơn (điểm còn tăng 10k -> 20k -> 30k).
+      chậm và tốn bộ nhớ hơn); train lâu hơn đã thử, chững ở 30k-40k.
 18. **Diffusion Policy (train từ đầu) tăng đều theo số step, chưa bão hoà.** `learning/configs/diffusion_scratch.yaml` (mục 8b), cùng
     dữ liệu, U-Net 256/512/1024 (89 triệu tham số), DDIM 10 bước, batch 32. L4 ~2,9 step/s một mình (~1,3 khi chung GPU với SmolVLA).
     100 seed: ck 10k / 20k / 30k = 11 / 32 / **53** %. Loss 0,022 (2k) -> 0,004 (30k). Train tiếp 30k -> 60k (resume với `--steps=60000`:
     lịch cosine được tính lại theo 60k nên lr nhảy lên ~5e-5 ở step 30k rồi giảm dần): ck 40k 45/100, tụt ở gần (68 -> 44 %) nhưng
-    xa tăng (22 -> 47 %); lr còn cao nên chưa ổn định, đợi 50k / 60k khi lr đã nhỏ. Chấm nhanh (~8 s/ván).
-    Muốn so ACT phải train tới khi điểm thôi tăng; bài báo Diffusion Policy train 100k+ step.
+    xa tăng (22 -> 47 %); lr còn cao nên chưa ổn định. Khi lr nhỏ lại: **ck 50k 62/100, ck 60k 66/100** (gần 71 %, xa 56 %, xa tốt
+    nhất trong các mạng mới nhưng còn dưới ACT 71 %). Loss 0,003 ở 60k. Chấm nhanh (~7-12 s/ván).
+    Vẫn còn tăng (53 -> 62 -> 66); muốn so ACT phải train tới khi điểm thôi tăng, bài báo Diffusion Policy train 100k+ step.
 
 Bảng chấm nhanh 100 seed (đêm 2026-11-26/27, Colab L4), cùng 100 seed cách đều của bộ 774:
 
@@ -215,8 +218,10 @@ Bảng chấm nhanh 100 seed (đêm 2026-11-26/27, Colab L4), cùng 100 seed cá
 | SmolVLA 20k, làm 50 rồi đoán lại | 30 % | 34 % | 22 % |
 | SmolVLA 20k, làm 10 rồi đoán lại | **53 %** | 65 % | 28 % |
 | SmolVLA 30k, làm 10 rồi đoán lại | **61 %** | 74 % | 34 % |
+| SmolVLA 40k, làm 10 rồi đoán lại | 57 % | 74 % | 22 % |
 | Diffusion 10k / 20k / 30k | 11 / 32 / **53 %** | 15 / 41 / 68 % | 3 / 13 / 22 % |
-| Diffusion 40k (lr vừa nhảy lên) | 45 % | 44 % | **47 %** |
+| Diffusion 40k (lr vừa nhảy lên) | 45 % | 44 % | 47 % |
+| Diffusion 50k / 60k | 62 / **66 %** | 69 / 71 % | 47 / **56 %** |
 
 ## 3. Thư mục nào làm gì
 
