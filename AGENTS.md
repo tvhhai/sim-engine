@@ -72,3 +72,16 @@ Nhật ký thí nghiệm và kết luận: `docs/so_tay_ai.md`. Luôn chấm đ�
 - [Buttergipfeli/robotics](https://github.com/Buttergipfeli/robotics): expert -> ACT chỉ từ dữ liệu sim -> chạy trên SO-101 thật.
 - [so101-policy-lab](https://github.com/noah-wardlow/so101-policy-lab): expert, ACT chạy trong trình duyệt, so sánh nhiều policy cùng cảnh.
 - [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie): quy ước MJCF và mesh.
+
+## CodeGraph và Graphify
+
+- Quy tắc này ưu tiên hơn hướng dẫn chung trong skill Graphify.
+- Tra định nghĩa, callers/callees và impact: dùng CodeGraph trước (context rồi một explore nếu cần). Nếu MCP không khả dụng, dùng Graphify hoặc tìm kiếm có phạm vi.
+- Bản đồ tổng thể, cụm thành phần và đường liên hệ: dùng Graphify. Không truy cả hai công cụ khi một kết quả đã đủ.
+- Chuỗi chữ, log và cấu hình: dùng rg/đọc đúng file; không bắt buộc truy graph.
+- Graph dùng chung nằm trong sim-engine/graphify-out/graph.json khi đứng ở VLA; trong graphify-out/graph.json khi đứng ở sim-engine. Từ VLA thêm --graph sim-engine/graphify-out/graph.json vào query/path/explain.
+- Dùng graphify query "<từ khóa>" --budget 1200, path hoặc explain; không nạp toàn bộ graph.json/report vào ngữ cảnh. INFERRED cần đối chiếu mã khi ảnh hưởng quyết định sửa.
+- Sau một đợt sửa mã, trước khi dùng Graphify lại: chạy tools/update_graph.ps1 từ sim-engine (hoặc sim-engine/tools/update_graph.ps1 từ VLA). Chỉ AST cục bộ, không LLM; graph không tự cập nhật nền.
+- Codex: $graphify, skill .codex/skills/graphify/SKILL.md. Claude: /graphify, skill .claude/skills/graphify/SKILL.md. Chỉ đọc skill khi cần workflow Graphify, không cho mọi câu hỏi code.
+- graphify-out/ là cache không commit. Chưa lập chỉ mục ngữ nghĩa docs/PDF/ảnh. Không tự bật semantic extraction dùng API.
+- Chi tiết và lệnh dựng lại: docs/code_navigation.md trong sim-engine.

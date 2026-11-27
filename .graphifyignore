@@ -1,0 +1,17 @@
+# Chỉ lập bản đồ mã nguồn; bỏ bản build, dữ liệu và cấu hình trợ lý.
+.venv/
+.codegraph/
+.codex/
+.claude/
+.agents/
+.cursor/
+static/studio/
+results/
+datasets/
+outputs/
+assets/
+**/node_modules/
+**/__pycache__/
+**/*.egg-info/
+graphify-out/
+pnpm-lock.yaml

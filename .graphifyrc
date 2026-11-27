@@ -1,0 +1,3 @@
+# Giới hạn ngữ cảnh truy vấn mặc định.
+query_budget=1200
+query_depth=2
