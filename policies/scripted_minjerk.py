@@ -257,16 +257,23 @@ class ScriptedPolicyMinJerk(ScriptedPolicy):
 class ScriptedBoxMinJerk(ScriptedPolicyMinJerk):
     """Phương án kẹp hộp với độ cao, độ lệch và cách rời tư thế nghỉ khác."""
 
-    def __init__(self, env, height_delta, side_delta, staged=True):
+    DRAG_UP_BOX = .02  # Hộp xa: thử nhấc 2 cm rồi thu tay về khi vẫn giữ hộp.
+
+    def __init__(self, env, height_delta, side_delta, staged=True, carry="retry"):
         super().__init__(env)
         self._height_delta = height_delta
         self._side_delta = side_delta
         self.STAGED_LIFT = staged
+        self.DRAG_FAR = carry != "direct"
+        self._drag_lift = self.DRAG_UP_BOX if carry == "hold" else 0.0
 
     def _apply_object_profile(self):
         super()._apply_object_profile()
         self._grasp_z += self._height_delta
         self.GRASP_SIDE_OFFSET += self._side_delta
+
+    def _drag_clearance_lift(self):
+        return self._drag_lift
 
 
 class ScriptedSphereMinJerk(ScriptedPolicyMinJerk):
@@ -347,9 +354,9 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
 
     # Hộp 4 cm: nhấc các khớp đồng thời sửa seed 204 và 248. Nâng điểm kẹp 4 mm sửa seed 87
     # và dời điểm kẹp theo trục hàm 4 mm sửa seed 244.
-    BOX_PROFILES = (
-        (0, 0, False), (.004, 0), (-.004, 0), (0, .004), (0, -.004),
-        (.004, .004), (-.004, .004), "v1", "v2",
+    BOX_GRASPS = (
+        (0, 0, False), (.004, 0, True), (-.004, 0, True), (0, .004, True),
+        (0, -.004, True), (.004, .004, True), (-.004, .004, True),
     )
 
     # Seed 8 và 201: nâng điểm kẹp 4 mm tránh má kẹp đẩy quả bóng trước khi nâng.
@@ -381,7 +388,7 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
 
     def reset(self):
         if self._plan_box:
-            self._reset_profile(self._choose_profile(self.BOX_PROFILES))
+            self._reset_profile(self._choose_profile((*self.BOX_GRASPS, "v1", "v2")))
         elif self._plan_sphere:
             adr = self.env._box_dof_adr
             speed = np.linalg.norm(self.env.data.qvel[adr:adr + 2])
@@ -412,18 +419,38 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
         env.data = mujoco.MjData(env.model)
         env.render_images = False
         probe = type(self)(env)
+        mujoco.mj_copyData(env.data, env.model, self.env.data)
+        prefer_single_grasp = self._plan_box and not probe.v1._arc_needed()
+        if prefer_single_grasp and probe.v1._box_pan_r() >= probe.v1.DRAG_R:
+            # Seed 87 và 100: dời điểm kẹp 4 mm và nâng trực tiếp giúp gắp một lần.
+            grips = ((0, .004, True), (0, 0, True), *self.BOX_GRASPS)
+            lifts = tuple((*grip, carry) for carry in ("direct", "hold") for grip in dict.fromkeys(grips))
+            profiles = (*lifts, *profiles)
+        best, best_score = "v1", (True, math.inf, math.inf)
         for profile in (None, *profiles):
             mujoco.mj_copyData(env.data, env.model, self.env.data)
             env._step_count = self.env._step_count
             env._grasped = self.env._grasped
             probe._reset_profile(profile)
             obs = env._get_obs()
+            closes, descents, last_grip = 0, 0, 1.0
+            grasped = False
             for _ in range(config.MAX_EPISODE_STEPS):
+                phase = probe._phase
                 action = probe.select_action(obs)
                 obs, _, terminated, truncated, info = env.step(action)
+                if prefer_single_grasp:
+                    closes += phase == 4 and last_grip >= 0 > action[5]
+                    descents += phase == 2 and probe._phase == 3
+                    last_grip = action[5]
+                    grasped |= env._grasped
                 if terminated or truncated or probe._phase > 10:
                     break
             _, info, _ = env.settle(action, info)
             if info["success"]:
-                return profile
-        return "v1"
+                if not prefer_single_grasp or (grasped and closes == descents == 1):
+                    return profile
+                score = (not grasped, closes, descents)
+                if score < best_score:
+                    best, best_score = profile, score
+        return best

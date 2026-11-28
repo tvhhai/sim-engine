@@ -6,10 +6,12 @@ import unittest
 import numpy as np
 
 from sim_engine.env import SO101PickPlaceEnv
+from sim_engine.policies import default_policy
 from sim_engine.studio.runner import LabRun
 from sim_engine.studio.scene import normalize_objects
 from sim_engine.studio.server import Lab
-from sim_engine.tools.object_replay import sweep_seed
+from sim_engine.tools.make_replay import Recorder
+from sim_engine.tools.object_replay import _make_env, _seed_scene, sweep_seed
 from test_lab_run import pose, wait
 
 
@@ -132,6 +134,21 @@ class ObjectAndBowlConfigTests(unittest.TestCase):
 
     def test_scripted_teacher_replans_a_four_centimeter_box_grasp(self):
         self.assertTrue(sweep_seed((246, "box", .04))["ok"])
+
+    def test_scripted_teacher_picks_far_box_without_regrasping(self):
+        for seed in (87, 100):
+            with self.subTest(seed=seed):
+                xy, bowl = _seed_scene(seed)
+                env = _make_env(xy, "box", .04)
+                try:
+                    episode = Recorder(env, default_policy(env)).run(seed, options={"bowl_xy": bowl})
+                finally:
+                    env.close()
+                self.assertTrue(episode["success"])
+                frames = episode["frames"]
+                self.assertEqual(sum(f["ph"] == 2 and f["phn"] == 3 for f in frames), 1)
+                self.assertEqual(sum(f["ph"] == 4 and prev["ag"] >= 0 > f["ag"]
+                                     for prev, f in zip(frames, frames[1:])), 1)
 
     def test_sizes_and_bowl_are_applied_to_the_model(self):
         import mujoco

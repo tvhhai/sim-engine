@@ -690,6 +690,10 @@ class ScriptedPolicy(BasePolicy):
         b = self.env.get_box_pos()
         return math.hypot(b[0] - config.PICK_PAN_XY[0], b[1] - config.PICK_PAN_XY[1])
 
+    def _drag_clearance_lift(self):
+        """Độ cao cần nhấc trước khi kéo và giữ vật trên không."""
+        return self.DRAG_UP_SPHERE if self.env.target_type == "sphere" else 0.0
+
     def _drag_box(self, ee_pos):
         """Đầu phase 5, hộp xa (r >= DRAG_R): không nhấc mà KÉO TRƯỢT hộp trên bàn theo hướng bán kính về phía trục khớp 1 tới r = DRAG_TARGET,
         nhả kẹp, nhấc tay lên DRAG_RAISE rồi gắp lại từ phase 2. Mỗi ván kéo tối đa một lần. Trả True nếu bước này dành cho việc kéo.
@@ -702,10 +706,11 @@ class ScriptedPolicy(BasePolicy):
             r_t = r - (self._box_pan_r() - self.DRAG_TARGET)                 # tay dời đúng quãng hộp cần dời
             self._drag_goal = np.array([*(pan + v * (r_t / r)), ee_pos[2] + self.DRAG_LIFT])
             self._drag, self._dragged = "pull", True
-            if getattr(self.env, "target_type", "box") == "sphere" and self.DRAG_UP_SPHERE:
-                self._drag = "up"                                              # bóng: nhấc lên trước, kéo về sau
-                self._drag_goal_after = self._drag_goal + np.array([0, 0, self.DRAG_UP_SPHERE - self.DRAG_LIFT])
-                self._drag_goal = np.array([ee_pos[0], ee_pos[1], ee_pos[2] + self.DRAG_UP_SPHERE])
+            clearance = self._drag_clearance_lift()
+            if clearance:
+                self._drag = "up"
+                self._drag_goal_after = self._drag_goal + np.array([0, 0, clearance - self.DRAG_LIFT])
+                self._drag_goal = np.array([ee_pos[0], ee_pos[1], ee_pos[2] + clearance])
         if self._drag == "up":
             self._gripper_target = -1.0
             self._move_toward(self._drag_goal, ee_pos, threshold=0.006, timeout_steps=20)
@@ -718,7 +723,7 @@ class ScriptedPolicy(BasePolicy):
             self._move_toward(self._drag_goal, ee_pos, threshold=0.006, timeout_steps=120)
             if self._phase != 5 or self.last_exit:                            # tới nơi hoặc hết hạn: ở lại phase 5, sang nhả
                 self._phase, self._phase_step = 5, 0
-                if self._drag_goal_after is not None and self.env._grasped:   # bóng đã được mang trên không và vẫn đang kẹp: nhấc tiếp luôn, không nhả gắp lại
+                if self._drag_goal_after is not None and self.env._grasped:   # còn giữ được vật thì nhấc tiếp
                     self._drag, self._drag_goal_after, self.last_exit = None, None, None
                     return True
                 self._drag, self._drag_n = "release", 0
