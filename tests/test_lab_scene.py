@@ -150,6 +150,22 @@ class ObjectAndBowlConfigTests(unittest.TestCase):
                 self.assertEqual(sum(f["ph"] == 4 and prev["ag"] >= 0 > f["ag"]
                                      for prev, f in zip(frames, frames[1:])), 1)
 
+    def test_scripted_teacher_retimes_box_and_sphere(self):
+        for seed, kind in ((87, "box"), (179, "box"), (2317, "sphere")):
+            with self.subTest(seed=seed, kind=kind):
+                xy, bowl = _seed_scene(seed)
+                env = _make_env(xy, kind, .04)
+                try:
+                    reference = default_policy(env)
+                    reference.TIMINGS = ()
+                    options = {"bowl_xy": bowl}
+                    before = Recorder(env, reference).run(seed, options=options)
+                    after = Recorder(env, default_policy(env)).run(seed, options=options)
+                finally:
+                    env.close()
+                self.assertTrue(before["success"] and after["success"])
+                self.assertLess(after["steps"], before["steps"])
+
     def test_sizes_and_bowl_are_applied_to_the_model(self):
         import mujoco
         env = SO101PickPlaceEnv(render_images=False, lab_objects=[

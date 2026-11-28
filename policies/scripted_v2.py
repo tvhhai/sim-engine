@@ -60,6 +60,7 @@ class ScriptedPolicyV2(BasePolicy):
     DT = config.PHYSICS_SUBSTEPS * config.PHYSICS_TIMESTEP
     VMAX = 2.0                 # rad/s, di chuyển tự do
     VMAX_CARRY = 1.2           # rad/s, khi đang mang hộp
+    VMAX_HOME = None          # Nếu có, vận tốc riêng cho chặng trở về tư thế nghỉ.
     CART_SPEED = 0.15          # m/s, đường thẳng không mang hộp
     CART_SPEED_SLOW = 0.08     # m/s, hạ cuối tới điểm kẹp, nhấc hộp, kéo hộp
     SETTLE_TOL = 0.03          # rad: hết đoạn, chờ tới khi mọi khớp lệch lệnh dưới mức này
@@ -551,7 +552,8 @@ class ScriptedPolicyV2(BasePolicy):
         elif ph == 10:
             self._grip_target = -1.0
             if not self._entered:
-                self._traj = self._seg_joint(self._q_cmd, np.array(config.HOME_QPOS_RAD[:5], dtype=float), self.VMAX)
+                self._traj = self._seg_joint(self._q_cmd, np.array(config.HOME_QPOS_RAD[:5], dtype=float),
+                                             self.VMAX_HOME or self.VMAX)
                 self._entered = True
             elif self._segment_done():
                 self._goto(11, "arrived")

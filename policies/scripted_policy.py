@@ -191,6 +191,7 @@ class ScriptedPolicy(BasePolicy):
     GRASP_SIDE_OFFSET = 0.022
     CARRY_Z = 0.51            # độ cao đầu tay khi mang: tay kẹp thẳng đứng được ở độ cao này, miệng bát z 0.46 nên hộp (đáy ~0.49) vẫn cao hơn
     LIFT_STEP_LIMIT = 0.01    # phase 5-7: mỗi bước, lệnh khớp (thang -1..1) đổi tối đa chừng này, để hộp không bị giật
+    TRANSFER_STEP_LIMIT = None  # Nếu có, giới hạn riêng cho pha đưa ngang sau khi đã nhấc vật.
     PLACE_ARRIVE_THRESHOLD = 0.04   # phase 7: kẹp thẳng đứng làm tay thiếu 2-4 cm tới đích, nên nới ngưỡng "tới nơi"
     # Lệnh mở kẹp lúc thả (action > 0.5 thì env coi là thả). 0.55 mở mỗi ngón ~33 mm, hai má hở ~67 mm: lớn hơn
     # đường chéo hộp (42 mm) để hộp rơi xéo vẫn lọt, nhưng nhỏ hơn mở hết (82 mm, rộng hơn lòng bát 84 mm).
@@ -1488,7 +1489,8 @@ class ScriptedPolicy(BasePolicy):
         else:
             step = alpha * (raw[:5] - self._smoothed_action[:5])
             if 5 <= self._phase <= 7:                         # mang hộp: không đổi lệnh khớp quá nhanh
-                step = np.clip(step, -self.LIFT_STEP_LIMIT, self.LIFT_STEP_LIMIT)
+                limit = self._carry_step_limit()
+                step = np.clip(step, -limit, limit)
             self._smoothed_action[:5] += step
             # gripper: đóng ngay; MỞ thì tăng dần (tối đa RELEASE_RAMP mỗi bước) để hai hàm không bật hộp văng ra khi thả
             self._smoothed_action[5:] = raw[5:]
@@ -1496,6 +1498,11 @@ class ScriptedPolicy(BasePolicy):
             self._smoothed_action[6] = self._smoothed_action[5]
         self._prev_grip = float(self._smoothed_action[5])
         return self._smoothed_action.copy()
+
+    def _carry_step_limit(self):
+        if self._phase == 6 and self.TRANSFER_STEP_LIMIT is not None:
+            return self.TRANSFER_STEP_LIMIT
+        return self.LIFT_STEP_LIMIT
 
     def _build_action_from_current(self) -> np.ndarray:
         """Tạo action giữ nguyên tư thế hiện tại (dùng khi đã xong phase 11)."""
