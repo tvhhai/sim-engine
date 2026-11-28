@@ -108,6 +108,7 @@ class ScriptedPolicy(BasePolicy):
     PLAN_ROLL_WAIT = 25
     DRAG_FAR = True
     DRAG_R = 0.40
+    DRAG_PULL_TIMEOUT = 120  # giới hạn mặc định khi tay kéo vật về gần
     DRAG_TARGET = 0.33
     DRAG_LIFT = 0.004          # nhấc nhẹ khi kéo để bớt ma sát với bàn (m)
     STAGED_LIFT = True         # phase 0: nâng khớp khuỷu (3) và cổ tay lên trước, khớp vai (2) chỉ nâng sau khi cánh tay đã cao (seed 2164: vai nâng trước quét trúng bóng sát đế)
@@ -721,7 +722,7 @@ class ScriptedPolicy(BasePolicy):
             return True
         if self._drag == "pull":
             self._gripper_target = -1.0
-            self._move_toward(self._drag_goal, ee_pos, threshold=0.006, timeout_steps=120)
+            self._move_toward(self._drag_goal, ee_pos, threshold=0.006, timeout_steps=self.DRAG_PULL_TIMEOUT)
             if self._phase != 5 or self.last_exit:                            # tới nơi hoặc hết hạn: ở lại phase 5, sang nhả
                 self._phase, self._phase_step = 5, 0
                 if self._drag_goal_after is not None and self.env._grasped:   # còn giữ được vật thì nhấc tiếp

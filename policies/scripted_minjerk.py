@@ -22,6 +22,7 @@ Chạy thử: python -m sim_engine.tools.make_replay --policy sim_engine.policie
 
 from copy import copy
 import math
+from typing import NamedTuple
 
 import mujoco
 import numpy as np
@@ -262,17 +263,25 @@ class ScriptedBoxMinJerk(ScriptedPolicyMinJerk):
 
     DRAG_UP_BOX = .02  # Hộp xa: thử nhấc 2 cm rồi thu tay về khi vẫn giữ hộp.
 
-    def __init__(self, env, height_delta, side_delta, staged=True, carry="retry", fixed_roll=None):
+    def __init__(self, env, height_delta, side_delta, staged=True, carry="retry", fixed_roll=None, keep_approach_roll=False):
         super().__init__(env)
         self._height_delta = height_delta
         self._side_delta = side_delta
         self.STAGED_LIFT = staged
         self.DRAG_FAR = carry != "direct"
         self._drag_lift = self.DRAG_UP_BOX if carry == "hold" else 0.0
+        self._keep_approach_roll = keep_approach_roll
+        self.ARC = not keep_approach_roll
         self._fixed_roll = None if fixed_roll is None else math.radians(fixed_roll)
         if self._fixed_roll is not None:
             self.FAR_FIXED_ROLL = self.PREDICT_BOWL_ROLL = self.PAN_LIMIT_ROLL = False
             self.FAR_ROLL_R = None
+
+    def select_action(self, observation):
+        if self._keep_approach_roll and self._phase == 2 and self._phase_step == 0 and self._fixed_roll is None:
+            self._fixed_roll = float(self.data.qpos[self._qpos_adr[4]])
+            self.GRASP_ALIGN = False
+        return super().select_action(observation)
 
     def _apply_object_profile(self):
         super()._apply_object_profile()
@@ -365,6 +374,15 @@ class ScriptedSphereIntercept(ScriptedPolicyMinJerk):
         self._gripper_target = self._prev_grip = float(action[5])
 
 
+class _TrialResult(NamedTuple):
+    ok: bool
+    steps: int
+    score: tuple[bool, int, int]
+    revisits: int
+    pad_heights: tuple[float, float] | None
+    pulled: bool
+
+
 class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
     """Bản kết hợp V1 + V2 như mặc định, chỉ thay V1 bằng bản minimum-jerk."""
 
@@ -376,6 +394,12 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
     )
     # Seed 245 (r = 42 cm): roll -100° và điểm kẹp thấp hơn 4 mm giảm từ hai lượt xuống một.
     BOX_FAR_FIXED_GRASP = (-.004, 0, True, "direct", -100)
+    # Hộp 133: giữ roll -87° cuối pha 1, lệch trục hàm 4 mm, bỏ kéo vòng cung và kéo lại (373 → 213 bước).
+    BOX_EDGE_GRASPS = ((0, .004, False, "direct", None, True), (0, 0, False, "direct", None, True),
+                       (.004, 0, False, "direct", None, True), (0, -.004, False, "direct", None, True),
+                       (0, 0, False, "hold", None, True))
+    # Hộp 55 và 1018: ở pha kéo, chờ tới 120 bước không giúp tay tới đích. Chấm thử 24 bước (435 → 342/345).
+    BOX_EDGE_PULL_TIMEOUT = 24
 
     # Thử trên bản sao vật lý. Với ngưỡng 0,018, pha đưa ngang giảm từ 31 xuống 18 bước ở seed hộp
     # 87 và từ 137 xuống 80 ở seed hộp 133. Các pha kẹp/nhấc/hạ vẫn dùng giới hạn cũ.
@@ -399,6 +423,16 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
     # Seed 2317: bóng đã lăn 0,31 m/s sau reset. Đón trước 14 bước gắp được với roll 45° hoặc -135°.
     SPHERE_INTERCEPT_SPEED = .10
     SPHERE_INTERCEPTS = (("intercept", 14, 45, -3), ("intercept", 14, -135, -3), ("intercept", 18, -45, 0))
+    # Bóng 2278 ở bước nhấc 1 cm: hai má chạm cao hơn tâm 4,0 và 14,4 mm.
+    # Xoay theo bán kính và dịch 4 mm giữ 138 bước, đưa điểm chạm còn 1,0 và 4,6 mm trên tâm.
+    SPHERE_HIGH_PAD_MIN = .003
+    SPHERE_HIGH_PAD_MAX = .012
+    SPHERE_CENTER_BAND = .006
+    SPHERE_CENTER_LIFT = .010
+    SPHERE_CENTER_GRASPS = ((0, 0, .004), (0, -.004, -.004), (0, -.008, -.004), (60, -.008, 0))
+    # Kiểm tra ván bóng trên 180 bước có lặp pha. Seed 2447, đổi hướng và điểm kẹp giảm 294 → 204 bước.
+    SPHERE_RETRY_STEP_THRESHOLD = 180
+    SPHERE_RETRY_GRASPS = ((30, 0, 0), (60, 0, 0), "v1", "v2")
 
     def __init__(self, env):
         self.env = env
@@ -437,8 +471,10 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
         self.v2.VMAX_CARRY = type(self.v2).VMAX_CARRY
         self.v2.VMAX_HOME = None
         if timing is not None:
-            transfer, home_peak, carry_v2, home_v2, approach = timing
+            transfer, home_peak, carry_v2, home_v2, approach, *pull_timeout = timing
             self.v1.TRANSFER_STEP_LIMIT = transfer
+            if pull_timeout:
+                self.v1.DRAG_PULL_TIMEOUT = pull_timeout[0]
             if isinstance(self.v1, ScriptedPolicyMinJerk):
                 self.v1.MJ_JOINT_PEAK = home_peak
                 self.v1.MJ_APPROACH_PEAK = approach
@@ -457,7 +493,53 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
         env.render_images = False
         probe = type(self)(env)
         mujoco.mj_copyData(env.data, env.model, self.env.data)
-        prefer_single_grasp = self._plan_box and not probe.v1._arc_needed()
+        at_box_edge = self._plan_box and probe.v1._arc_needed()
+        profile, timing, result = self._timed_profile(probe, profiles, self._plan_box and not at_box_edge)
+        if result is None or not self.TIMINGS:
+            return profile, timing
+        if at_box_edge:
+            for candidate in self.BOX_EDGE_GRASPS:
+                direct = self._trial(probe, candidate, self.TIMINGS[0])
+                if (direct.steps < result.steps and direct.score[1] == 1
+                        and self._trial_preserves_grasp(direct, result)):
+                    profile, timing, result = candidate, self.TIMINGS[0], direct
+            if result.pulled and result.revisits:
+                short_pull = (*(timing or self.TIMINGS[0]), self.BOX_EDGE_PULL_TIMEOUT)
+                pulled = self._trial(probe, profile, short_pull)
+                if pulled.steps < result.steps and self._trial_preserves_grasp(pulled, result):
+                    timing = short_pull
+        if self._plan_sphere:
+            return self._refine_sphere_pick(probe, profile, timing, result)
+        return profile, timing
+
+    @staticmethod
+    def _trial_preserves_grasp(candidate, baseline):
+        return (candidate.ok and candidate.revisits <= baseline.revisits
+                and all(a <= b for a, b in zip(candidate.score, baseline.score)))
+
+    def _refine_sphere_pick(self, probe, profile, timing, result):
+        pads = result.pad_heights
+        high = pads and min(pads) >= self.SPHERE_HIGH_PAD_MIN and max(pads) >= self.SPHERE_HIGH_PAD_MAX
+        slow_retry = result.revisits and result.steps > self.SPHERE_RETRY_STEP_THRESHOLD
+        if not (high or slow_retry):
+            return profile, timing
+
+        candidates = (*self.SPHERE_CENTER_GRASPS, *self.SPHERE_RETRY_GRASPS) if slow_retry else self.SPHERE_CENTER_GRASPS
+        for candidate in candidates:
+            if (candidate, self.TIMINGS[0]) == (profile, timing):
+                continue
+            trial = self._trial(probe, candidate, self.TIMINGS[0])
+            if trial.steps > result.steps or not self._trial_preserves_grasp(trial, result):
+                continue
+            if high and not (trial.pad_heights and max(map(abs, trial.pad_heights)) <= self.SPHERE_CENTER_BAND):
+                continue
+            if high or trial.steps < result.steps or trial.revisits < result.revisits:
+                profile, timing, result = candidate, self.TIMINGS[0], trial
+                if high and not slow_retry:
+                    break
+        return profile, timing
+
+    def _timed_profile(self, probe, profiles, prefer_single_grasp):
         if prefer_single_grasp and probe.v1._box_pan_r() >= probe.v1.DRAG_R:
             # Seed 87 và 100: dời điểm kẹp 4 mm và nâng trực tiếp giúp gắp một lần.
             grips = ((0, .004, True), (0, 0, True), *self.BOX_GRASPS)
@@ -466,41 +548,41 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
         best, best_result = "v1", None
         for profile in (None, *profiles):
             result = self._trial(probe, profile)
-            if not result[0]:
+            if not result.ok:
                 continue
-            _, _, score = result
-            if best_result is None or score < best_result[2]:
+            score = result.score
+            if best_result is None or score < best_result.score:
                 best, best_result = profile, result
             if not prefer_single_grasp or score == (False, 1, 1):
                 break
         if best_result is not None and self.TIMINGS:
-            _, original_steps, original_score = best_result
+            original_steps, original_score = best_result.steps, best_result.score
             chosen_timing = None
-            shortest = original_steps
+            shortest = best_result
             for timing in self.TIMINGS:
-                ok, steps, score = self._trial(probe, best, timing)
-                if ok and steps < shortest and all(a <= b for a, b in zip(score, original_score)):
-                    if not self._plan_sphere or steps < self.SLOW_SPHERE_CYCLE_STEPS:
-                        return best, timing
-                    chosen_timing, shortest = timing, steps
+                result = self._trial(probe, best, timing)
+                if result.ok and result.steps < shortest.steps and all(a <= b for a, b in zip(result.score, original_score)):
+                    if not self._plan_sphere or result.steps < self.SLOW_SPHERE_CYCLE_STEPS:
+                        return best, timing, result
+                    chosen_timing, shortest = timing, result
                     break
-            if self._plan_sphere and shortest >= self.SLOW_SPHERE_CYCLE_STEPS:
+            if self._plan_sphere and shortest.steps >= self.SLOW_SPHERE_CYCLE_STEPS:
                 for profile in ("v1", "v2"):
                     if profile == best:
                         continue
-                    ok, steps, score = self._trial(probe, profile)
-                    if ok and steps < shortest and all(a <= b for a, b in zip(score, original_score)):
-                        best, chosen_timing, shortest = profile, None, steps
-                if shortest < original_steps:
-                    return best, chosen_timing
+                    result = self._trial(probe, profile)
+                    if result.ok and result.steps < shortest.steps and all(a <= b for a, b in zip(result.score, original_score)):
+                        best, chosen_timing, shortest = profile, None, result
+                if shortest.steps < original_steps:
+                    return best, chosen_timing, shortest
             # Nếu đổi nhịp chưa rút được bước, thử một cách kẹp có sẵn để tránh vòng thử lại dài.
             for profile in (None, *profiles):
                 if profile == best:
                     continue
-                ok, steps, score = self._trial(probe, profile)
-                if ok and steps < original_steps and all(a <= b for a, b in zip(score, original_score)):
-                    return profile, None
-        return best, None
+                result = self._trial(probe, profile)
+                if result.ok and result.steps < original_steps and all(a <= b for a, b in zip(result.score, original_score)):
+                    return profile, None, result
+        return best, None, best_result
 
     def _trial(self, probe, profile, timing=None):
         env = probe.env
@@ -511,15 +593,48 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
         obs = env._get_obs()
         closes, descents, last_grip = 0, 0, 1.0
         grasped = env._grasped
+        previous_phase = None
+        entered = set()
+        revisits = 0
+        pad_heights = None
+        pulled = False
+        initial_z = env.data.xpos[env._box_body, 2]
         for step in range(1, config.MAX_EPISODE_STEPS + 1):
             phase = probe._phase
+            pulled |= getattr(probe._active, "_drag", None) == "pull"
+            if phase != previous_phase:
+                revisits += phase in entered
+                entered.add(phase)
+                previous_phase = phase
             action = probe.select_action(obs)
             obs, _, terminated, truncated, info = env.step(action)
             closes += phase == 4 and last_grip >= 0 > action[5]
             descents += phase == 2 and probe._phase == 3
             last_grip = action[5]
             grasped |= env._grasped
+            if self._plan_sphere and pad_heights is None and 3 <= phase <= 6 and env._grasped:
+                center_z = env.data.xpos[env._box_body, 2]
+                if center_z - initial_z >= self.SPHERE_CENTER_LIFT:
+                    pad_heights = self._loaded_pad_heights(env, center_z)
             if terminated or truncated or probe._phase > 10:
                 break
         _, info, waited = env.settle(action, info)
-        return info["success"], step + waited, (not grasped, closes, descents)
+        return _TrialResult(info["success"], step + waited, (not grasped, closes, descents), revisits, pad_heights, pulled)
+
+    @staticmethod
+    def _loaded_pad_heights(env, center_z):
+        """Lấy cao độ điểm đang chịu lực lớn nhất của mỗi má kẹp so với tâm bóng."""
+        pads = {}
+        force = np.empty(6)
+        for i in range(env.data.ncon):
+            contact = env.data.contact[i]
+            for pad, other in ((contact.geom1, contact.geom2), (contact.geom2, contact.geom1)):
+                name = env._pad_geoms.get(pad)
+                if name is None or env.model.geom_bodyid[other] != env._box_body:
+                    continue
+                mujoco.mj_contactForce(env.model, env.data, i, force)
+                if force[0] > .05 and (name not in pads or force[0] > pads[name][0]):
+                    pads[name] = float(force[0]), float(contact.pos[2] - center_z)
+        if len(pads) == 2:
+            return pads["fixed"][1], pads["moving"][1]
+        return None
