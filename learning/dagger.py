@@ -45,12 +45,20 @@ def make_teacher(env):
     Hộp đã nằm trong lòng bát (theo chiều ngang) mà chưa tính thành công (AI vừa thả, hộp đang rơi / gác nghiêng trên thành): thầy bắt đầu
     từ phase 8 (mở kẹp, rút lên khỏi bát, chờ hộp nằm yên, rồi về home; hộp rơi ra ngoài thì tự gắp lại). Trước đây thầy bắt đầu từ phase 0
     và cố gắp hộp RA KHỎI bát: kẹp hụt 3 lần rồi kẹt 200 bước ở phase 5. Đo 93 điểm tách nhánh (AI act_box4_topwrist, seed 6000-6119):
-    10/10 ván "thầy lòng vòng" đều là ca này. Ca này lại dạy đúng việc ACT hay quên: thả xong thì rút tay về home."""
-    from ..policies.scripted_minjerk import ScriptedPolicyHybridMinJerk
-    teacher = ScriptedPolicyHybridMinJerk(env)
-    teacher.reset()
+    10/10 ván "thầy lòng vòng" đều là ca này. Ca này lại dạy đúng việc ACT hay quên: thả xong thì rút tay về home.
+
+    Thầy = config.DEFAULT_POLICY, cùng lớp với record_dataset (demo). Trước đây cố định ScriptedPolicyHybridMinJerk: khi đổi thầy mặc
+    định sang ScriptedPolicyFinal (f10a585), ván DAgger sẽ theo thầy cũ còn demo theo thầy mới."""
+    from ..policies import default_policy
+    teacher = default_policy(env)
     box, bowl = env.get_box_pos(), env.get_bowl_pos()
-    if not env._grasped and float(np.linalg.norm(box[:2] - bowl[:2])) < env.bowl_inner:
+    in_bowl = not env._grasped and float(np.linalg.norm(box[:2] - bowl[:2])) < env.bowl_inner
+    if in_bowl:
+        # Vật đã trong bát: bỏ lượt thử trước (chọn cách gắp) của thầy mặc định, vì ngay sau đó thầy bị ép sang phase 8. Đo seed DAgger
+        # 6022 (tiếp quản ở bước 122, vật trong bát): lượt thử mất ~400-480 s cho một ván thầy chỉ chạy 20 bước.
+        teacher._plan_box = teacher._plan_sphere = False
+    teacher.reset()
+    if in_bowl:
         teacher.v1._phase, teacher.v1._phase_step = 8, 0
     return teacher
 
