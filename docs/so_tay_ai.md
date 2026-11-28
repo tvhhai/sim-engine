@@ -234,6 +234,32 @@ Bảng chấm nhanh 100 seed (đêm 2026-11-26/27, Colab L4), cùng 100 seed cá
 | Diffusion 40k (lr vừa nhảy lên) | 45 % | 44 % | 47 % |
 | Diffusion 50k / 60k | 62 / **66 %** | 69 / 71 % | 47 / **56 %** |
 
+19. **Chuỗi camera rear (2026-11-27/28): ACT tốt nhất 79,5 % trên 774 seed, chưa vượt mốc 84,1 % của camera trên cao.** Camera `rear`
+    (sát sau đế tay, giống bộ thật) + cổ tay; 500 ván thầy (camera rear + top + cổ tay, chia seed theo bước nhảy) rồi DAgger 4 vòng x 300
+    ván (mạng lái = checkpoint điểm validation cao nhất vòng trước). Chọn checkpoint trên **bộ validation** (100 seed của 2500-2999), chấm
+    cuối trên 774 seed. Colab A100 rồi L4.
+
+    | Mạng | Chấm nhanh / validation 100 seed | Gần | Xa |
+    |---|---|---|---|
+    | ACT train từ đầu 500 ván, ck 50k (60k tụt còn 32 %) | 67 % (bộ 774) | 81 % | 38 % |
+    | ACT DAgger 1, ck 15k | 82 % (val) | 90 % | 62 % |
+    | ACT DAgger 2, ck 15k | 82 % (val) | 89 % | 66 % |
+    | ACT DAgger 3, ck 5k / 10k / 15k / 20k | **87** / 53 / 78 / 86 % (val) | 93 / 62 / 90 / 96 % | 72 / 31 / 48 / 62 % |
+    | ACT DAgger 4, ck 5k / 10k / 15k / 20k | 74 / 74 / 79 / 80 % (val) | 92 / 86 / 87 / 86 % | 31 / 45 / 59 / 66 % |
+    | **ACT DAgger 3 ck 5k, đủ 774 seed** | **615/774 = 79,5 %** | 88,1 % | 60,1 % |
+    | SmolVLA mở khoá phần nhìn (`smolvla_rear_unfrozen.yaml`), 500 ván, 20k / 25k / 30k | 63 / 65 / **73 %** (val) | 76 / 82 / 80 % | 31 / 24 / 55 % |
+
+    - **Điểm validation 100 seed lạc quan ~7 điểm so với 774 seed** (87 -> 79,5): chọn mạng cao nhất trong ~16 checkpoint trên 100 seed
+      (±4-5 điểm mỗi lần chấm) là chọn cả may mắn. Lần sau chọn trên 200-300 seed validation, hoặc gộp vài checkpoint.
+    - **Checkpoint ACT dao động rất mạnh** giữa các mốc 5k (vòng 3: 87 -> 53 -> 78 -> 86 %): không lấy checkpoint cuối; gộp nhiều
+      checkpoint (trung bình action) từng giúp +1,5 điểm ở chuỗi cũ (mục 15).
+    - **DAgger vòng 4 không giúp** (validation tối đa 80 % < 87 % vòng 3): với 300 ván / vòng, ACT camera rear đã chững quanh 80 %.
+    - SmolVLA mở khoá phần nhìn: 61 % (khoá, 2 100 ván) -> 73 % (mở, chỉ 500 ván). Train tiếp 10k trên dữ liệu DAgger vòng 1-3 (1 400 ván,
+      batch 16, L4) đã xong; chấm validation lần đầu hỏng vì tràn bộ nhớ (3 việc chung L4 22 GB), đang chấm lại.
+    - Bóng 4 cm: thầy mới (commit `46745a3`, min-jerk có thử trước đường kẹp) ghi 500/500 ván (thầy cũ V1: 500/508), dataset
+      `so101_ball4mj_reartopwrist` trên Drive; thầy hộp không đổi (41 seed giống hệt từng action).
+    - Bài học vận hành L4 (22 GB): không chạy train SmolVLA + train ACT + chấm SmolVLA cùng lúc.
+
 ## 3. Thư mục nào làm gì
 
 ### Phần đã có
