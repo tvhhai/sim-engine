@@ -51,6 +51,7 @@ Chạy song song nhiều phần ghi demo / DAgger: phần k dùng `--seed-start 
 
 ## Quy tắc làm việc
 
+- **Báo cáo chi tiết sau mỗi lần sửa**: ghi nguyên nhân hoặc mục tiêu, file và hàm đã đổi, công thức hoặc thông số trước/sau, ảnh hưởng tới các luồng liên quan, và kết quả kiểm tra. Với policy, ghi rõ ảnh hưởng tới tiêu chí chấm, dữ liệu demo và ACT/SmolVLA. Kèm commit, tài liệu, replay hoặc log kiểm chứng khi có.
 - **Đánh giá thay đổi policy bằng quét cả bộ seed**, không bằng một seed. Bộ chuẩn: seed 0-199, `config.BOX_FIXED_SEEDS` >= 200, 2000-2499
   (774 seed). Báo số trước/sau cho hộp và bóng, liệt kê seed mới hỏng và mới sửa.
 - **Sửa theo yêu cầu thì giữ lại**, kể cả khi làm hỏng vài seed khác: ghi seed hỏng vào danh sách theo dõi rồi điều tra dần, không âm thầm

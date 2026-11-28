@@ -33,6 +33,18 @@ Replay đối chiếu 42 ván nằm ở `results/replays/box4-minjerk-review.htm
 
 Thầy ưu tiên phương án đã gắp thật và thả thành công chỉ với một lần hạ tay, một lần khép kẹp. Với hộp ở xa, thầy thử nhấc trực tiếp hoặc nhấc nhẹ rồi thu tay về khi vẫn giữ hộp. Phép thử diễn ra trên bản sao vật lý. Khi một lần gắp chưa đủ, thầy chọn phương án thành công có ít lượt khép và hạ nhất trong các phương án đã thử. Các cảnh đủ điều kiện kéo vòng cung sát giới hạn khớp 1 tiếp tục dùng cách chọn cũ.
 
+### Thay đổi trong mã
+
+- `ScriptedPolicyHybridMinJerk._choose_profile()` trong `policies/scripted_minjerk.py` trước đây trả về phương án thành công đầu tiên. Bản mới vẫn thử đường mặc định trước. Với một hộp 4 cm ngoài nhóm kéo vòng cung, nó ưu tiên kết quả cuối thành công, có kẹp vật thật, một lần hạ và một lần khép. Một lần hạ là chuyển pha 2 → 3. Một lần khép là lệnh hàm qua ngưỡng 0 theo chiều đóng trong pha 4. Khi cần dự phòng, các phương án thành công được xếp theo việc có kẹp thật, rồi số lần khép, rồi số lần hạ. Đây là tiêu chí chọn quỹ đạo của thầy. Tiêu chí chấm thành công của mô phỏng vẫn ở `env._get_info()`.
+- `ScriptedBoxMinJerk` chọn cách mang hộp sau khi khép kẹp. Từ bán kính 40 cm, thầy có thể bỏ bước kéo, hoặc nhấc trước 2 cm rồi thu tay về khi còn giữ hộp. `ScriptedPolicy._drag_box()` trong `policies/scripted_policy.py` đọc độ cao nhấc từ `_drag_clearance_lift()`. Nếu phương án thu tay không giữ được hộp, nhánh nhả và gắp lại vẫn là phương án dự phòng.
+- Công thức điểm kẹp cơ sở của hộp 4 cm cho độ cao đầu kẹp z = 43,5 cm trong hệ tọa độ world và độ lệch ngang 27 mm theo trục kẹp. Các phương án thay đổi tham số đưa vào công thức. Seed 87 và 100 chọn độ lệch **31 mm** rồi nhấc trực tiếp. Seed 245 chọn **z = 43,1 cm**, độ lệch **27 mm**, góc `wrist_roll = −100°` và nhấc trực tiếp. Các tham số được thử trên trạng thái vật lý của cảnh, không tra theo seed.
+- Công thức nội suy minimum-jerk vẫn là `s(t) = 10t³ − 15t⁴ + 6t⁵` với `t` chuẩn hoá từ 0 đến 1. Bộ giải IK, cấu hình vật lý, camera và tiêu chí chấm giữ nguyên trong hai commit policy `c31fa61` và `5a5513a`. Thay đổi nằm ở đích, hướng kẹp và thứ tự các đoạn tay đi.
+- Demo ghi mới với thầy này có thể ít đoạn nhả và gắp lại hơn. Định dạng camera, state/action và dữ liệu đã ghi giữ nguyên. Điểm benchmark đo policy viết tay. Hai commit không train hay sửa checkpoint ACT/SmolVLA.
+
+### Kiểm chứng
+
+Test `test_scripted_teacher_picks_far_box_without_regrasping` chạy lại seed 87, 100, 245 và kiểm tra thành công cùng đúng một lần hạ, một lần khép. Cả 21 bài kiểm thử Python đều qua.
+
 Quét đủ 774 seed mỗi loại sau tối ưu. Hộp 4 cm và bóng 4 cm đều đạt 774/774. Trong 90 ca hộp có bán kính từ 40 cm và nằm ngoài nhóm phải kéo vòng cung, số ca gắp một lần tăng từ **1/90 lên 90/90**. Số ca phải nhả trong lúc kéo giảm từ 89 xuống 0, số bước trung vị giảm từ 236,5 xuống 185. Cả 10 ca thuộc nhóm kéo vòng cung có số bước y hệt mốc trước tối ưu. Policy chốt ở `5a5513a`.
 
 | Seed | Lần khép kẹp trước → sau | Bước trước → sau |
