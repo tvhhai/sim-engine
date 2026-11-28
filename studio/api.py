@@ -18,7 +18,7 @@ def scene_from_source(store, source, index=0):
     if source == "lab":
         return json.loads((store.directory / "lab_case.json").read_text(encoding="utf-8"))
     payload = store.payload(source)
-    episode = payload["episodes"][index]
+    episode = store.episode(source, payload, index)
     frame = episode["frames"][0]
     keys = ("pan", "lift", "elbow", "wflex", "wroll")
     q = frame.get("bq", [1, 0, 0, 0])
@@ -78,13 +78,16 @@ def handle_get(handler, lab, path, query):
         elif path in ("/studio/replay-data", "/studio/replay-view"):
             payload = store.payload(source)
             if path.endswith("replay-view"):
+                if payload.get("episode_files"):
+                    index = int(query.get("episode", "0"))
+                    entries = list(payload["episodes"])
+                    entries[index] = store.episode(source, payload, index)
+                    payload = {**payload, "episodes": entries, "initial_episode": index}
                 handler._send(render_full_replay(payload, paths.REPLAY_ASSETS), "text/html")
                 return True
             if "episode" in query:
                 index = int(query["episode"])
-                if not 0 <= index < len(payload["episodes"]):
-                    raise ValueError("Episode không tồn tại")
-                result = {"scene": payload["scene"], "episodes": [payload["episodes"][index]]}
+                result = {"scene": payload["scene"], "episodes": [store.episode(source, payload, index)]}
             else:
                 result = payload
         elif path == "/studio/health":

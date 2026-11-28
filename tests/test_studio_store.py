@@ -1,7 +1,9 @@
+import gzip
 import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from sim_engine import paths
 from sim_engine.studio.api import scene_from_source
@@ -74,6 +76,30 @@ class StudioStoreTests(unittest.TestCase):
             path.write_text(json.dumps(payload()), encoding="utf-8")
             episode = StudioStore(directory, baseline=path).catalog()["sources"][0]["episodes"][0]
             self.assertEqual(episode["zone"], "green")                # hộp ở (0.15, 0.03): trong vùng gắp được
+
+    def test_final_catalog_lists_metadata_and_reads_only_requested_episode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            replay = root / "replays"
+            replay.mkdir()
+            metadata = {"seed": 7, "success": True, "steps": 1, "zone": "green"}
+            manifest = {"scene": {"title": "Policy cuối"}, "episode_files": True, "episodes": [metadata]}
+            for name in ("box4-final", "sphere4-final"):
+                (replay / f"{name}.json").write_text(json.dumps(manifest), encoding="utf8")
+            (replay / "box4-history.json").write_text(json.dumps(payload()), encoding="utf8")
+            with patch.object(paths, "RESULTS", root):
+                store = StudioStore(root)
+                catalog = store.catalog()
+                self.assertEqual([s["id"] for s in catalog["sources"]], ["baseline", "file:sphere4-final"])
+                self.assertEqual(catalog["sources"][0]["episodes"][0]["zone"], "green")
+                self.assertEqual(store.payload("file:box4-history")["episodes"][0]["seed"], 7)
+                folder = replay / "box4-final"
+                folder.mkdir()
+                with gzip.open(folder / "7.json.gz", "wt", encoding="utf8") as f:
+                    json.dump(payload()["episodes"][0], f)
+                self.assertEqual(scene_from_source(store, "baseline", 0)["pose"]["pan"], 1)
+                with self.assertRaises(ValueError):
+                    store.episode("baseline", store.payload("baseline"), -1)
 
     def test_full_view_reuses_all_replay_tools_without_cdn(self):
         html = render_full_replay(payload(), paths.REPLAY_ASSETS)

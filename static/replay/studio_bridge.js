@@ -150,19 +150,29 @@
   window.studioRender = publish;
   const notify = () => parent.postMessage({type:'studio-replay-state',source:sourceKey,episode:ep,step:i,playing:!!timer}, location.origin);
   window.studioPlaybackChanged=()=>{if(!timer)render();publish(F()[i],F());notify();};
-  let stamp = '', controlled = false;
-  const observe = () => {if(!controlled)return;const next=`${ep}/${i}/${!!timer}`;if(next!==stamp){stamp=next;notify();}};
+  let stamp = '', controlled = false, pendingEpisodeLoads = 0;
+  const observe = () => {if(!controlled||pendingEpisodeLoads)return;const next=`${ep}/${i}/${!!timer}`;if(next!==stamp){stamp=next;notify();}};
   new MutationObserver(observe).observe(document.getElementById('stepCount'), {attributes:true,childList:true,subtree:true});
   document.addEventListener('click', () => queueMicrotask(observe));
-  window.addEventListener('message', event => {
+  window.addEventListener('message', async event => {
     if(event.origin!==location.origin||event.source!==parent||event.data?.type!=='studio-replay-command')return;
     const command=event.data;
     controlled=true;
     if(typeof command.focus3d==='boolean' && document.documentElement.classList.contains('studio-focus3d')!==command.focus3d){document.documentElement.classList.toggle('studio-focus3d',command.focus3d);render();}
     if(command.orbit){Object.assign(CAM,command.orbit);syncFollow();return;}
     if((command.theme==='light'||command.theme==='dark')&&document.documentElement.dataset.studioTheme!==command.theme){document.documentElement.dataset.studioTheme=command.theme;render();}
-    if(Number.isInteger(command.episode)&&command.episode>=0&&command.episode<EPS.length&&command.episode!==ep){
-      $('flt').value='all';$('mixResult').value='all';buildSel();loadEp(command.episode);
+    if(Number.isInteger(command.episode)&&command.episode>=0&&command.episode<EPS.length){
+      if(command.episode!==ep){
+        $('flt').value='all';$('mixResult').value='all';buildSel();
+        const loaded=loadEp(command.episode);
+        if(loaded!==true){
+          pendingEpisodeLoads++;
+          try { if(!(await loaded))return; }
+          finally { pendingEpisodeLoads--; }
+        }
+      } else if(DATA.episode_files) {
+        cancelEpisodeLoad();
+      }
     }
     if(Number.isFinite(command.step)&&command.step!==i)go(command.step);
     if([.1,.25,.5,1,1.5,2,3,4].includes(Number(command.speed)) && Number(command.speed)!==speed){const wasPlaying=!!timer;if(wasPlaying)stop();speed=Number(command.speed);$('spd').value=String(speed);if($('speedValue'))$('speedValue').value=`${speed}×`;if(wasPlaying)play();}

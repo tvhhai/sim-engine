@@ -57,7 +57,7 @@ MAX_EPISODE_STEPS = 500  # tối đa 500 bước (~16 giây ở 30 Hz) rồi b�
 # sửa; seed mới hỏng ghim ở results/object_pins.json). Đổi lại: chậm hơn một chút (hộp 2 cm: trung vị 175 -> 185 bước).
 # Bản gốc vẫn dùng được: --policy sim_engine.policies.scripted_hybrid:ScriptedPolicyHybrid (bộ seed replay cũ ở results/goc/).
 # Muốn dùng policy khác cho một lệnh thì truyền --policy module:Lớp.
-DEFAULT_POLICY = "sim_engine.policies.scripted_minjerk:ScriptedPolicyHybridMinJerk"
+DEFAULT_POLICY = "sim_engine.policies.scripted_minjerk:ScriptedPolicyFinal"
 
 DEFAULT_TASK = "Pick up the box and place it in the bowl"
 

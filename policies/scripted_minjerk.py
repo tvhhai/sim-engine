@@ -381,6 +381,26 @@ class _TrialResult(NamedTuple):
     revisits: int
     pad_heights: tuple[float, float] | None
     pulled: bool
+    contacts: tuple[int, int, int] = (0, 0, 0)
+
+
+def _carry_contacts(env, bodies):
+    floor, bowl, camera, camera_mount = bodies
+    table_hit = bowl_hit = camera_hit = False
+    geom_body = env.model.geom_bodyid
+    object_body = env._box_body
+    for contact in env.data.contact:
+        a, b = geom_body[contact.geom1], geom_body[contact.geom2]
+        if a in floor or b in floor:
+            other = b if a in floor else a
+            table_hit |= other not in floor and other not in (object_body, bowl)
+        if bowl in (a, b):
+            other = b if a == bowl else a
+            bowl_hit |= other not in floor and other != object_body
+        if camera in (a, b):
+            other = b if a == camera else a
+            camera_hit |= other not in camera_mount
+    return table_hit, camera_hit, bowl_hit
 
 
 class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
@@ -584,7 +604,7 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
                     return profile, None, result
         return best, None, best_result
 
-    def _trial(self, probe, profile, timing=None):
+    def _trial(self, probe, profile, timing=None, *, track_contacts=False):
         env = probe.env
         mujoco.mj_copyData(env.data, env.model, self.env.data)
         env._step_count = self.env._step_count
@@ -598,6 +618,12 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
         revisits = 0
         pad_heights = None
         pulled = False
+        contacts = [0, 0, 0]
+        if track_contacts:
+            body = lambda name: mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_BODY, name)
+            camera = body("wrist_cam_arm")
+            bodies = ({body("table"), body("world")}, body("bowl"), camera,
+                      {camera, body("gripper"), body("wrist"), body("moving_jaw_so101_v1")})
         initial_z = env.data.xpos[env._box_body, 2]
         for step in range(1, config.MAX_EPISODE_STEPS + 1):
             phase = probe._phase
@@ -608,6 +634,9 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
                 previous_phase = phase
             action = probe.select_action(obs)
             obs, _, terminated, truncated, info = env.step(action)
+            if track_contacts and 5 <= phase <= 7:
+                for index, hit in enumerate(_carry_contacts(env, bodies)):
+                    contacts[index] += int(hit)
             closes += phase == 4 and last_grip >= 0 > action[5]
             descents += phase == 2 and probe._phase == 3
             last_grip = action[5]
@@ -619,7 +648,8 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
             if terminated or truncated or probe._phase > 10:
                 break
         _, info, waited = env.settle(action, info)
-        return _TrialResult(info["success"], step + waited, (not grasped, closes, descents), revisits, pad_heights, pulled)
+        return _TrialResult(info["success"], step + waited, (not grasped, closes, descents), revisits, pad_heights,
+                            pulled, tuple(contacts))
 
     @staticmethod
     def _loaded_pad_heights(env, center_z):
@@ -638,3 +668,92 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
         if len(pads) == 2:
             return pads["fixed"][1], pads["moving"][1]
         return None
+
+
+class _FinalTiming(NamedTuple):
+    original: tuple | None
+    carry: tuple[float, float] | None = None
+    lower: float = 0.
+    place_threshold: float | None = None
+    short_arc: bool = False
+
+
+class ScriptedPolicyFinal(ScriptedPolicyHybridMinJerk):
+    """Chọn phương án ngắn nhất qua lượt thử vật lý cho cảnh một vật 4 cm."""
+
+    # Nhịp 0,030/2,0 rút bước trên PPO nhưng làm hỏng 7 hộp; nhịp 0,024/1,8 là ứng viên dự phòng.
+    FAST_CARRY = (.030, 2.0)
+    MEDIUM_CARRY = (.024, 1.8)
+    # Thử riêng 7 ca đặt hỏng: hạ 3–6 mm sửa 6 ca, hạ 9 mm và siết ngưỡng tới đích sửa 2087.
+    LOWER_PLACEMENTS = ((.003, None), (.006, None), (.009, .025))
+    # Hộp 1016 giảm 373 → 242 bước khi rút vòng cung từ 102 còn 82 bước.
+    SHORT_ARC_STEPS = {"above": 16, "down": 12, "close": 12, "sweep": 24, "release": 8, "raise": 10}
+
+    def _reset_profile(self, profile, timing=None):
+        if not isinstance(timing, _FinalTiming):
+            super()._reset_profile(profile, timing)
+            return
+        super()._reset_profile(profile, timing.original)
+        if timing.carry is not None:
+            self.v1.TRANSFER_STEP_LIMIT, self.v2.VMAX_CARRY = timing.carry
+        self.v1._place_z -= timing.lower
+        if timing.place_threshold is not None:
+            self.v1.PLACE_ARRIVE_THRESHOLD = timing.place_threshold
+        if timing.short_arc:
+            self.v1.ARC_STEPS = self.SHORT_ARC_STEPS
+
+    def _trial(self, probe, profile, timing=None):
+        result = super()._trial(probe, profile, timing, track_contacts=isinstance(timing, _FinalTiming))
+        if self._planning_results is not None:
+            self._planning_results[profile, timing] = result
+        return result
+
+    def __init__(self, env):
+        super().__init__(env)
+        self._planning_results = None
+
+    def _choose_profile(self, profiles):
+        tried = {}
+        self._planning_results = tried
+        try:
+            profile, original = super()._choose_profile(profiles)
+        finally:
+            self._planning_results = None
+        if not self.TIMINGS:
+            return profile, original
+
+        shadow = copy(self.env)
+        shadow.data = mujoco.MjData(shadow.model)
+        shadow.render_images = False
+        mujoco.mj_copyData(shadow.data, shadow.model, self.env.data)
+        probe = type(self)(shadow)
+        at_edge = self._plan_box and probe.v1._arc_needed()
+        baseline = tried.get((profile, original))
+        if baseline is None:
+            baseline = self._trial(probe, profile, original)
+        best, best_timing = baseline, original
+        baseline_contacts = None
+
+        def consider(timing):
+            nonlocal best, best_timing, baseline_contacts
+            result = self._trial(probe, profile, timing)
+            if (result.ok and not result.score[0] and (not best.ok or result.steps < best.steps)
+                    and (not baseline.ok or self._trial_preserves_grasp(result, baseline))):
+                if any(result.contacts) and baseline_contacts is None:
+                    baseline_contacts = self._trial(probe, profile, _FinalTiming(original)).contacts
+                if not any(result.contacts) or all(a <= b for a, b in zip(result.contacts, baseline_contacts)):
+                    best, best_timing = result, timing
+            return result
+
+        fast = consider(_FinalTiming(original, self.FAST_CARRY))
+        if best_timing == original:
+            consider(_FinalTiming(original, self.MEDIUM_CARRY))
+        if self._plan_box and not fast.ok:
+            for lower, threshold in self.LOWER_PLACEMENTS:
+                consider(_FinalTiming(original, self.FAST_CARRY, lower, threshold))
+        direct_roll = isinstance(profile, tuple) and len(profile) >= 6 and profile[5]
+        if at_edge and profile not in ("v1", "v2") and not direct_roll:
+            arc = consider(_FinalTiming(original, short_arc=True))
+            if arc.ok:
+                consider(_FinalTiming(original, self.FAST_CARRY, short_arc=True))
+        return profile, best_timing

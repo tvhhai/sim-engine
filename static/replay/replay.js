@@ -20,7 +20,7 @@ const f3 = v => v ? "(" + basePoint(v).map(x => (x >= 0 ? "+" : "") + x.toFixed(
 const dist = (a, b) => Math.hypot(a[0]-b[0], a[1]-b[1], a[2]-b[2]);
 const cm = v => (v * 100).toFixed(1);
 
-let ep = 0, i = 0, timer = null, speed = 1;   // speed = hệ số so với thời gian thực (1 = đúng tốc độ robot chạy thật)
+let ep = DATA.initial_episode ?? 0, i = 0, timer = null, speed = 1;
 const STEP_DT = S.step_dt || 1 / 30;           // giây mô phỏng mỗi bước (policy ra 1 action mỗi STEP_DT)
 const OPT = { past:true, future:true, path:true, hz:window.STUDIO_WEBGL ? "15" : "1", every:window.STUDIO_WEBGL ? 5 : 1 };
 
@@ -417,7 +417,7 @@ function pickZone(x, y) {
       angle < region.angle_min_deg - 1e-9 || angle > region.angle_max_deg + 1e-9) return "mixed";
   return "green";
 }
-EPS.forEach(e => { e._pickZone = pickZone(...e.frames[0].box); });
+EPS.forEach(e => { e._pickZone = e.frames?.length ? pickZone(...e.frames[0].box) : e.zone; });
 
 function sectorPts(pan, inner, outer, start, end, n = 72) {
   const point = (r, q) => {
@@ -675,14 +675,15 @@ function isLearnedReplay() { return (EPS[ep].tags || []).some(tag => tag.startsW
 // Từ lúc hai hàm đã kẹp hộp ít nhất một lần, hộp dịch chuyển là chủ ý
 function ph_after_grasp() { return F().slice(0, i + 1).some(f => f.gr); }
 // PUSH[ep] = chỉ số khung đầu tiên mà hộp trượt ngang > 0.2 cm khi chưa được kẹp (hoặc null)
-const PUSH = EPS.map(e => {
-  const fs = e.frames;
+function firstPush(e) {
+  const fs = e.frames || [];
   for (let k = 1; k < fs.length; k++) {
     if (fs[k].gr) return null;
     if (Math.hypot(fs[k].box[0] - fs[k-1].box[0], fs[k].box[1] - fs[k-1].box[1]) > 0.002) return k;
   }
   return null;
-});
+}
+const PUSH = EPS.map(firstPush);
 function yn(ok, text) { return `<div class="chk"><span class="${ok ? "y" : "n"}">${ok ? "✓" : "✗"}</span><span>${text}</span></div>`; }
 function drawChk(fr) {
   const dEB = dist(fr.ee, fr.box), z = fr.box[2], bz = S.bowl[2];
@@ -1091,7 +1092,7 @@ function prevPhase() {
   go(Math.max(0, k - 1));
 }
 const PLAY_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="7 5 19 12 7 19"/></svg>', PAUSE_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="14" y="5" width="3" height="14" rx="1"/><rect x="7" y="5" width="3" height="14" rx="1"/></svg>';
-function stop() { if (timer) { clearInterval(timer); timer = null; } $("bPlay").innerHTML = PLAY_ICON; $("bPlay").setAttribute("aria-label", "Phát"); if(window.STUDIO_WEBGL)window.studioPlaybackChanged?.(); }
+function stop(notify = true) { if (timer) { clearInterval(timer); timer = null; } $("bPlay").innerHTML = PLAY_ICON; $("bPlay").setAttribute("aria-label", "Phát"); if(notify !== false && window.STUDIO_WEBGL)window.studioPlaybackChanged?.(); }
 function play() {
   if (timer) return stop();
   if (i >= F().length - 1) i = 0;
@@ -1105,8 +1106,36 @@ function play() {
   }, 16);
   if(window.STUDIO_WEBGL)window.studioPlaybackChanged?.();
 }
+let episodeLoadId = 0;
+function cancelEpisodeLoad() { episodeLoadId++; }
 function loadEp(k) {
-  stop(); ep = k; i = 0;
+  const request = ++episodeLoadId;
+  if (!DATA.episode_files || EPS[k].frames?.length) {
+    showEpisode(k);
+    return true;
+  }
+  stop(false);
+  $("epPos").textContent = "Đang tải ván…";
+  const source = new URLSearchParams(location.search).get("source");
+  const params = new URLSearchParams({source, episode: String(k)});
+  return fetch("/studio/replay-data?" + params).then(async response => {
+    const payload = await response.json();
+    const data = payload.episodes?.[0];
+    if (!response.ok || !data?.frames?.length || data.seed !== EPS[k].seed) throw new Error("Ván replay không hợp lệ");
+    if (request !== episodeLoadId) return false;
+    // Giữ một ván đầy đủ trong bộ nhớ. Danh sách seed giữ metadata để tìm kiếm.
+    delete EPS[ep].frames;
+    Object.assign(EPS[k], data);
+    PUSH[k] = firstPush(data);
+    showEpisode(k);
+    return true;
+  }).catch(() => {
+    if (request === episodeLoadId) $("epPos").textContent = "Không tải được ván";
+    return false;
+  });
+}
+function showEpisode(k) {
+  stop(false); ep = k; i = 0;
   if (EPS[ep].bowl) { S.bowl = EPS[ep].bowl; S.bowl_geoms = EPS[ep].bowl_geoms; }   // mỗi ván có thể có bát ở chỗ khác
   const e = EPS[k];
   $("rng").max = e.frames.length - 1;
@@ -1246,7 +1275,7 @@ $("vCams").onclick = () => setCam(CAM0.yaw, CAM0.pitch, CAM0.dist, true);
   try { localStorage.removeItem("camTilt"); } catch (e) {}                                   // dọn khoá của bản cũ
   const apply = v => { CAM_TILT_EXTRA = (v - base) * Math.PI / 180;
     $("camTiltV").innerHTML = v + "°" + (v !== base ? ` <span style="color:var(--warn)" title="Đang xem thử: khác độ gập trong config (WRIST_CAM_TILT_DEG)">· config ${base}°</span>` : "");
-    EPS.forEach(e => e.frames.forEach(f => { delete f._pose; delete f._w; })); render(); };
+    EPS.forEach(e => e.frames?.forEach(f => { delete f._pose; delete f._w; })); render(); };
   sl.value = base;
   sl.oninput = () => apply(+sl.value);
   sl.ondblclick = () => { sl.value = base; sl.oninput(); };
@@ -1323,11 +1352,12 @@ speedSlider.oninput = () => {
 // (replay dựng lại sau khi đổi policy sẽ khác số khung -> về khung 0 thay vì nhảy tới một thời điểm không còn tương ứng).
 const saveView = () => { store.set("replayEp", epKey(EPS[ep])); store.set("replayFrame", String(i)); store.set("replayLen", String(F().length)); };
 {
-  const saved = store.get("replayEp");
+  const saved = DATA.episode_files ? null : store.get("replayEp");
   const shown = visible();                                                // chỉ khôi phục ván còn nằm trong bộ lọc đã khôi phục
   let def = saved ? EPS.findIndex((e, k) => epKey(e) === saved && shown.includes(k)) : -1;
   const restored = def >= 0;
   if (def < 0) def = EPS.findIndex((e, k) => /^CASE 1/.test(e.name || "") && shown.includes(k));   // mặc định: hộp XA nhất
+  if (DATA.episode_files) def = DATA.initial_episode ?? 0;
   if (def < 0) def = shown.length ? shown[0] : 0;
   loadEp(def);
   if (shown.includes(def)) $("epPos").textContent = `${shown.indexOf(def) + 1}/${shown.length} seed`;

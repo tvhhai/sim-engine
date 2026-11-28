@@ -1,6 +1,7 @@
 """Local run archive and replay adapters. Reading a replay never runs physics."""
 
 from datetime import datetime, timezone
+import gzip
 import json
 import os
 from pathlib import Path
@@ -106,8 +107,16 @@ class StudioStore:
     def case(self, run_id):
         return json.loads((self._run_dir(run_id) / "case.json").read_text(encoding="utf-8"))
 
+    def _has_final_replays(self):
+        replay_dir = paths.RESULTS / "replays"
+        return self.baseline == paths.REPLAY_JSON and all(
+            (replay_dir / name).is_file() for name in ("box4-final.json", "sphere4-final.json")
+        )
+
     def payload(self, source):
         if source == "baseline":
+            if self._has_final_replays():
+                return self.payload("file:box4-final")
             path = self.baseline
             if path.suffix == ".json" and not path.is_file() and path.with_suffix(".html").is_file():
                 path = path.with_suffix(".html")
@@ -142,10 +151,36 @@ class StudioStore:
             return json.loads((self._run_dir(source[4:]) / "payload.json").read_text(encoding="utf-8"))
         raise ValueError("Nguồn replay không hợp lệ")
 
+    @staticmethod
+    def episode(source, payload, index):
+        """Đọc một ván đã lưu. Bộ lớn chỉ giữ metadata trong catalog."""
+        if not 0 <= index < len(payload["episodes"]):
+            raise ValueError("Episode không tồn tại")
+        entry = payload["episodes"][index]
+        if not payload.get("episode_files"):
+            return entry
+        name = "box4-final" if source == "baseline" else source.removeprefix("file:")
+        seed = entry["seed"]
+        if (source != "baseline" and not source.startswith("file:")) or not re.fullmatch(r"[A-Za-z0-9_-]{1,60}", name) or type(seed) is not int:
+            raise ValueError("Đường dẫn ván replay không hợp lệ")
+        file = paths.RESULTS / "replays" / name / f"{seed}.json.gz"
+        with gzip.open(file, "rt", encoding="utf-8") as handle:
+            episode = json.load(handle)
+        if episode["seed"] != seed:
+            raise ValueError("Seed replay khác danh sách")
+        return episode
+
     def catalog(self):
         sources = []
         extra = [(f"file:{p.stem}", None) for p in sorted((paths.RESULTS / "replays").glob("*.json"))] if (paths.RESULTS / "replays").is_dir() else []
-        for ident, title in (("lab", "Lab · lần chạy mới nhất"), ("baseline", "Bộ replay hiện tại"), *extra):
+        final = self._has_final_replays()
+        if final:
+            history = {f"file:{kind}4{suffix}" for kind in ("box", "sphere")
+                       for suffix in ("", "-history", "-pilot5", "-ppo-review")}
+            # Chỉ hiện bộ cuối trong danh sách thầy. Link replay cũ vẫn đọc được.
+            extra = [item for item in extra if item[0] not in history and item[0] != "file:box4-final"]
+        extra.sort(key=lambda item: not item[0].endswith("4-final"))
+        for ident, title in (("lab", "Lab · lần chạy mới nhất"), ("baseline", None if final else "Bộ replay hiện tại"), *extra):
             try:
                 payload = self.payload(ident)
                 title = title or payload.get("scene", {}).get("title") or ident[5:]
@@ -153,7 +188,8 @@ class StudioStore:
                     {"index": i, "seed": e["seed"], "name": e.get("name", f"seed {e['seed']}"),
                      "success": e["success"], "steps": e["steps"], "tags": e.get("tags", []),
                      "blocked_reason": e.get("blocked_reason"),
-                     "zone": pick_zone(*e["frames"][0]["box"][:2]) if e.get("frames") else None}
+                     "zone": e.get("zone") if payload.get("episode_files") else (
+                         pick_zone(*e["frames"][0]["box"][:2]) if e.get("frames") else None)}
                     for i, e in enumerate(payload["episodes"])]})
             except (OSError, ValueError, KeyError):
                 continue

@@ -437,8 +437,8 @@ def pick_zone(x, y):
     return "green"
 
 
-def write_replay(env, episodes, out, policy_name):
-    """Write existing episodes without running any seeds or updating batch metadata."""
+def replay_scene(env, policy_name):
+    """Xuất hình học và thông số dùng chung cho các ván cùng loại vật."""
     # Thông tin cố định của cảnh để HTML vẽ đúng tỷ lệ
     scene = {
         "bowl": r3(env.get_bowl_pos()),
@@ -473,7 +473,12 @@ def write_replay(env, episodes, out, policy_name):
             scene["reach"] = json.load(f)
     else:
         print("Chưa có results/reach_envelope.json nên replay chưa vẽ vùng với tới. Chạy python -m sim_engine.studio một lần để tính.")
-    data = {"scene": scene, "episodes": episodes}
+    return scene
+
+
+def write_replay(env, episodes, out, policy_name):
+    """Write existing episodes without running any seeds or updating batch metadata."""
+    data = {"scene": replay_scene(env, policy_name), "episodes": episodes}
     render_html(data, out)
     return data
 
