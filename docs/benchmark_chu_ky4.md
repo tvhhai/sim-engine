@@ -35,7 +35,7 @@ Với một đoạn điểm–điểm có vận tốc và gia tốc đầu cuố
 | Bóng 8 | 80 → 46 | 201 → 168 |
 | Bóng 2317 | 36 → 21 | 104 → 90 |
 
-Nguồn Studio `box4-shorter-cycle` và `sphere4-shorter-cycle` có các cặp replay trên.
+Nguồn `box4-shorter-cycle` trong Studio giữ các cặp trước/sau của seed 87, 133 và 179. Nguồn `sphere4-shorter-cycle` giữ các cặp của seed 8, 2278 và 2317. Các replay sau sửa được tạo từ policy hiện tại. Danh sách trên Studio chỉ gồm các seed đối chiếu, còn số liệu benchmark vẫn tính trên cả 774 seed mỗi loại.
 
 ## Kiểm thử
 
