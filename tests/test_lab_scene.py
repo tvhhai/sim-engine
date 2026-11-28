@@ -136,7 +136,7 @@ class ObjectAndBowlConfigTests(unittest.TestCase):
         self.assertTrue(sweep_seed((246, "box", .04))["ok"])
 
     def test_scripted_teacher_picks_far_box_without_regrasping(self):
-        for seed in (87, 100):
+        for seed in (87, 100, 245):
             with self.subTest(seed=seed):
                 xy, bowl = _seed_scene(seed)
                 env = _make_env(xy, "box", .04)

@@ -259,21 +259,34 @@ class ScriptedBoxMinJerk(ScriptedPolicyMinJerk):
 
     DRAG_UP_BOX = .02  # Hộp xa: thử nhấc 2 cm rồi thu tay về khi vẫn giữ hộp.
 
-    def __init__(self, env, height_delta, side_delta, staged=True, carry="retry"):
+    def __init__(self, env, height_delta, side_delta, staged=True, carry="retry", fixed_roll=None):
         super().__init__(env)
         self._height_delta = height_delta
         self._side_delta = side_delta
         self.STAGED_LIFT = staged
         self.DRAG_FAR = carry != "direct"
         self._drag_lift = self.DRAG_UP_BOX if carry == "hold" else 0.0
+        self._fixed_roll = None if fixed_roll is None else math.radians(fixed_roll)
+        if self._fixed_roll is not None:
+            self.FAR_FIXED_ROLL = self.PREDICT_BOWL_ROLL = self.PAN_LIMIT_ROLL = False
+            self.FAR_ROLL_R = None
 
     def _apply_object_profile(self):
         super()._apply_object_profile()
         self._grasp_z += self._height_delta
         self.GRASP_SIDE_OFFSET += self._side_delta
+        if self._fixed_roll is not None:
+            self.GRASP_ALIGN = False
 
     def _drag_clearance_lift(self):
         return self._drag_lift
+
+    def _choose_roll(self, q5):
+        if self._fixed_roll is None:
+            return super()._choose_roll(q5)
+        q = np.array(q5, dtype=float)
+        q[4] = self._fixed_roll
+        return q[4], self._clamp_direction(q)
 
 
 class ScriptedSphereMinJerk(ScriptedPolicyMinJerk):
@@ -358,6 +371,8 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
         (0, 0, False), (.004, 0, True), (-.004, 0, True), (0, .004, True),
         (0, -.004, True), (.004, .004, True), (-.004, .004, True),
     )
+    # Seed 245 (r = 42 cm): roll -100° và điểm kẹp thấp hơn 4 mm giảm từ hai lượt xuống một.
+    BOX_FAR_FIXED_GRASP = (-.004, 0, True, "direct", -100)
 
     # Seed 8 và 201: nâng điểm kẹp 4 mm tránh má kẹp đẩy quả bóng trước khi nâng.
     # Hướng và độ lệch khác giúp kiểm tra điểm kẹp quanh quả cầu khi bị giới hạn khớp.
@@ -425,7 +440,7 @@ class ScriptedPolicyHybridMinJerk(ScriptedPolicyHybrid):
             # Seed 87 và 100: dời điểm kẹp 4 mm và nâng trực tiếp giúp gắp một lần.
             grips = ((0, .004, True), (0, 0, True), *self.BOX_GRASPS)
             lifts = tuple((*grip, carry) for carry in ("direct", "hold") for grip in dict.fromkeys(grips))
-            profiles = (*lifts, *profiles)
+            profiles = (*lifts, *profiles, self.BOX_FAR_FIXED_GRASP)
         best, best_score = "v1", (True, math.inf, math.inf)
         for profile in (None, *profiles):
             mujoco.mj_copyData(env.data, env.model, self.env.data)
