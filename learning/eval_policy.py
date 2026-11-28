@@ -140,6 +140,9 @@ def run_episode(seed, members, device, kind, size, task, max_steps, record=False
         pre.reset()
         post.reset()
     grasped, t, close_err = False, 0, None
+    # Phân biệt "chạm thoáng" với "nhấc được rồi rơi": số bước hai hàm cùng chạm vật, độ cao nhấc lớn nhất khi đang kẹp, bước cuối còn kẹp.
+    z0 = float(info["box_pos"][2])
+    grasp_steps, max_lift, last_grasp = 0, 0.0, None
     for t in range(max_steps):
         # 1) Đổi quan sát của env sang định dạng LeRobot (giống hệt lúc ghi dataset), bỏ trường "action" và "task".
         frame = sim_setup.to_frame(env, obs, np.zeros(7), task, cameras, env_state)
@@ -151,6 +154,10 @@ def run_episode(seed, members, device, kind, size, task, max_steps, record=False
         # 3) Mô phỏng làm lệnh đó và trả quan sát mới. Vòng lặp quay lại bước 1 với quan sát mới (vòng kín).
         obs, _, terminated, truncated, info = env.step(env_action)
         grasped = grasped or bool(env._grasped)                  # đã từng kẹp được vật (hai hàm cùng chạm) lúc nào chưa
+        if env._grasped:
+            grasp_steps += 1
+            last_grasp = t + 1
+            max_lift = max(max_lift, float(info["box_pos"][2]) - z0)
         if close_err is None and env_action[5] < 0:              # lần đầu mạng ra lệnh khép kẹp (lệnh kẹp < 0)
             # đầu kẹp cách tâm vật bao xa (mm) theo x, y, z ở đúng lúc đó: "kẹp vào không khí" lệch bao nhiêu, lệch hướng nào
             close_err = [round(float(v) * 1000) for v in np.asarray(info["ee_pos"]) - np.asarray(info["box_pos"])]
@@ -163,7 +170,10 @@ def run_episode(seed, members, device, kind, size, task, max_steps, record=False
     r = math.hypot(x0 - config.PICK_PAN_XY[0], y0 - config.PICK_PAN_XY[1])
     row = {"seed": seed, "ok": bool(info.get("success")), "steps": t + 1, "grasped": grasped, "r": round(r, 3),
            "end_xy": [round(float(v), 3) for v in info["box_pos"][:2]],   # end_xy: vật nằm đâu khi hết ván
-           "close_err_mm": close_err}                                      # lệch đầu kẹp - vật lúc khép lần đầu (mm)
+           "close_err_mm": close_err,                                      # lệch đầu kẹp - vật lúc khép lần đầu (mm)
+           "grasp_steps": grasp_steps,                                     # số bước hai hàm cùng chạm vật
+           "max_lift_mm": round(max_lift * 1000),                          # vật lên cao nhất bao nhiêu (mm) khi đang kẹp
+           "last_grasp_step": last_grasp}                                  # bước cuối còn kẹp (rơi / thả lúc nào)
     episode = None
     if rec:
         from ..tools.make_replay import bowl_geom_list
