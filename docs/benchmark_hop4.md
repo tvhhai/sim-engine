@@ -23,7 +23,7 @@ Phần lớn các ca trước sửa bị mất điểm kẹp khi tiếp cận ho
 | Hạ điểm kẹp 4 mm | `2474` |
 | Hạ điểm kẹp 4 mm và tăng độ lệch theo trục kẹp 4 mm | `246` |
 
-Nguồn `box4-minjerk-review` trong Studio giữ 6 ván đối chiếu của seed 227, 2047 và 2474. Bản đủ 42 ván nằm ở `results/replays/archive/before-cycle-cleanup/box4-minjerk-review.html` trên máy chạy benchmark.
+Nguồn `box4-history` trong Studio (nhóm *Đợt 1*, trước đây là `box4-minjerk-review`) giữ 6 ván đối chiếu của seed 227, 2047 và 2474. Bản đủ 42 ván nằm ở `results/replays/archive/before-cycle-cleanup/box4-minjerk-review.html` trên máy chạy benchmark.
 
 ## Ghi demo
 
@@ -57,7 +57,7 @@ Quét đủ 774 seed mỗi loại sau tối ưu. Hộp 4 cm và bóng 4 cm đề
 | 55, sát giới hạn khớp | 2 → 2 | 456 → 456 |
 | 1022, sát giới hạn khớp | 2 → 2 | 369 → 369 |
 
-Các số bước trong bảng đếm tới hành động cuối. Nguồn Studio `box4-single-grasp-review` giữ 6 ván đối chiếu của seed 100, 245 và 1022. Bản đủ 14 ván nằm ở `results/replays/archive/before-cycle-cleanup/box4-single-grasp-review.html`.
+Các số bước trong bảng đếm tới hành động cuối. Nguồn Studio `box4-history` (nhóm *Đợt 2*, trước đây là `box4-single-grasp-review`) giữ 6 ván đối chiếu của seed 100, 245 và 1022. Bản đủ 14 ván nằm ở `results/replays/archive/before-cycle-cleanup/box4-single-grasp-review.html`.
 
 ### Vì sao có ván thả vào bát vẫn bị chấm hỏng?
 

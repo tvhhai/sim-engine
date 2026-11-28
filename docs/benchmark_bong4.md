@@ -59,4 +59,4 @@ Tỉ lệ trong bảng chấm đo thầy trên MuJoCo với lệnh điều khi�
 | 2447 | Cụm kẹp đẩy bóng khi hạ ở bước 59–60. Hai lần khép lại hụt trước khi bóng ra ngoài tầm. | Nâng điểm kẹp 4 mm, 347 bước |
 | 2450 | Cụm kẹp chạm ở bước 47 khi hạ. Bóng ra ngoài tầm ngay lần khép đầu. | Nâng điểm kẹp 4 mm, 162 bước |
 
-Nguồn `sphere4-minjerk-review` trong Studio giữ 6 ván đối chiếu của seed 201, 2263 và 2317. Bản đủ 44 ván nằm ở `results/replays/archive/before-cycle-cleanup/sphere4-minjerk-review.html` trên máy chạy benchmark. Mỗi seed trong bảng có một ván min-jerk gốc và một ván sau sửa.
+Nguồn `sphere4-history` trong Studio (nhóm *Đợt 1*, trước đây là `sphere4-minjerk-review`) giữ 6 ván đối chiếu của seed 201, 2263 và 2317. Bản đủ 44 ván nằm ở `results/replays/archive/before-cycle-cleanup/sphere4-minjerk-review.html` trên máy chạy benchmark. Mỗi seed trong bảng có một ván min-jerk gốc và một ván sau sửa.

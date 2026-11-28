@@ -45,8 +45,8 @@ Các thay đổi nằm ở bước chọn phương án và thời hạn kéo đ�
 
 ## Replay đối chiếu
 
-- [Hộp 4 cm, seed 55, 133 và 2486](http://127.0.0.1:8765/studio/replay-view?source=file%3Abox4-phase-review)
-- [Bóng 4 cm, seed 2278 và 2317](http://127.0.0.1:8765/studio/replay-view?source=file%3Asphere4-phase-review)
+- [Hộp 4 cm, seed 55, 133 và 2486](http://127.0.0.1:8765/studio/replay-view?source=file%3Abox4-history) (nhóm *Đợt 4*)
+- [Bóng 4 cm, seed 2278 và 2317](http://127.0.0.1:8765/studio/replay-view?source=file%3Asphere4-history) (nhóm *Đợt 4*)
 
 ## Tổng hợp đủ bộ seed
 
