@@ -262,7 +262,8 @@ Bảng chấm nhanh 100 seed (đêm 2026-11-26/27, Colab L4), cùng 100 seed cá
     - **SmolVLA train tiếp trên dữ liệu DAgger tụt:** ck 2,5k / 5k / 7,5k / 10k = 34 / 56 / 60 / 62 % val (xa 7 / 21 / 24 / 28 %), dưới
       73 % của 30k. Ván DAgger là thầy sửa lỗi của ACT (cảnh do ACT lái tới), không trúng chỗ SmolVLA yếu.
     - **ACT hộp + bóng** (notebook mục 13; từ DAgger 3 ck 5k, 20k step trên 1 700 ván hộp + 500 ván bóng): hộp val 82 / 78 / 82 / 80 %
-      (không quên), bóng val 47 / 49 / 58 / **59 %** ở 5k / 10k / 15k / 20k, còn tăng. Báo cáo cho review: `docs/bao_cao_ai_2026-11-28.md`.
+      (không quên), bóng val 47 / 49 / 58 / **59 %** ở 5k / 10k / 15k / 20k, còn tăng.
+    - **Gộp 3 mạng ACT rear (d3 5k + d3 20k + d2 15k) không giúp:** 604/774 (78,0 %), xa 55,5 %, dưới mạng lẻ d3 5k (79,5 %). Báo cáo cho review: `docs/bao_cao_ai_2026-11-28.md`.
 
 ## 3. Thư mục nào làm gì
 
