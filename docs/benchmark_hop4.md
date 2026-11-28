@@ -28,3 +28,27 @@ Replay đối chiếu 42 ván nằm ở `results/replays/box4-minjerk-review.htm
 ## Ghi demo
 
 Đã chạy thử seed train `3000` qua `record_dataset.py` với camera `top,wrist`. Ván thành công với 146 khung, state và action đều 6 chiều. Lượt chấm 774 seed đo thầy ở lệnh điều khiển sạch trên MuJoCo. Đo ACT hay SmolVLA cần dùng checkpoint và bộ seed đánh giá của từng mô hình.
+
+## Giảm gắp lại cho hộp ở xa
+
+Thầy ưu tiên phương án đã gắp thật và thả thành công chỉ với một lần hạ tay, một lần khép kẹp. Với hộp ở xa, thầy thử nhấc trực tiếp hoặc nhấc nhẹ rồi thu tay về khi vẫn giữ hộp. Phép thử diễn ra trên bản sao vật lý. Khi một lần gắp chưa đủ, thầy chọn phương án thành công có ít lượt khép và hạ nhất trong các phương án đã thử. Các cảnh đủ điều kiện kéo vòng cung sát giới hạn khớp 1 tiếp tục dùng cách chọn cũ.
+
+Quét đủ 774 seed mỗi loại sau tối ưu. Hộp 4 cm và bóng 4 cm đều đạt 774/774. Trong 90 ca hộp có bán kính từ 40 cm và nằm ngoài nhóm phải kéo vòng cung, số ca gắp một lần tăng từ **1/90 lên 90/90**. Số ca phải nhả trong lúc kéo giảm từ 89 xuống 0, số bước trung vị giảm từ 236,5 xuống 185. Cả 10 ca thuộc nhóm kéo vòng cung có số bước y hệt mốc trước tối ưu. Policy chốt ở `5a5513a`.
+
+| Seed | Lần khép kẹp trước → sau | Bước trước → sau |
+| ---: | ---: | ---: |
+| 87 | 4 → 1 | 310 → 178 |
+| 100 | 3 → 1 | 305 → 167 |
+| 245, bán kính 42 cm | 2 → 1 | 313 → 237 |
+| 246 | 2 → 1 | 219 → 186 |
+| 248 | 2 → 1 | 203 → 164 |
+| 55, sát giới hạn khớp | 2 → 2 | 456 → 456 |
+| 1022, sát giới hạn khớp | 2 → 2 | 369 → 369 |
+
+Các số bước trong bảng đếm tới hành động cuối. Nguồn Studio `box4-single-grasp-review` cho xem 14 ván đối chiếu.
+
+### Vì sao có ván thả vào bát vẫn bị chấm hỏng?
+
+Điểm được chấm khi ván kết thúc. Với bát chuẩn, miệng bát ở z = 46,0 cm. Tâm hộp phải nằm trong lòng bát theo XY và thấp hơn miệng ít nhất 5 mm, tức z < 45,5 cm. Hộp phải rời hàm và vận tốc tịnh tiến dưới 0,05 m/s. Tiêu chí độ sâu loại các trường hợp hộp còn gác cao gần miệng bát.
+
+Trong replay trước lần sửa đầu tiên, seed 227, 2047 và 2401 kết thúc với hộp vẫn chạm bát nhưng tâm cao lần lượt 45,6 cm, 45,8 cm và 45,9 cm. Seed 2401 có khung hình báo đạt ngay sau khi thả, rồi hộp đổi thế và tâm lên cao hơn ngưỡng. Seed 2474 từng báo đạt rồi nảy ra ngoài bát. Các lượt chấm dùng cùng tiêu chí này để so sánh quỹ đạo.
