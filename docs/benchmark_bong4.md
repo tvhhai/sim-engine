@@ -1,5 +1,7 @@
 # Thầy gắp bóng 4 cm
 
+Kết quả hộp trong trang này là mốc đối chứng của lượt sửa cho bóng. [Xem lượt sửa hộp 4 cm tiếp theo](benchmark_hop4.md).
+
 Bộ chấm gồm seed 0–199, các seed cố định từ 200 trở lên và 2000–2499. Mỗi cấu hình chạy trên cùng 774 cảnh cho từng loại vật. Mỗi ván giữ nguyên camera, vị trí vật, hình học kẹp, ma sát và tiêu chí vật đã được thả và nằm yên trong bát.
 
 Lượt chấm dùng MuJoCo 4.0.1, hộp và bóng đều 4 cm. Mốc trước sửa lấy mã ở `820b70f`. Lượt bóng min-jerk gốc dùng `ScriptedPolicyMinJerk` làm nhánh chính và giữ V2 dự phòng của policy kết hợp. Lượt sau sửa dùng mặc định ở `46745a3`. Có thể chấm lại bản hiện tại bằng `python -m sim_engine.tools.object_replay --kind sphere --size 0.04` và lặp với `--kind box`.

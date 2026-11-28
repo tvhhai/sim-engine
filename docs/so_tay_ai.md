@@ -19,7 +19,7 @@ Vai trò của policy viết tay từ giờ: **thầy giáo**. Nó làm mẫu, m
 
 | Chặng | Việc | Xong khi | Thư mục |
 |---|---|---|---|
-| 0 (đã xong) | Mô phỏng, policy viết tay, Studio, bộ seed đánh giá | Hộp 4 cm 753/774, bóng 4 cm 774/774 | [Benchmark và replay từng seed](benchmark_bong4.md) |
+| 0 (đã xong) | Mô phỏng, policy viết tay, Studio, bộ seed đánh giá | Hộp 4 cm 774/774, bóng 4 cm 774/774 | [Benchmark hộp](benchmark_hop4.md) · [Benchmark bóng](benchmark_bong4.md) |
 | 1 | Ghi dataset từ thầy giáo | Có `datasets/<tên>/`, mở xem được vài ván | `learning/record_dataset.py` |
 | 2 | Train ACT bản nhỏ | Loss giảm đều, có checkpoint | `outputs/train/<lần chạy>/` |
 | 3 | Đánh giá trên 774 seed | Có bảng thành công theo vùng như bảng của policy viết tay | `learning/eval_policy.py` |
